@@ -1,0 +1,191 @@
+"""SQLite storage: projects, sessions, messages, and executor stats."""
+
+from __future__ import annotations
+
+import sqlite3
+import threading
+import time
+import uuid
+from pathlib import Path
+from typing import Any
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    path TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    user_email TEXT NOT NULL,
+    project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+    title TEXT,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    content TEXT NOT NULL,
+    executor TEXT,
+    tier INTEGER,
+    status TEXT NOT NULL DEFAULT 'done',
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
+CREATE TABLE IF NOT EXISTS executor_stats (
+    executor TEXT PRIMARY KEY,
+    calls INTEGER NOT NULL DEFAULT 0,
+    failures INTEGER NOT NULL DEFAULT 0,
+    total_ms INTEGER NOT NULL DEFAULT 0,
+    last_used REAL
+);
+CREATE TABLE IF NOT EXISTS user_state (
+    user_email TEXT PRIMARY KEY,
+    active_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL
+);
+"""
+
+
+class Store:
+    """Thread-safe wrapper around one SQLite connection."""
+
+    def __init__(self, path: Path | str):
+        if str(path) != ":memory:":
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(str(path), check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA foreign_keys = ON")
+        self._conn.execute("PRAGMA journal_mode = WAL")
+        self._lock = threading.Lock()
+        with self._lock:
+            self._conn.executescript(SCHEMA)
+
+    def close(self) -> None:
+        self._conn.close()
+
+    def _exec(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
+        with self._lock:
+            cur = self._conn.execute(sql, params)
+            self._conn.commit()
+            return cur
+
+    def _all(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
+        with self._lock:
+            return [dict(row) for row in self._conn.execute(sql, params).fetchall()]
+
+    def _one(self, sql: str, params: tuple = ()) -> dict[str, Any] | None:
+        rows = self._all(sql, params)
+        return rows[0] if rows else None
+
+    # Projects
+
+    def add_project(self, name: str, path: str) -> dict[str, Any]:
+        self._exec("INSERT INTO projects (name, path, created_at) VALUES (?, ?, ?)", (name, path, time.time()))
+        return self.get_project(name)  # type: ignore[return-value]
+
+    def remove_project(self, name: str) -> bool:
+        return self._exec("DELETE FROM projects WHERE name = ?", (name,)).rowcount > 0
+
+    def get_project(self, name: str) -> dict[str, Any] | None:
+        return self._one("SELECT * FROM projects WHERE name = ?", (name,))
+
+    def get_project_by_id(self, project_id: int | None) -> dict[str, Any] | None:
+        if project_id is None:
+            return None
+        return self._one("SELECT * FROM projects WHERE id = ?", (project_id,))
+
+    def list_projects(self) -> list[dict[str, Any]]:
+        return self._all("SELECT * FROM projects ORDER BY name")
+
+    def set_active_project(self, user_email: str, project_id: int | None) -> None:
+        self._exec(
+            "INSERT INTO user_state (user_email, active_project_id) VALUES (?, ?) "
+            "ON CONFLICT(user_email) DO UPDATE SET active_project_id = excluded.active_project_id",
+            (user_email, project_id),
+        )
+
+    def active_project(self, user_email: str) -> dict[str, Any] | None:
+        return self._one(
+            "SELECT p.* FROM user_state u JOIN projects p ON p.id = u.active_project_id WHERE u.user_email = ?",
+            (user_email,),
+        )
+
+    # Sessions
+
+    def create_session(self, user_email: str, project_id: int | None = None, title: str | None = None) -> dict[str, Any]:
+        now = time.time()
+        session_id = uuid.uuid4().hex
+        self._exec(
+            "INSERT INTO sessions (id, user_email, project_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (session_id, user_email, project_id, title, now, now),
+        )
+        return self.get_session(session_id)  # type: ignore[return-value]
+
+    def get_session(self, session_id: str) -> dict[str, Any] | None:
+        return self._one("SELECT * FROM sessions WHERE id = ?", (session_id,))
+
+    def latest_session(self, user_email: str) -> dict[str, Any] | None:
+        return self._one(
+            "SELECT * FROM sessions WHERE user_email = ? ORDER BY updated_at DESC LIMIT 1", (user_email,)
+        )
+
+    def update_session(self, session_id: str, *, project_id: int | None = None, title: str | None = None) -> None:
+        if project_id is not None:
+            self._exec("UPDATE sessions SET project_id = ? WHERE id = ?", (project_id, session_id))
+        if title is not None:
+            self._exec("UPDATE sessions SET title = ? WHERE id = ?", (title, session_id))
+
+    # Messages
+
+    def add_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        *,
+        executor: str | None = None,
+        tier: int | None = None,
+        status: str = "done",
+        message_id: str | None = None,
+    ) -> dict[str, Any]:
+        message_id = message_id or uuid.uuid4().hex
+        now = time.time()
+        self._exec(
+            "INSERT INTO messages (id, session_id, role, content, executor, tier, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (message_id, session_id, role, content, executor, tier, status, now),
+        )
+        self._exec("UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id))
+        return self._one("SELECT * FROM messages WHERE id = ?", (message_id,))  # type: ignore[return-value]
+
+    def finish_message(self, message_id: str, content: str, status: str, executor: str | None = None) -> None:
+        self._exec(
+            "UPDATE messages SET content = ?, status = ?, executor = COALESCE(?, executor) WHERE id = ?",
+            (content, status, executor, message_id),
+        )
+
+    def set_message_tier(self, message_id: str, tier: int) -> None:
+        self._exec("UPDATE messages SET tier = ? WHERE id = ?", (tier, message_id))
+
+    def list_messages(self, session_id: str, limit: int = 200) -> list[dict[str, Any]]:
+        rows = self._all(
+            "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
+            (session_id, limit),
+        )
+        return list(reversed(rows))
+
+    # Executor stats
+
+    def record_executor(self, executor: str, *, ok: bool, elapsed_ms: int) -> None:
+        self._exec(
+            "INSERT INTO executor_stats (executor, calls, failures, total_ms, last_used) VALUES (?, 1, ?, ?, ?) "
+            "ON CONFLICT(executor) DO UPDATE SET calls = calls + 1, failures = failures + excluded.failures, "
+            "total_ms = total_ms + excluded.total_ms, last_used = excluded.last_used",
+            (executor, 0 if ok else 1, elapsed_ms, time.time()),
+        )
+
+    def executor_stats(self) -> list[dict[str, Any]]:
+        return self._all("SELECT * FROM executor_stats ORDER BY executor")

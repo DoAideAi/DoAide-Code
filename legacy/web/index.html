@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#11130f" />
+    <meta name="description" content="A local-first coding chat that helps reduce model cost." />
+    <title>Doaide Code</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Doaide Code home"><span class="brand-mark">✳</span><span>doaide<span class="brand-accent">code</span></span></a>
+        <div class="top-actions"><span class="local-state"><i id="service-dot"></i><span id="service-state">Loading models…</span></span><button id="refresh-status" class="icon-button" type="button" aria-label="Refresh models" title="Refresh models">↻</button></div>
+      </header>
+
+      <section class="workspace-picker" aria-label="Project folder">
+        <div class="folder-icon">▰</div>
+        <div class="folder-info"><span class="field-caption">PROJECT</span><strong id="workspace-path">Loading folder…</strong><small id="workspace-detail">Project files are shared as context.</small></div>
+        <button class="secondary-button" id="choose-folder" type="button">Choose folder</button>
+        <button class="quiet-button" id="default-folder" type="button">Default</button>
+      </section>
+
+      <section class="chat-card" aria-label="Coding chat">
+        <div class="chat-heading"><div><h1>Work on your code</h1><p id="model-hint">Doaide chooses a model for each request.</p></div></div>
+        <div class="privacy-hint" id="privacy-hint">Routine requests stay local. Doaide may send project context to a cloud CLI for harder tasks or when you ask for one.</div>
+        <div id="chat-messages" class="chat-messages" aria-live="polite">
+          <div class="welcome-message"><span class="welcome-mark">✳</span><strong>What are you working on?</strong><p>Ask about this project, request a code change, or get help debugging. Requested changes are written into the selected folder.</p></div>
+        </div>
+        <form id="chat-form" class="composer">
+          <textarea id="chat-input" rows="1" maxlength="8000" placeholder="Ask about your code…" aria-label="Message" required></textarea>
+          <div class="composer-bottom"><span>Enter to send · Shift + Enter for a new line</span><button id="send-button" class="send-button" type="submit" aria-label="Send message">↑</button></div>
+        </form>
+        <div class="chat-footer"><span>Requested edits are applied to the selected project folder.</span><button id="new-chat" class="quiet-button" type="button">New chat</button></div>
+      </section>
+      <footer>DOAIDE CODE <span>Local-first chat for lower coding costs.</span></footer>
+    </main>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
