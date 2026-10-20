@@ -4,20 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import logging
-import time
 import uuid
 from pathlib import Path
 from typing import Any
 
 from .commands import is_command, run_command
 from .db import Store
-from .executors import ExecutorError, Job, Turn
+from .executors import Job, Turn
 from .gemini import GeminiClient, GeminiError
 from .router import RouterBrain
+from .runner import Outcome, run_job
 from .sync import SyncHub
-
-log = logging.getLogger(__name__)
 
 HISTORY_TURNS = 12
 
@@ -60,6 +57,7 @@ class ChatService:
             "session_id": session["id"],
             "project": project["name"] if project else None,
             "status": self.status(user_email),
+            "mode": "local",
             "messages": [public_message(m) for m in self.store.list_messages(session["id"])],
         }
 
@@ -130,45 +128,26 @@ class ChatService:
         await self.hub.publish(user_email, {"type": "message", "message": public_message(reply)})
         await self._status(user_email)
 
-        content, status, used = "", "error", None
+        outcome = Outcome()
+
+        async def on_delta(chunk: str) -> None:
+            await self.hub.publish(user_email, {"type": "delta", "id": reply_id, "text": chunk})
+
         try:
-            decision = await self.router.classify(text, project=project["name"] if project else None)
-            self.store.set_message_tier(reply_id, decision.tier)
-            candidates = await self.router.candidates(decision.tier)
-            if not candidates:
-                content = "No executor is available. Start Ollama or sign in to the Claude or Codex CLI."
-            errors: list[str] = []
-            for executor in candidates:
-                started = time.monotonic()
-                produced = False
-                try:
-                    async for chunk in executor.stream(job):
-                        produced = True
-                        content += chunk
-                        await self.hub.publish(user_email, {"type": "delta", "id": reply_id, "text": chunk})
-                except ExecutorError as exc:
-                    self.store.record_executor(executor.name, ok=False, elapsed_ms=_ms(started))
-                    log.warning("%s failed: %s", executor.name, exc)
-                    errors.append(f"{executor.name}: {exc}")
-                    if produced:
-                        content += f"\n\n[stopped: {exc}]"
-                        used = executor.name
-                        break
-                    continue
-                self.store.record_executor(executor.name, ok=True, elapsed_ms=_ms(started))
-                used, status = executor.name, "done"
-                break
-            if status != "done" and not content and errors:
-                content = "All executors failed.\n" + "\n".join(errors)
+            await run_job(self.router, self.store, job, outcome, on_delta, project=project["name"] if project else None)
         except asyncio.CancelledError:
-            status = "stopped"
+            outcome.status = "stopped"
             raise
         finally:
-            self._error[user_email] = status == "error"
-            self.store.finish_message(reply_id, content, status, executor=used)
+            self._error[user_email] = outcome.status == "error"
+            if outcome.tier is not None:
+                self.store.set_message_tier(reply_id, outcome.tier)
+            self.store.finish_message(reply_id, outcome.content, outcome.status, executor=outcome.executor)
             if self._tasks.get(user_email) is asyncio.current_task():
                 del self._tasks[user_email]
-            await self.hub.publish(user_email, {"type": "done", "id": reply_id, "status": status, "content": content})
+            await self.hub.publish(
+                user_email, {"type": "done", "id": reply_id, "status": outcome.status, "content": outcome.content}
+            )
             await self._status(user_email)
 
     async def _title_session(self, session_id: str, text: str) -> None:
@@ -186,7 +165,3 @@ class ChatService:
             except GeminiError:
                 title = text[:60]
         self.store.update_session(session_id, title=title)
-
-
-def _ms(started: float) -> int:
-    return int((time.monotonic() - started) * 1000)

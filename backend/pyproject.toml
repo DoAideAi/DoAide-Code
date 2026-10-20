@@ -10,6 +10,7 @@ dependencies = [
     "pyjwt>=2.9",
     "pydantic>=2.12",
     "typesafe-sdk>=0.7.5",
+    "websockets>=13",
 ]
 
 [project.optional-dependencies]

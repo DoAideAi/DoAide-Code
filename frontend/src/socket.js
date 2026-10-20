@@ -1,7 +1,6 @@
 import { socketUrl } from './api.js'
 
-// Keeps one WebSocket open with backoff reconnects. Desktop uses /ws; phones use the
-// read-only /sync relay.
+// Keeps one WebSocket open with backoff reconnects.
 export function connect({ path, token, onEvent, onState, onUnauthorized }) {
   let ws = null
   let closed = false

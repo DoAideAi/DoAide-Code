@@ -24,7 +24,7 @@ def auth(token: str) -> dict:
 def test_health_and_config(client):
     body = client.get("/api/health").json()
     assert body["ok"] and body["executors"] == ["ollama", "codex", "claude-sonnet", "claude-opus"]
-    assert client.get("/api/config").json() == {"google_client_id": "", "local_login": True}
+    assert client.get("/api/config").json() == {"google_client_id": "", "local_login": True, "mode": "local"}
 
 
 def test_local_login_only_for_direct_loopback(client, settings, executors):

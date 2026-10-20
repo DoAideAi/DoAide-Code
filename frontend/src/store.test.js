@@ -44,6 +44,30 @@ describe('applyEvent', () => {
   })
 })
 
+describe('hub events', () => {
+  it('tracks mode, laptop presence, and system replies to relayed commands', () => {
+    let s = applyEvent(initialChat, {
+      type: 'snapshot',
+      session_id: 's',
+      project: null,
+      status: 'busy',
+      mode: 'hub',
+      agent_online: false,
+      messages: [msg('r', 'assistant', '', 'queued')],
+    })
+    expect(s).toMatchObject({ mode: 'hub', agentOnline: false })
+    s = applyEvent(s, { type: 'agent', online: true })
+    expect(s.agentOnline).toBe(true)
+    s = applyEvent(s, { type: 'done', id: 'r', status: 'done', content: '* alpha', role: 'system' })
+    expect(s.messages[0]).toMatchObject({ role: 'system', content: '* alpha', status: 'done' })
+  })
+
+  it('local snapshots default to local mode', () => {
+    const s = applyEvent(initialChat, { type: 'snapshot', session_id: 's', project: null, status: 'idle', messages: [] })
+    expect(s.mode).toBe('local')
+  })
+})
+
 describe('statusColor', () => {
   it('maps connection and server state to green/gray/red', () => {
     expect(statusColor('closed', 'idle')).toBe('gray')
@@ -51,6 +75,12 @@ describe('statusColor', () => {
     expect(statusColor('open', 'idle')).toBe('green')
     expect(statusColor('open', 'busy')).toBe('green')
     expect(statusColor('open', 'error')).toBe('red')
+  })
+
+  it('is gray on the hub while the laptop is offline', () => {
+    expect(statusColor('open', 'idle', 'hub', false)).toBe('gray')
+    expect(statusColor('open', 'idle', 'hub', true)).toBe('green')
+    expect(statusColor('open', 'error', 'hub', true)).toBe('red')
   })
 })
 

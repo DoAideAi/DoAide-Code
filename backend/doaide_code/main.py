@@ -1,7 +1,12 @@
-"""FastAPI harness server: REST, chat WebSocket (/ws), sync relay (/sync), and the built UI."""
+"""FastAPI harness server: REST, chat WebSocket (/ws), sync relay (/sync), and the built UI.
+
+In local mode (the laptop) it runs the executors itself. In hub mode (code.doaide.com) it
+only stores and syncs the conversation and relays prompts to the laptop agent on /agent.
+"""
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from contextlib import asynccontextmanager
@@ -14,6 +19,7 @@ from pydantic import BaseModel
 
 from .auth import AuthError, User, bearer, is_loopback, issue_token, verify_google_credential, verify_token
 from .chat import ChatService
+from .relay import RelayService
 from .config import Settings
 from .db import Store
 from .executors import Executor, JevExecutor, build_executors
@@ -38,21 +44,29 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
     settings = settings or Settings()
     store = Store(settings.db_path)
     hub = SyncHub()
-    gemini = GeminiClient(settings.gemini_api_key, settings.gemini_model)
-    jev = JevExecutor(settings.typesafe_api_key)
-    router = RouterBrain(
-        executors if executors is not None else build_executors(settings),
-        jev=jev,
-        gemini=gemini,
-        offline=settings.offline_router,
-    )
-    chat = ChatService(store, router, hub, gemini=None if settings.offline_router else gemini)
+    jev: JevExecutor | None = None
+    router: RouterBrain | None = None
+    chat: ChatService | RelayService
+    if settings.is_hub:
+        # No model, router or LLM key is used on the hub; the laptop agent does all of that.
+        chat = RelayService(store, hub)
+    else:
+        gemini = GeminiClient(settings.gemini_api_key, settings.gemini_model)
+        jev = JevExecutor(settings.typesafe_api_key)
+        router = RouterBrain(
+            executors if executors is not None else build_executors(settings),
+            jev=jev,
+            gemini=gemini,
+            offline=settings.offline_router,
+        )
+        chat = ChatService(store, router, hub, gemini=None if settings.offline_router else gemini)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         yield
-        with contextlib.suppress(Exception):
-            await jev.aclose()
+        if jev is not None:
+            with contextlib.suppress(Exception):
+                await jev.aclose()
         store.close()
 
     app = FastAPI(title="Doaide Code", version="0.1.0", lifespan=lifespan)
@@ -74,12 +88,18 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
 
     @app.get("/api/health")
     async def health() -> dict:
+        if router is None:
+            return {"ok": True, "mode": "hub"}
         available = [e.name for e in router.executors if await e.available()]
-        return {"ok": True, "executors": available}
+        return {"ok": True, "mode": "local", "executors": available}
 
     @app.get("/api/config")
     async def public_config() -> dict:
-        return {"google_client_id": settings.google_client_id, "local_login": not settings.require_sso}
+        return {
+            "google_client_id": settings.google_client_id,
+            "local_login": not settings.require_sso,
+            "mode": settings.mode,
+        }
 
     @app.post("/api/auth/local")
     async def local_login(request: Request) -> dict:
@@ -107,6 +127,9 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
 
     @app.get("/api/projects")
     async def projects(user: User = Depends(current_user)) -> dict:
+        if isinstance(chat, RelayService):
+            # Project folders live on the laptop; the hub only knows the active one's name.
+            return {"projects": [], "active": store.remote_project(user.email)}
         active = store.active_project(user.email)
         return {"projects": store.list_projects(), "active": active["name"] if active else None}
 
@@ -123,11 +146,23 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
     async def stats(user: User = Depends(current_user)) -> dict:
         return {"executors": store.executor_stats()}
 
+    @app.post("/api/agent-token")
+    async def agent_token(request: Request, user: User = Depends(current_user)) -> dict:
+        """Long-lived token that lets the user's laptop agent connect to this hub."""
+        if not settings.is_hub:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Only the hub accepts laptop agents")
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("host", request.url.netloc)
+        return {
+            "token": issue_token(settings, User(email=user.email, name=user.name, scope="agent")),
+            "hub_url": f"{'wss' if proto == 'https' else 'ws'}://{host}/agent",
+        }
+
     # WebSockets
 
-    async def accept(ws: WebSocket) -> User | None:
+    async def accept(ws: WebSocket, scope: str = "user") -> User | None:
         try:
-            user = verify_token(settings, ws.query_params.get("token"))
+            user = verify_token(settings, ws.query_params.get("token"), scope)
         except AuthError:
             await ws.close(code=WS_UNAUTHORIZED)
             return None
@@ -175,6 +210,31 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
         finally:
             await hub.leave(user.email, ws)
 
+    if isinstance(chat, RelayService):
+        relay = chat
+
+        @app.websocket("/agent")
+        async def agent_socket(ws: WebSocket) -> None:
+            """The user's laptop: receives queued jobs and streams results back."""
+            user = await accept(ws, scope="agent")
+            if user is None:
+                return
+            await relay.attach_agent(user.email, ws)
+            try:
+                while True:
+                    data = await ws.receive_json()
+                    if isinstance(data, dict):
+                        if data.get("type") == "ping":
+                            await ws.send_json({"type": "pong"})
+                        else:
+                            await relay.on_agent_event(user.email, data)
+            except (WebSocketDisconnect, RuntimeError, ValueError):
+                pass
+            finally:
+                # Shielded so the running prompt is failed and devices told even if this
+                # handler is being cancelled (server shutdown, client teardown).
+                await asyncio.shield(relay.detach_agent(user.email, ws))
+
     mount_frontend(app, settings.frontend_dist)
     return app
 
@@ -189,7 +249,7 @@ def mount_frontend(app: FastAPI, dist: Path) -> None:
 
     @app.get("/{path:path}", include_in_schema=False)
     async def spa(path: str) -> FileResponse:
-        if path.startswith(("api/", "ws", "sync")):
+        if path.startswith(("api/", "ws", "sync", "agent")):
             raise HTTPException(status.HTTP_404_NOT_FOUND)
         candidate = (dist / path).resolve()
         if path and candidate.is_file() and candidate.is_relative_to(dist.resolve()):
@@ -198,10 +258,17 @@ def mount_frontend(app: FastAPI, dist: Path) -> None:
 
 
 def run() -> None:
+    import sys
+
     import uvicorn
 
     logging.basicConfig(level=logging.INFO)
     settings = Settings()
+    if sys.argv[1:2] == ["agent"]:
+        from .agent import run_agent
+
+        run_agent(settings)
+        return
     uvicorn.run(create_app(settings), host=settings.host, port=settings.port)
 
 

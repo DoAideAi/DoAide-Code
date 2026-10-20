@@ -11,8 +11,8 @@ code.doaide.com {
         Strict-Transport-Security "max-age=31536000"
         -Server
     }
-    # REST, chat socket (/ws) and read-only sync relay (/sync) go to the API.
-    @backend path /api/* /ws /ws/* /sync /sync/*
+    # REST, chat socket (/ws), read-only sync relay (/sync) and the laptop agent (/agent) go to the API.
+    @backend path /api/* /ws /ws/* /sync /sync/* /agent /agent/*
     handle @backend {
         reverse_proxy 172.18.0.1:3097 {
             header_up X-Forwarded-For {remote_host}

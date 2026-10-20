@@ -37,6 +37,12 @@ export async function checkToken(token) {
   return resp.ok
 }
 
+export async function createAgentToken(token) {
+  const resp = await fetch('/api/agent-token', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+  if (!resp.ok) throw new Error(`/api/agent-token failed (${resp.status})`)
+  return resp.json()
+}
+
 export const localLogin = () => post('/api/auth/local')
 export const googleLogin = (credential) => post('/api/auth/google', { credential })
 

@@ -33,6 +33,12 @@ def _flag(name: str, default: bool = False) -> bool:
 
 @dataclass
 class Settings:
+    # "local": this machine runs the executors (laptop). "hub": sync server only; prompts are
+    # relayed to the owner's laptop agent and no model runs here.
+    mode: str = field(default_factory=lambda: os.environ.get("DOAIDE_MODE", "local").strip().lower())
+    # Laptop agent: the hub socket to connect to and the agent token issued by the hub.
+    hub_url: str = field(default_factory=lambda: os.environ.get("DOAIDE_HUB_URL", "wss://code.doaide.com/agent"))
+    hub_token: str = field(default_factory=lambda: os.environ.get("DOAIDE_HUB_TOKEN", "").strip())
     host: str = field(default_factory=lambda: os.environ.get("DOAIDE_HOST", "127.0.0.1"))
     port: int = field(default_factory=lambda: int(os.environ.get("DOAIDE_PORT", "3097")))
     db_path: Path = field(
@@ -65,6 +71,7 @@ class Settings:
 
     jwt_secret: str = field(default_factory=lambda: os.environ.get("DOAIDE_JWT_SECRET", "") or secrets.token_urlsafe(48))
     jwt_ttl_seconds: int = field(default_factory=lambda: int(os.environ.get("DOAIDE_JWT_TTL", str(7 * 24 * 3600))))
+    agent_ttl_seconds: int = field(default_factory=lambda: int(os.environ.get("DOAIDE_AGENT_TTL", str(90 * 24 * 3600))))
     google_client_id: str = field(default_factory=lambda: os.environ.get("GOOGLE_CLIENT_ID", ""))
     allowed_emails: frozenset[str] = field(
         default_factory=lambda: frozenset(
@@ -78,3 +85,6 @@ class Settings:
     # Heuristic-only routing: skips Jev and Gemini calls (used by tests and offline use).
     offline_router: bool = field(default_factory=lambda: _flag("DOAIDE_OFFLINE_ROUTER"))
 
+    @property
+    def is_hub(self) -> bool:
+        return self.mode == "hub"

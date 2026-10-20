@@ -9,7 +9,7 @@ export default function Composer({ busy, disabled, onSend, onStop }) {
   }
 
   return (
-    <footer data-testid="composer" className="hidden shrink-0 border-t border-zinc-800/80 md:block">
+    <footer data-testid="composer" className="shrink-0 border-t border-zinc-800/80 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto flex max-w-3xl items-end gap-2 px-4 py-3">
         <textarea
           aria-label="Message"

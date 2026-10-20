@@ -8,6 +8,8 @@ rm -rf frontend/dist && mkdir -p frontend/dist && tar -xzf dist.tar.gz -C fronte
 mkdir -p data
 [ -f backend/.env ] || { [ -f env.new ] && mv env.new backend/.env; }
 rm -f env.new
+# The hosted server is only a sync hub: it relays prompts to the laptop agent.
+grep -q '^DOAIDE_MODE=' backend/.env || echo 'DOAIDE_MODE=hub' >> backend/.env
 chmod 600 backend/.env
 [ -x .venv/bin/python ] || python3 -m venv .venv
 .venv/bin/pip install -q --upgrade pip

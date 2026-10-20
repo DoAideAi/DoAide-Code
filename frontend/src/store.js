@@ -5,6 +5,8 @@ export const initialChat = {
   project: null,
   messages: [],
   serverStatus: 'idle', // idle | busy | error
+  mode: 'local', // local: this server runs the models | hub: prompts are relayed to the laptop
+  agentOnline: false, // hub mode only: is the laptop agent connected?
 }
 
 // Pure reducer for server events, kept separate from the store so it is easy to test.
@@ -17,6 +19,8 @@ export function applyEvent(state, event) {
         project: event.project,
         messages: event.messages,
         serverStatus: event.status,
+        mode: event.mode ?? 'local',
+        agentOnline: Boolean(event.agent_online),
       }
     case 'message': {
       const exists = state.messages.some((m) => m.id === event.message.id)
@@ -36,11 +40,15 @@ export function applyEvent(state, event) {
       return {
         ...state,
         messages: state.messages.map((m) =>
-          m.id === event.id ? { ...m, content: event.content, status: event.status } : m,
+          m.id === event.id
+            ? { ...m, content: event.content, status: event.status, role: event.role ?? m.role }
+            : m,
         ),
       }
     case 'status':
       return { ...state, serverStatus: event.state }
+    case 'agent':
+      return { ...state, agentOnline: event.online }
     case 'project':
       return { ...state, project: event.project }
     case 'notice':
@@ -63,8 +71,10 @@ export const useChat = create((set) => ({
   setConnection: (connection) => set({ connection }),
 }))
 
-// green: connected and healthy; red: last run failed; gray: offline.
-export function statusColor(connection, serverStatus) {
+// green: connected and healthy; red: last run failed; gray: offline (including, on the
+// hub, when the laptop that runs the models is not connected).
+export function statusColor(connection, serverStatus, mode = 'local', agentOnline = false) {
   if (connection !== 'open') return 'gray'
+  if (mode === 'hub' && !agentOnline) return 'gray'
   return serverStatus === 'error' ? 'red' : 'green'
 }

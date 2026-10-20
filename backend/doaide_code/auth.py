@@ -23,22 +23,27 @@ class AuthError(Exception):
 class User:
     email: str
     name: str = ""
+    # "user" for browser sessions, "agent" for a laptop agent connected to the hub.
+    scope: str = "user"
 
 
 def issue_token(settings: Settings, user: User) -> str:
     now = int(time.time())
-    claims = {"sub": user.email, "name": user.name, "iat": now, "exp": now + settings.jwt_ttl_seconds}
+    ttl = settings.agent_ttl_seconds if user.scope == "agent" else settings.jwt_ttl_seconds
+    claims = {"sub": user.email, "name": user.name, "scope": user.scope, "iat": now, "exp": now + ttl}
     return jwt.encode(claims, settings.jwt_secret, algorithm=ALGORITHM)
 
 
-def verify_token(settings: Settings, token: str | None) -> User:
+def verify_token(settings: Settings, token: str | None, scope: str = "user") -> User:
     if not token:
         raise AuthError("missing token")
     try:
         claims = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM], options={"require": ["sub", "exp"]})
     except jwt.PyJWTError as exc:
         raise AuthError(f"invalid token: {exc}") from exc
-    return User(email=claims["sub"], name=claims.get("name", ""))
+    if claims.get("scope", "user") != scope:
+        raise AuthError(f"not a {scope} token")
+    return User(email=claims["sub"], name=claims.get("name", ""), scope=scope)
 
 
 def bearer(header: str | None) -> str | None:

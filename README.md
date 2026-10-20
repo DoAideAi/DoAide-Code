@@ -18,7 +18,10 @@ harness escalates to the next tier, then falls back to cheaper ones.
 ```
 backend/            FastAPI harness server (Python 3.11+)
   doaide_code/
-    main.py         REST API, /ws chat socket, /sync relay, serves frontend/dist
+    main.py         REST API, /ws chat socket, /sync relay, /agent (hub), serves frontend/dist
+    relay.py        hub mode: stores + queues prompts, relays them to the laptop agent
+    agent.py        laptop agent: `doaide-code agent`, runs relayed prompts locally
+    runner.py       one prompt through the executors with fallback (laptop only)
     router.py       Router Brain (Jev -> Gemini -> keyword heuristics)
     chat.py         orchestration: commands, routing, fallback, persistence, fan-out
     executors/      ollama.py, claude_cli.py, codex_cli.py, jev.py (TypeSafe SDK)
@@ -69,22 +72,54 @@ from the CLI environments so they run on your subscription logins.
 /projects   /new   /help
 ```
 
-## Cross-device sync
+## Cross-device sync (hub + laptop agent)
 
-Every event (user message, stream deltas, completion, status) is fanned out to
-all sockets of the same user. Desktop browsers use `/ws` (read-write). Screens
-narrower than 768px use `/sync`, which is read-only, and hide the input bar.
+The hosted server at code.doaide.com runs in **hub mode** (`DOAIDE_MODE=hub`). It
+stores conversations and syncs them between devices, and it runs no models or LLM
+calls. All code execution happens on your laptop:
 
-Auth: a loopback browser gets a JWT from `POST /api/auth/local` as
-`DOAIDE_OWNER_EMAIL`. Other devices sign in with Google (`POST /api/auth/google`)
-and receive a JWT. Set `DOAIDE_OWNER_EMAIL` to your Google address so both
-devices share one chat. Requests that carry proxy forwarding headers never get a
-local token. Set `DOAIDE_REQUIRE_SSO=1` when exposing the server.
+```
+phone / laptop browser ──/ws──▶ hub (code.doaide.com) ◀──/agent── laptop agent
+                                 stores + queues                  Ollama / Claude / Codex
+```
+
+1. Sign in at code.doaide.com from any device. Every device can read and send.
+2. Prompts are saved and queued on the hub. While the laptop is offline the status
+   dot is gray and a banner says so.
+3. Click **Connect laptop** to get a long-lived agent token, then on the laptop run:
+
+   ```bash
+   cd backend
+   DOAIDE_HUB_URL=wss://code.doaide.com/agent DOAIDE_HUB_TOKEN=<token> .venv/bin/doaide-code agent
+   ```
+
+   The agent connects out to the hub (no inbound port needed), runs one prompt at
+   a time with the local executors and project registry, and streams the answer
+   back to every device. Slash commands such as `/add-project` run on the laptop,
+   because the project folders live there. `/new` is handled by the hub.
+
+If no executor is available, the laptop reports that as the answer. The hub never
+checks for executors. If the laptop disconnects mid-answer, that reply is marked as
+failed and the next prompt waits for it to reconnect.
+
+Running `doaide-code` without `agent` is still a self-contained **local mode**: the
+same server runs the executors itself, for single-machine use at
+http://127.0.0.1:3097.
+
+Auth: a loopback browser in local mode gets a JWT from `POST /api/auth/local` as
+`DOAIDE_OWNER_EMAIL`. Other devices sign in with Google (`POST /api/auth/google`).
+Set `DOAIDE_OWNER_EMAIL` to your Google address on the laptop so its project
+registry belongs to the same account. Requests that carry proxy forwarding headers
+never get a local token. Agent tokens (`POST /api/agent-token`) only work on
+`/agent`, and browser tokens never work there.
 
 ## Configuration
 
 | Variable | Default |
 | --- | --- |
+| `DOAIDE_MODE` | `local` (runs executors) or `hub` (sync server only) |
+| `DOAIDE_HUB_URL` / `DOAIDE_HUB_TOKEN` | laptop agent: `wss://code.doaide.com/agent` / unset |
+| `DOAIDE_AGENT_TTL` | `7776000` seconds (90 days) |
 | `DOAIDE_HOST` / `DOAIDE_PORT` | `127.0.0.1` / `3097` |
 | `DOAIDE_DB` | `~/.doaide-code/doaide.db` |
 | `OLLAMA_URL` / `DOAIDE_OLLAMA_MODEL` | `http://localhost:11434` / `qwen3-coder` |

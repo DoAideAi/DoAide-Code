@@ -1,25 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { checkToken, fetchConfig, googleLogin, loadToken, localLogin, saveToken } from './api.js'
+import { checkToken, createAgentToken, fetchConfig, googleLogin, loadToken, localLogin, saveToken } from './api.js'
 import Composer from './components/Composer.jsx'
+import LaptopBanner from './components/LaptopBanner.jsx'
 import MessageList from './components/MessageList.jsx'
 import SignIn from './components/SignIn.jsx'
 import TopBar from './components/TopBar.jsx'
 import { connect } from './socket.js'
 import { statusColor, useChat } from './store.js'
-
-const DESKTOP_QUERY = '(min-width: 768px)'
-
-function useIsDesktop() {
-  const [desktop, setDesktop] = useState(() => window.matchMedia?.(DESKTOP_QUERY).matches ?? true)
-  useEffect(() => {
-    const query = window.matchMedia?.(DESKTOP_QUERY)
-    if (!query) return
-    const onChange = (e) => setDesktop(e.matches)
-    query.addEventListener('change', onChange)
-    return () => query.removeEventListener('change', onChange)
-  }, [])
-  return desktop
-}
 
 // Resolve a session token: saved token, else loopback login, else Google sign-in.
 function useAuth() {
@@ -78,38 +65,40 @@ function useAuth() {
 }
 
 export default function App() {
-  const desktop = useIsDesktop()
   const { token, needsSignIn, clientId, error, onCredential, signOut } = useAuth()
-  const { messages, project, serverStatus, connection, apply, setConnection } = useChat()
+  const { messages, project, serverStatus, mode, agentOnline, connection, apply, setConnection } = useChat()
   const socket = useRef(null)
 
+  // Every device (laptop browser or phone) can read and send; on the hub, prompts are
+  // queued and run by the laptop agent.
   useEffect(() => {
     if (!token) return
     socket.current = connect({
-      path: desktop ? '/ws' : '/sync',
+      path: '/ws',
       token,
       onEvent: apply,
       onState: setConnection,
       onUnauthorized: signOut,
     })
     return () => socket.current?.close()
-  }, [token, desktop, apply, setConnection, signOut])
+  }, [token, apply, setConnection, signOut])
 
   if (needsSignIn) return <SignIn clientId={clientId} onCredential={onCredential} error={error} />
 
   const busy = serverStatus === 'busy'
   return (
     <div className="flex h-full flex-col">
-      <TopBar project={project} color={statusColor(connection, serverStatus)} busy={busy} />
-      <MessageList messages={messages} />
-      {desktop && (
-        <Composer
-          busy={busy}
-          disabled={connection !== 'open'}
-          onSend={(text) => socket.current?.send({ type: 'send', text }) ?? false}
-          onStop={() => socket.current?.send({ type: 'stop' })}
-        />
+      <TopBar project={project} color={statusColor(connection, serverStatus, mode, agentOnline)} busy={busy} />
+      {mode === 'hub' && connection === 'open' && !agentOnline && (
+        <LaptopBanner onCreateToken={() => createAgentToken(token)} />
       )}
+      <MessageList messages={messages} />
+      <Composer
+        busy={busy}
+        disabled={connection !== 'open'}
+        onSend={(text) => socket.current?.send({ type: 'send', text }) ?? false}
+        onStop={() => socket.current?.send({ type: 'stop' })}
+      />
     </div>
   )
 }

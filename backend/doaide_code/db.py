@@ -46,6 +46,20 @@ CREATE TABLE IF NOT EXISTS user_state (
     user_email TEXT PRIMARY KEY,
     active_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL
 );
+-- Hub mode: prompts waiting for (or running on) the user's laptop agent. The id is the
+-- assistant reply message that will hold the answer.
+CREATE TABLE IF NOT EXISTS pending_jobs (
+    id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+    user_email TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+-- Hub mode: what the laptop last reported (projects live on the laptop, not the hub).
+CREATE TABLE IF NOT EXISTS remote_state (
+    user_email TEXT PRIMARY KEY,
+    project TEXT
+);
 """
 
 
@@ -167,6 +181,12 @@ class Store:
             (content, status, executor, message_id),
         )
 
+    def set_message_role(self, message_id: str, role: str) -> None:
+        self._exec("UPDATE messages SET role = ? WHERE id = ?", (role, message_id))
+
+    def get_message(self, message_id: str) -> dict[str, Any] | None:
+        return self._one("SELECT * FROM messages WHERE id = ?", (message_id,))
+
     def set_message_tier(self, message_id: str, tier: int) -> None:
         self._exec("UPDATE messages SET tier = ? WHERE id = ?", (tier, message_id))
 
@@ -176,6 +196,36 @@ class Store:
             (session_id, limit),
         )
         return list(reversed(rows))
+
+    # Hub job queue
+
+    def add_job(self, job_id: str, user_email: str, session_id: str, text: str) -> None:
+        self._exec(
+            "INSERT INTO pending_jobs (id, user_email, session_id, text, created_at) VALUES (?, ?, ?, ?, ?)",
+            (job_id, user_email, session_id, text, time.time()),
+        )
+
+    def next_job(self, user_email: str) -> dict[str, Any] | None:
+        return self._one(
+            "SELECT * FROM pending_jobs WHERE user_email = ? ORDER BY created_at, rowid LIMIT 1", (user_email,)
+        )
+
+    def list_jobs(self, user_email: str) -> list[dict[str, Any]]:
+        return self._all("SELECT * FROM pending_jobs WHERE user_email = ? ORDER BY created_at, rowid", (user_email,))
+
+    def delete_job(self, job_id: str) -> None:
+        self._exec("DELETE FROM pending_jobs WHERE id = ?", (job_id,))
+
+    def remote_project(self, user_email: str) -> str | None:
+        row = self._one("SELECT project FROM remote_state WHERE user_email = ?", (user_email,))
+        return row["project"] if row else None
+
+    def set_remote_project(self, user_email: str, project: str | None) -> None:
+        self._exec(
+            "INSERT INTO remote_state (user_email, project) VALUES (?, ?) "
+            "ON CONFLICT(user_email) DO UPDATE SET project = excluded.project",
+            (user_email, project),
+        )
 
     # Executor stats
 

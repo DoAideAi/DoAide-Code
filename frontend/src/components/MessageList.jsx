@@ -51,6 +51,9 @@ function Message({ message }) {
     )
   }
   const streaming = message.status === 'streaming'
+  if (message.status === 'queued') {
+    return <div className="text-sm text-zinc-500">Queued for your laptop…</div>
+  }
   return (
     <div className={`leading-relaxed ${message.status === 'error' ? 'text-red-300' : 'text-zinc-200'}`}>
       {message.content ? <Body content={message.content} /> : null}
