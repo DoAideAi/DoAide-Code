@@ -9,7 +9,7 @@ ROOT=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 OUT=$(mktemp -d)
 (cd "$ROOT/frontend" && npm install --silent && npm run build)
 git -C "$ROOT" archive --format=tar.gz -o "$OUT/release.tar.gz" HEAD
-tar -czf "$OUT/dist.tar.gz" -C "$ROOT/frontend/dist" .
+COPYFILE_DISABLE=1 tar --no-xattrs -czf "$OUT/dist.tar.gz" -C "$ROOT/frontend/dist" .
 files=("$OUT/release.tar.gz" "$OUT/dist.tar.gz")
 [ -n "${DOAIDE_ENV_FILE:-}" ] && { cp "$DOAIDE_ENV_FILE" "$OUT/env.new"; files+=("$OUT/env.new"); }
 "${SSH[@]}" mkdir -p /opt/DoAide-Code
