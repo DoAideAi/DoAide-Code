@@ -107,3 +107,19 @@ Keys stay on the server. The frontend only receives the public Google client ID.
 cd backend && .venv/bin/pytest -q
 cd frontend && npm test
 ```
+
+## Deploy
+
+Production runs at https://code.doaide.com on the shared Hetzner box. Caddy
+(`knol-caddy` container) sends `/api/*`, `/ws` and `/sync` to the API on
+`172.18.0.1:3097` and everything else to the static frontend on
+`172.18.0.1:3098`. Both are systemd units (`deploy/*.service`).
+
+```bash
+deploy/deploy.sh                              # redeploy (keeps the server .env and data/)
+DOAIDE_ENV_FILE=/path/to/env deploy/deploy.sh # first deploy: also uploads backend/.env
+```
+
+The script builds the frontend, uploads a `git archive` of `HEAD` plus
+`frontend/dist`, installs the backend into `/opt/DoAide-Code/.venv`, restarts
+both units and appends `deploy/code.doaide.com.caddy` to the Caddyfile once.

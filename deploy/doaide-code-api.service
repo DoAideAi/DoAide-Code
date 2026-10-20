@@ -1,0 +1,22 @@
+[Unit]
+Description=DoAide Code API (uvicorn)
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+WorkingDirectory=/opt/DoAide-Code/backend
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/opt/DoAide-Code/backend/.env
+# 172.18.0.1 = knol_knol bridge gateway: reachable by knol-caddy, not the public internet.
+ExecStart=/opt/DoAide-Code/.venv/bin/doaide-code
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+SyslogIdentifier=doaide-code-api
+
+[Install]
+WantedBy=multi-user.target
