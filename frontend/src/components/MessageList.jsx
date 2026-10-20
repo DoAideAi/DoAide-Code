@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // Split text into prose and ``` fenced code segments. An unclosed fence (mid-stream) is code.
 export function splitFences(text) {
@@ -33,7 +33,179 @@ function Body({ content }) {
   )
 }
 
-function Message({ message }) {
+export function formatTokens(n) {
+  if (!n) return '0'
+  return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n)
+}
+
+export function formatCost(usd) {
+  if (!usd) return '$0'
+  return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`
+}
+
+// Tokens and cost of one reply; "no model" for answers read straight from disk.
+export function usageLabel(usage) {
+  if (!usage) return null
+  if (usage.cached) return 'cached · $0'
+  if (!usage.tokens_in && !usage.tokens_out) return 'no model · $0'
+  return `${formatTokens(usage.tokens_in)} in · ${formatTokens(usage.tokens_out)} out · ${formatCost(usage.cost_usd)}`
+}
+
+const TOOL_LABELS = {
+  execute_code: 'task',
+  run_command: 'command',
+  read_file: 'read',
+  write_file: 'write',
+  edit_file: 'edit',
+  list_files: 'list',
+  search_code: 'search',
+  get_status: 'status',
+  apply_changes: 'apply',
+  discard_changes: 'discard',
+}
+
+function ClaudeBadge({ tool }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+      Claude Code
+      {tool && <span className="text-amber-300/60">· {TOOL_LABELS[tool] ?? tool}</span>}
+    </span>
+  )
+}
+
+function Diff({ text }) {
+  return (
+    <pre className="overflow-x-auto bg-black/40 p-2 font-mono text-[12px] leading-snug">
+      {text.split('\n').map((line, i) => {
+        let color = 'text-zinc-400'
+        if (line.startsWith('+++') || line.startsWith('---')) color = 'text-zinc-500'
+        else if (line.startsWith('+')) color = 'text-emerald-300 bg-emerald-500/10'
+        else if (line.startsWith('-')) color = 'text-red-300 bg-red-500/10'
+        else if (line.startsWith('@@')) color = 'text-sky-300'
+        return (
+          <div key={i} className={color}>
+            {line || ' '}
+          </div>
+        )
+      })}
+    </pre>
+  )
+}
+
+const CHANGE_STATUS = {
+  pending: 'text-amber-300',
+  applied: 'text-emerald-300',
+  discarded: 'text-zinc-500',
+}
+
+// Diff preview of proposed edits. Nothing is written until Apply (/apply <id>) on the laptop.
+export function ChangeSet({ changes, onSend }) {
+  const [open, setOpen] = useState(() => new Set(changes.files.length === 1 ? [changes.files[0].path] : []))
+  const toggle = (path) =>
+    setOpen((prev) => {
+      const next = new Set(prev)
+      next.has(path) ? next.delete(path) : next.add(path)
+      return next
+    })
+  const pending = changes.status === 'pending'
+  return (
+    <div data-testid="changeset" className="mt-3 overflow-hidden rounded-md border border-zinc-800">
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/60 px-3 py-1.5 text-xs">
+        <span className="text-zinc-300">
+          {changes.files.length} file{changes.files.length === 1 ? '' : 's'} changed
+          <span className={`ml-2 ${CHANGE_STATUS[changes.status] ?? 'text-zinc-400'}`}>{changes.status}</span>
+        </span>
+        {pending && onSend && (
+          <span className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => onSend(`/discard ${changes.id}`)}
+              className="rounded border border-zinc-700 px-2 py-0.5 text-zinc-300 hover:bg-zinc-800"
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              onClick={() => onSend(`/apply ${changes.id}`)}
+              className="rounded bg-emerald-500/90 px-2 py-0.5 font-medium text-zinc-950 hover:bg-emerald-400"
+            >
+              Apply
+            </button>
+          </span>
+        )}
+      </div>
+      {changes.files.map((file) => (
+        <div key={file.path} className="border-b border-zinc-800/60 last:border-b-0">
+          <button
+            type="button"
+            onClick={() => toggle(file.path)}
+            className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left font-mono text-xs hover:bg-zinc-900"
+          >
+            <span className="truncate text-zinc-200">
+              {file.path}
+              {file.new_file && <span className="ml-2 text-zinc-500">new</span>}
+            </span>
+            <span className="shrink-0">
+              <span className="text-emerald-400">+{file.additions}</span>{' '}
+              <span className="text-red-400">-{file.deletions}</span>
+            </span>
+          </button>
+          {file.problems?.length > 0 && (
+            <ul className="px-3 pb-1.5 text-xs text-amber-300">
+              {file.problems.map((p, i) => (
+                <li key={i}>⚠ {p}</li>
+              ))}
+            </ul>
+          )}
+          {open.has(file.path) && <Diff text={file.diff} />}
+        </div>
+      ))}
+      {changes.problems?.length > 0 && (
+        <ul className="border-t border-zinc-800 px-3 py-1.5 text-xs text-amber-300">
+          {changes.problems.map((p, i) => (
+            <li key={i}>⚠ {p}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// Seconds since a reply started, so a long run visibly makes progress.
+function Elapsed({ since }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  const seconds = since ? Math.max(0, Math.round(now / 1000 - since)) : null
+  return seconds === null ? null : <span className="tabular-nums"> {seconds}s</span>
+}
+
+function Message({ message, onSend }) {
+  const via = message.meta?.via === 'mcp'
+  if (via && message.role === 'user') {
+    return (
+      <div data-testid="mcp-instruction" className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2">
+        <ClaudeBadge tool={message.meta.tool} />
+        <div className="mt-1.5 whitespace-pre-wrap text-zinc-100">{message.content}</div>
+      </div>
+    )
+  }
+  if (via && message.meta.tool !== 'execute_code' && message.status !== 'streaming') {
+    // Tool output (file reads, commands): kept, but folded away.
+    const first = message.content.split('\n')[0] || '(no output)'
+    return (
+      <details className="-mt-3 rounded-md border border-zinc-800/80 text-xs">
+        <summary className={`cursor-pointer truncate px-3 py-1.5 font-mono ${message.status === 'error' ? 'text-red-300' : 'text-zinc-400'}`}>
+          {first}
+        </summary>
+        <pre className="max-h-80 overflow-auto border-t border-zinc-800 bg-black/40 p-2 font-mono text-[12px] text-zinc-300">
+          {message.content}
+        </pre>
+      </details>
+    )
+  }
   if (message.role === 'user') {
     return (
       <div className="flex justify-end">
@@ -54,16 +226,32 @@ function Message({ message }) {
   if (message.status === 'queued') {
     return <div className="text-sm text-zinc-500">Queued for your laptop…</div>
   }
+  const usage = usageLabel(message.meta?.usage)
+  const changes = message.meta?.changes
   return (
     <div className={`leading-relaxed ${message.status === 'error' ? 'text-red-300' : 'text-zinc-200'}`}>
+      {streaming && !message.content && (
+        <div data-testid="working" className="text-sm text-zinc-500">
+          Working on your laptop…
+          <Elapsed since={message.created_at} />
+        </div>
+      )}
       {message.content ? <Body content={message.content} /> : null}
-      {streaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-zinc-400 align-middle" />}
+      {streaming && message.content && (
+        <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-zinc-400 align-middle" />
+      )}
+      {changes?.files?.length > 0 && <ChangeSet changes={changes} onSend={onSend} />}
       {message.status === 'stopped' && <div className="mt-1 text-xs text-zinc-500">stopped</div>}
+      {usage && !streaming && (
+        <div data-testid="usage" className="mt-1.5 font-mono text-[11px] text-zinc-600">
+          {usage}
+        </div>
+      )}
     </div>
   )
 }
 
-export default function MessageList({ messages }) {
+export default function MessageList({ messages, onSend }) {
   const end = useRef(null)
   const last = messages[messages.length - 1]
   useEffect(() => {
@@ -79,7 +267,7 @@ export default function MessageList({ messages }) {
           </p>
         )}
         {messages.map((m) => (
-          <Message key={m.id} message={m} />
+          <Message key={m.id} message={m} onSend={onSend} />
         ))}
         <div ref={end} />
       </div>

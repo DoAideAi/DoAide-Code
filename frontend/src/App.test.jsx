@@ -283,3 +283,57 @@ describe('sign-in never expires', () => {
     expect(FakeSocket.instances).toHaveLength(0)
   })
 })
+
+describe('Claude Code activity and diff previews', () => {
+  const changes = {
+    id: 'c1',
+    status: 'pending',
+    problems: [],
+    files: [{ path: 'app.py', new_file: false, additions: 1, deletions: 1, diff: '@@ -1 +1 @@\n-a\n+b\n', problems: [] }],
+  }
+
+  it('shows the instruction, the diff, usage, and applies via /apply', async () => {
+    const ws = await boot(true, {
+      title: 'Claude Code: rename it',
+      source: 'mcp',
+      messages: [
+        { id: 'u', role: 'user', content: 'rename it', status: 'done', meta: { via: 'mcp', tool: 'execute_code' } },
+        {
+          id: 'r',
+          role: 'assistant',
+          content: 'Renamed.',
+          status: 'done',
+          meta: { via: 'mcp', tool: 'execute_code', usage: { tokens_in: 10, tokens_out: 2, cost_usd: 0 }, changes },
+        },
+      ],
+    })
+    expect(screen.getByTestId('mcp-instruction').textContent).toContain('Claude Code')
+    expect(screen.getByTestId('mcp-instruction').textContent).toContain('rename it')
+    expect(screen.getByTestId('sessions-toggle').textContent).toContain('Claude Code: rename it')
+    expect(screen.getByTestId('changeset').textContent).toContain('+b')
+    expect(screen.getByTestId('usage').textContent).toBe('10 in · 2 out · $0')
+    fireEvent.click(screen.getByText('Apply'))
+    expect(ws.sent.at(-1)).toEqual({ type: 'send', text: '/apply c1' })
+    await act(async () => ws.emit({ type: 'changes', id: 'r', changes: { ...changes, status: 'applied' } }))
+    expect(screen.queryByText('Apply')).toBeNull()
+    expect(screen.getByTestId('changeset').textContent).toContain('applied')
+  })
+
+  it('shows progress while a reply has no text yet', async () => {
+    await boot(false, { messages: [{ id: 'r', role: 'assistant', content: '', status: 'streaming', created_at: 0 }] })
+    expect(screen.getByTestId('working').textContent).toContain('Working on your laptop')
+  })
+
+  it('switches conversations from the menu', async () => {
+    const ws = await boot(true)
+    globalThis.fetch.mockImplementationOnce(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ sessions: [{ id: 'other', title: 'Older chat', source: 'mcp', updated_at: 0 }] }),
+    }))
+    fireEvent.click(screen.getByTestId('sessions-toggle'))
+    await flush()
+    fireEvent.click(screen.getByText('Older chat'))
+    expect(ws.sent.at(-1)).toEqual({ type: 'open', session_id: 'other' })
+  })
+})

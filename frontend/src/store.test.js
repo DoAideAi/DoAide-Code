@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { splitFences } from './components/MessageList.jsx'
+import { splitFences, usageLabel } from './components/MessageList.jsx'
 import { applyEvent, initialChat, statusColor } from './store.js'
 
 const msg = (id, role, content, status = 'done') => ({ id, role, content, status, created_at: 0 })
@@ -95,5 +95,23 @@ describe('splitFences', () => {
       { kind: 'text', value: 'see ' },
       { kind: 'code', lang: 'js', value: 'let' },
     ])
+  })
+})
+
+describe('reply meta', () => {
+  it('keeps usage from done and updates changes in place', () => {
+    let s = applyEvent(initialChat, { type: 'message', message: msg('a', 'assistant', '', 'streaming') })
+    const changes = { id: 'c1', status: 'pending', files: [] }
+    s = applyEvent(s, { type: 'done', id: 'a', status: 'done', content: 'x', meta: { usage: { tokens_in: 5 }, changes } })
+    expect(s.messages[0].meta.usage.tokens_in).toBe(5)
+    s = applyEvent(s, { type: 'changes', id: 'a', changes: { ...changes, status: 'applied' } })
+    expect(s.messages[0].meta).toMatchObject({ usage: { tokens_in: 5 }, changes: { status: 'applied' } })
+  })
+
+  it('formats usage labels', () => {
+    expect(usageLabel({ tokens_in: 1500, tokens_out: 200, cost_usd: 0.0021 })).toBe('1.5k in · 200 out · $0.0021')
+    expect(usageLabel({ tokens_in: 0, tokens_out: 0, cost_usd: 0 })).toBe('no model · $0')
+    expect(usageLabel({ cached: true })).toBe('cached · $0')
+    expect(usageLabel(undefined)).toBeNull()
   })
 })

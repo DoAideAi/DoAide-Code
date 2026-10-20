@@ -147,7 +147,8 @@ function useStoredFlag(key) {
 export default function App() {
   const desktop = useIsDesktop()
   const { token, needsSignIn, clientId, error, onCredential, renew } = useAuth()
-  const { messages, project, serverStatus, mode, agentOnline, connection, apply, setConnection } = useChat()
+  const { messages, project, serverStatus, mode, agentOnline, connection, apply, setConnection, sessionId, title, source } =
+    useChat()
   const socket = useRef(null)
   const [filesOpen, toggleFiles] = useStoredFlag(FILES_KEY)
   const [openFile, setOpenFile] = useState(null)
@@ -174,6 +175,7 @@ export default function App() {
   if (needsSignIn) return <SignIn clientId={clientId} onCredential={onCredential} error={error} />
 
   const busy = serverStatus === 'busy'
+  const send = (text) => socket.current?.send({ type: 'send', text }) ?? false
   // The file panel is desktop-only; phones show just the conversation.
   const showFiles = desktop && filesOpen && token
   const showViewer = showFiles && openFile
@@ -185,6 +187,16 @@ export default function App() {
         busy={busy}
         filesOpen={filesOpen}
         onToggleFiles={desktop ? toggleFiles : null}
+        sessions={
+          token && {
+            token,
+            title,
+            source,
+            sessionId,
+            onOpen: (id) => socket.current?.send({ type: 'open', session_id: id }),
+            onNew: () => send('/new'),
+          }
+        }
       />
       {mode === 'hub' && connection === 'open' && !agentOnline && (
         <LaptopBanner onCreateToken={() => createAgentToken(token)} />
@@ -195,11 +207,11 @@ export default function App() {
           <CodeViewer token={token} path={openFile} version={filesVersion} onClose={() => setOpenFile(null)} />
         )}
         <section className={`flex min-w-0 flex-col ${showViewer ? 'w-[26rem] shrink-0 lg:w-[34rem]' : 'flex-1'}`}>
-          <MessageList messages={messages} />
+          <MessageList messages={messages} onSend={send} />
           <Composer
             busy={busy}
             disabled={connection !== 'open'}
-            onSend={(text) => socket.current?.send({ type: 'send', text }) ?? false}
+            onSend={send}
             onStop={() => socket.current?.send({ type: 'stop' })}
           />
         </section>

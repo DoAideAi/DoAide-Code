@@ -1,13 +1,15 @@
+import Sessions from './Sessions.jsx'
+
 const DOT = {
   green: 'bg-emerald-400',
   red: 'bg-red-500',
   gray: 'bg-zinc-600',
 }
 
-export default function TopBar({ project, color, busy, filesOpen, onToggleFiles }) {
+export default function TopBar({ project, color, busy, filesOpen, onToggleFiles, sessions }) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4">
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {onToggleFiles && (
           <button
             type="button"
@@ -23,7 +25,8 @@ export default function TopBar({ project, color, busy, filesOpen, onToggleFiles 
             </svg>
           </button>
         )}
-        <span className="text-sm font-medium tracking-tight text-zinc-300">Doaide Code</span>
+        <span className="shrink-0 text-sm font-medium tracking-tight text-zinc-300">Doaide Code</span>
+        {sessions && <Sessions {...sessions} />}
       </div>
       <div className="flex items-center gap-3">
         <span

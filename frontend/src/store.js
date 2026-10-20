@@ -2,6 +2,8 @@ import { create } from 'zustand'
 
 export const initialChat = {
   sessionId: null,
+  title: null,
+  source: null, // 'mcp' when Claude Code (via MCP) started this conversation
   project: null,
   messages: [],
   serverStatus: 'idle', // idle | busy | error
@@ -16,6 +18,8 @@ export function applyEvent(state, event) {
       return {
         ...state,
         sessionId: event.session_id,
+        title: event.title ?? null,
+        source: event.source ?? null,
         project: event.project,
         messages: event.messages,
         serverStatus: event.status,
@@ -41,8 +45,22 @@ export function applyEvent(state, event) {
         ...state,
         messages: state.messages.map((m) =>
           m.id === event.id
-            ? { ...m, content: event.content, status: event.status, role: event.role ?? m.role }
+            ? {
+                ...m,
+                content: event.content,
+                status: event.status,
+                role: event.role ?? m.role,
+                meta: event.meta ?? m.meta,
+              }
             : m,
+        ),
+      }
+    case 'changes':
+      // A proposed changeset was applied or discarded (possibly from another device).
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.id === event.id ? { ...m, meta: { ...m.meta, changes: event.changes } } : m,
         ),
       }
     case 'status':

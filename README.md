@@ -23,10 +23,10 @@ backend/            FastAPI harness server (Python 3.11+)
     agent.py        laptop agent: `doaide-code agent`, runs relayed prompts locally
     runner.py       one prompt through the executors with fallback (laptop only)
     mcp_server.py   `doaide-code mcp`: MCP server (stdio) exposing laptop tools to Claude
-    router.py       Router Brain (Jev -> Gemini -> keyword heuristics)
+    router.py       Router Brain (local keyword heuristics)
+    changes.py      edit blocks -> diff preview, checks, /apply
     chat.py         orchestration: commands, routing, fallback, persistence, fan-out
-    executors/      ollama.py, claude_cli.py, codex_cli.py, jev.py (TypeSafe SDK)
-    gemini.py       Gemini client for product LLM calls (routing fallback, titles)
+    executors/      ollama.py, claude_cli.py, codex_cli.py (all local, no API keys)
     db.py           SQLite: projects, sessions, messages, executor_stats
     auth.py         JWT + Google Sign-In
     sync.py         cross-device relay hub
@@ -58,11 +58,18 @@ from the CLI environments so they run on your subscription logins.
 
 ## Routing
 
-1. **Jev** asks TypeSafe `system_one` two typed questions: a `Choice` over
-   tiers and a `Score` of complexity. A low-confidence choice defers to the
-   complexity score.
-2. If Jev has no key or fails, **Gemini** classifies with a JSON schema.
-3. Offline, **keyword heuristics** decide.
+Everything runs on the laptop: tier 0 is Ollama (free), tier 1 Codex CLI / Claude
+Haiku, tier 2 Claude Sonnet, tier 3 Claude Opus, all on your own subscription logins.
+Local keyword heuristics pick the tier; the router tries that tier, escalates, then
+falls back down. No API keys are used.
+
+## Code changes: preview, then apply
+
+Models answer with SEARCH/REPLACE edit blocks and never write files. Each answer's
+blocks become a changeset: per-file diffs shown under the reply, quick checks (syntax,
+ruff) on the result, and one automatic repair round if they fail. Nothing is written
+until **Apply** in the UI, `/apply [<id>]`, or the MCP `apply_changes` tool; applying
+refuses if a file changed since the preview. Every reply also shows its tokens and cost.
 
 ## Chat commands
 
@@ -72,6 +79,8 @@ from the CLI environments so they run on your subscription logins.
 /workspace [<path>|reset]    show or change the default workspace folder
 /remove-project <name>
 /switch-project <name>       executors run with this folder as their working dir
+/apply [<id>]   /discard [<id>]   proposed changes (latest pending if no id)
+/usage                       tokens and cost today, this week, and this month
 /projects   /new   /help
 ```
 
@@ -166,8 +175,9 @@ Every tool works inside the active project, or `~/doaide-code-workspace` when no
 active, or a registered project passed as `project`. Paths that resolve outside that
 root (`..`, absolute paths elsewhere, symlinks) are refused. Read-only tools are marked
 `readOnlyHint`, and writing tools are marked `destructiveHint`, so clients can ask
-before running them. Routing decisions use Jev, then Gemini; the product itself makes
-no Anthropic API calls.
+before running them. `execute_code` returns proposed edits as a diff preview under
+`changes`; `apply_changes` / `discard_changes` write or drop them. The product itself
+makes no LLM API calls.
 
 **Claude Code**
 
@@ -205,6 +215,12 @@ MCP token from `POST /api/mcp-token`; agent tokens are refused. Supported method
 `initialize`, `ping`, `tools/list` and `tools/call`; notifications get 202. A call waits
 up to about 30 minutes, and requests are capped at 2 MB.
 
+Every relayed `tools/call` shows up in the DoAide Code UI (web and phone) in a
+"Claude Code" conversation: the instruction the client sent, then the laptop's reply,
+with `execute_code` output streaming in live and its diff preview, usage and cost when
+it finishes. Calls within 30 minutes of each other share a conversation; the switcher
+in the top bar lists every conversation (Claude Code ones are marked).
+
 ## Configuration
 
 | Variable | Default |
@@ -216,17 +232,16 @@ up to about 30 minutes, and requests are capped at 2 MB.
 | `DOAIDE_DB` | `~/.doaide-code/doaide.db` |
 | `OLLAMA_URL` / `DOAIDE_OLLAMA_MODEL` | `http://localhost:11434` / `qwen3-coder` |
 | `DOAIDE_CODEX_MODEL` | `o4-mini` |
-| `DOAIDE_CLAUDE_HAIKU_MODEL` / `_SONNET_MODEL` / `_OPUS_MODEL` | `haiku` / `claude-sonnet-4-5-20250514` / `opus` |
+| `DOAIDE_CLAUDE_HAIKU_MODEL` / `_SONNET_MODEL` / `_OPUS_MODEL` | `haiku` / `sonnet` / `opus` |
 | `DOAIDE_CLI_TIMEOUT` | `600` seconds |
-| `GEMINI_API_KEY` (or `GEMINI_API_KEY_FILE`) | read from `$DOAIDE_KEYS_DIR/gemini_api_key[.txt]` |
-| `DOAIDE_GEMINI_MODEL` | `gemini-3.5-flash-lite` |
-| `TYPESAFE_API_KEY` (or `TYPESAFE_API_KEY_FILE`) | read from `$DOAIDE_KEYS_DIR/typesafe_api_key.txt` |
 | `DOAIDE_JWT_SECRET` | random per process (set it so access tokens survive restarts; refresh tokens survive regardless) |
 | `GOOGLE_CLIENT_ID`, `DOAIDE_ALLOWED_EMAILS` | unset |
 | `DOAIDE_OWNER_EMAIL` | `local` |
-| `DOAIDE_REQUIRE_SSO`, `DOAIDE_OFFLINE_ROUTER` | off |
+| `DOAIDE_DISABLE_CODEX_CLI`, `DOAIDE_DISABLE_CLAUDE_CLI` | off |
+| `DOAIDE_CACHE_TTL` | `86400` seconds (0 disables the response cache) |
+| `DOAIDE_REQUIRE_SSO` | off |
 
-Keys stay on the server. The frontend only receives the public Google client ID.
+No LLM keys are needed. The frontend only receives the public Google client ID.
 
 ## Tests
 
