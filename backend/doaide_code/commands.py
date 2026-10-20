@@ -9,14 +9,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .db import Store
+from .workspace import DEFAULT_WORKSPACE, set_workspace, workspace_path
 
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 HELP = """Commands:
 /add-project <name> <path>   register a project folder (name optional: /add-project <path>)
+/add-project <name>          create <workspace>/<name> and register it
 /remove-project <name>       unregister a project (files are untouched)
 /switch-project <name>       make a project active for this chat
 /projects                    list registered projects
+/workspace [<path>|reset]    show or change the default workspace folder
 /new                         start a new chat session
 /help                        show this help"""
 
@@ -39,7 +42,12 @@ def _format_projects(store: Store, active_id: int | None) -> str:
     return "\n".join(f"{'*' if p['id'] == active_id else ' '} {p['name']}  {p['path']}" for p in projects)
 
 
-def run_command(store: Store, user_email: str, text: str) -> CommandResult:
+def _looks_like_path(arg: str) -> bool:
+    return "/" in arg or "\\" in arg or arg.startswith(("~", "."))
+
+
+def run_command(store: Store, user_email: str, text: str, *, workspace: str = DEFAULT_WORKSPACE) -> CommandResult:
+    """Run a slash command. `workspace` is the configured default workspace folder."""
     try:
         parts = shlex.split(text.strip())
     except ValueError as exc:
@@ -54,16 +62,39 @@ def run_command(store: Store, user_email: str, text: str) -> CommandResult:
     if cmd == "/new":
         return CommandResult("Started a new session.", new_session=True)
 
+    if cmd == "/workspace":
+        if not args:
+            return CommandResult(f"Workspace: {workspace_path(store, workspace)}")
+        if len(args) != 1:
+            return CommandResult("Usage: /workspace [<path>|reset]")
+        if args[0].lower() == "reset":
+            set_workspace(store, None)
+            return CommandResult(f"Workspace reset to {workspace_path(store, workspace)}.")
+        try:
+            path = set_workspace(store, args[0])
+        except ValueError as exc:
+            return CommandResult(str(exc))
+        return CommandResult(f"Workspace set to {path}.")
+
     if cmd == "/add-project":
-        if len(args) == 1:
-            name, raw_path = Path(args[0]).expanduser().name, args[0]
+        root = workspace_path(store, workspace)
+        create = False
+        if len(args) == 1 and not _looks_like_path(args[0]):
+            # A bare name: a new folder inside the workspace.
+            name, path, create = args[0], root / args[0], True
+        elif len(args) == 1:
+            path = Path(args[0]).expanduser()
+            name = path.name
         elif len(args) == 2:
-            name, raw_path = args
+            name, path = args[0], Path(args[1]).expanduser()
         else:
             return CommandResult("Usage: /add-project <name> <path>")
         if not NAME_RE.match(name):
             return CommandResult("Project names use letters, digits, '.', '_' or '-' (max 64 chars).")
-        path = Path(raw_path).expanduser().resolve()
+        # Relative paths are relative to the workspace, not to wherever the server started.
+        path = (path if path.is_absolute() else root / path).resolve()
+        if create:
+            path.mkdir(parents=True, exist_ok=True)
         if not path.is_dir():
             return CommandResult(f"Not a directory: {path}")
         try:

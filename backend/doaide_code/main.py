@@ -17,15 +17,27 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .auth import AuthError, User, bearer, is_loopback, issue_token, verify_google_credential, verify_token
+from .auth import (
+    AuthError,
+    User,
+    bearer,
+    hash_token,
+    is_loopback,
+    issue_token,
+    new_refresh_token,
+    verify_google_credential,
+    verify_token,
+)
 from .chat import ChatService
-from .relay import RelayService
+from .files import FileAccessError, list_dir, read_file
+from .relay import LaptopOffline, RelayService
 from .config import Settings
 from .db import Store
 from .executors import Executor, JevExecutor, build_executors
 from .gemini import GeminiClient
 from .router import RouterBrain
 from .sync import SyncHub
+from .workspace import set_workspace, working_root, workspace_path
 
 log = logging.getLogger("doaide_code")
 
@@ -38,6 +50,15 @@ class GoogleLogin(BaseModel):
 
 class SendMessage(BaseModel):
     text: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class SettingsUpdate(BaseModel):
+    # None restores the default (~/doaide-code-workspace).
+    workspace: str | None = None
 
 
 def create_app(settings: Settings | None = None, *, executors: list[Executor] | None = None) -> FastAPI:
@@ -59,7 +80,9 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
             gemini=gemini,
             offline=settings.offline_router,
         )
-        chat = ChatService(store, router, hub, gemini=None if settings.offline_router else gemini)
+        chat = ChatService(
+            store, router, hub, gemini=None if settings.offline_router else gemini, workspace=settings.workspace
+        )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -83,6 +106,12 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
             return verify_token(settings, bearer(request.headers.get("authorization")))
         except AuthError as exc:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+
+    def start_session(user: User) -> dict:
+        """Access token plus a refresh token that never expires (revoked by /api/auth/logout)."""
+        raw, digest = new_refresh_token()
+        store.add_refresh_token(digest, user.email, "user", name=user.name)
+        return {"token": issue_token(settings, user), "refresh_token": raw, "email": user.email}
 
     # Health and auth
 
@@ -108,8 +137,7 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
         host = request.client.host if request.client else None
         if settings.require_sso or proxied or not is_loopback(host):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Sign in with Google")
-        user = User(email=settings.owner_email, name="Local")
-        return {"token": issue_token(settings, user), "email": user.email}
+        return start_session(User(email=settings.owner_email, name="Local"))
 
     @app.post("/api/auth/google")
     async def google_login(body: GoogleLogin) -> dict:
@@ -117,7 +145,22 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
             user = await verify_google_credential(settings, body.credential)
         except AuthError as exc:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
-        return {"token": issue_token(settings, user), "email": user.email}
+        return start_session(user)
+
+    @app.post("/api/auth/refresh")
+    async def refresh(body: RefreshRequest) -> dict:
+        row = store.use_refresh_token(hash_token(body.refresh_token), "user")
+        if row is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign in again")
+        email = row["user_email"]
+        if settings.allowed_emails and email not in settings.allowed_emails and email != settings.owner_email:
+            store.delete_refresh_token(row["token_hash"])
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This account is no longer allowed")
+        return {"token": issue_token(settings, User(email=email, name=row["name"])), "email": email}
+
+    @app.post("/api/auth/logout")
+    async def logout(body: RefreshRequest) -> dict:
+        return {"revoked": store.delete_refresh_token(hash_token(body.refresh_token))}
 
     @app.get("/api/me")
     async def me(user: User = Depends(current_user)) -> dict:
@@ -153,10 +196,54 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Only the hub accepts laptop agents")
         proto = request.headers.get("x-forwarded-proto", request.url.scheme)
         host = request.headers.get("host", request.url.netloc)
+        raw, digest = new_refresh_token()
+        store.add_refresh_token(digest, user.email, "agent", name="laptop")
         return {
-            "token": issue_token(settings, User(email=user.email, name=user.name, scope="agent")),
+            "token": raw,
             "hub_url": f"{'wss' if proto == 'https' else 'ws'}://{host}/agent",
         }
+
+    # Files (read-only) and laptop settings
+
+    async def browse(user: User, method: str, rel: str) -> dict:
+        if isinstance(chat, RelayService):
+            try:
+                answer = await chat.rpc(user.email, method, {"path": rel})
+            except LaptopOffline as exc:
+                raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Your laptop is offline") from exc
+            if "error" in answer:
+                raise HTTPException(int(answer.get("status") or 400), str(answer["error"]))
+            return answer.get("result") or {}
+        root, label = working_root(store, user.email, settings.workspace)
+        try:
+            result = (list_dir if method == "list_files" else read_file)(root, rel)
+        except FileAccessError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+        return {**result, "root": label}
+
+    @app.get("/api/files")
+    async def files(path: str = "", user: User = Depends(current_user)) -> dict:
+        return await browse(user, "list_files", path)
+
+    @app.get("/api/file")
+    async def file(path: str, user: User = Depends(current_user)) -> dict:
+        return await browse(user, "read_file", path)
+
+    @app.get("/api/settings")
+    async def get_settings(user: User = Depends(current_user)) -> dict:
+        if settings.is_hub:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Settings live on the laptop; use /workspace in chat")
+        return {"workspace": str(workspace_path(store, settings.workspace)), "default_workspace": settings.workspace}
+
+    @app.put("/api/settings")
+    async def put_settings(body: SettingsUpdate, user: User = Depends(current_user)) -> dict:
+        if settings.is_hub:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Settings live on the laptop; use /workspace in chat")
+        try:
+            set_workspace(store, body.workspace)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        return {"workspace": str(workspace_path(store, settings.workspace)), "default_workspace": settings.workspace}
 
     # WebSockets
 
@@ -216,9 +303,13 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
         @app.websocket("/agent")
         async def agent_socket(ws: WebSocket) -> None:
             """The user's laptop: receives queued jobs and streams results back."""
-            user = await accept(ws, scope="agent")
-            if user is None:
+            # Laptop tokens are never-expiring refresh tokens with the agent scope.
+            row = store.use_refresh_token(hash_token(ws.query_params.get("token") or ""), "agent")
+            if row is None:
+                await ws.close(code=WS_UNAUTHORIZED)
                 return
+            await ws.accept()
+            user = User(email=row["user_email"], scope="agent")
             await relay.attach_agent(user.email, ws)
             try:
                 while True:

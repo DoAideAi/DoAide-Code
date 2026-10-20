@@ -63,6 +63,9 @@ class Settings:
     codex_bin: str = field(default_factory=lambda: os.environ.get("DOAIDE_CODEX_BIN", "codex"))
     codex_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_CODEX_MODEL", "o4-mini"))
 
+    # Default workspace on the laptop; `/workspace <path>` overrides it in the local database.
+    workspace: str = field(default_factory=lambda: os.environ.get("DOAIDE_WORKSPACE", "~/doaide-code-workspace"))
+
     cli_timeout: float = field(default_factory=lambda: float(os.environ.get("DOAIDE_CLI_TIMEOUT", "600")))
 
     gemini_api_key: str = field(default_factory=lambda: _read_secret("GEMINI_API_KEY", "gemini_api_key.txt", "gemini_api_key"))
@@ -70,8 +73,8 @@ class Settings:
     typesafe_api_key: str = field(default_factory=lambda: _read_secret("TYPESAFE_API_KEY", "typesafe_api_key.txt"))
 
     jwt_secret: str = field(default_factory=lambda: os.environ.get("DOAIDE_JWT_SECRET", "") or secrets.token_urlsafe(48))
-    jwt_ttl_seconds: int = field(default_factory=lambda: int(os.environ.get("DOAIDE_JWT_TTL", str(7 * 24 * 3600))))
-    agent_ttl_seconds: int = field(default_factory=lambda: int(os.environ.get("DOAIDE_AGENT_TTL", str(90 * 24 * 3600))))
+    # Access tokens are short-lived; the browser renews them with its never-expiring refresh token.
+    jwt_ttl_seconds: int = field(default_factory=lambda: int(os.environ.get("DOAIDE_JWT_TTL", str(24 * 3600))))
     google_client_id: str = field(default_factory=lambda: os.environ.get("GOOGLE_CLIENT_ID", ""))
     allowed_emails: frozenset[str] = field(
         default_factory=lambda: frozenset(

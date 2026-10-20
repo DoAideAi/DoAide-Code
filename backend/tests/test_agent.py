@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -17,8 +18,15 @@ pytestmark = pytest.mark.anyio
 OWNER = "owner@example.com"
 
 
-def make_agent(store, executors) -> LaptopAgent:
-    return LaptopAgent(store, RouterBrain(executors, offline=True), OWNER)
+def make_agent(store, executors, workspace=None) -> LaptopAgent:
+    return LaptopAgent(
+        store, RouterBrain(executors, offline=True), OWNER, workspace=str(workspace or store_workspace(store))
+    )
+
+
+def store_workspace(store) -> str:
+    # Each test's store lives in its own tmp dir; keep the workspace next to it.
+    return str(Path(store.path).parent / "workspace")
 
 
 class Outbox:
@@ -131,13 +139,17 @@ async def test_serve_end_to_end_against_real_hub(settings, store, executors, tmp
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
-    server = uvicorn.Server(uvicorn.Config(create_app(settings), host="127.0.0.1", port=port, log_level="warning"))
+    app = create_app(settings)
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     server_task = asyncio.create_task(server.serve())
     while not server.started:
         await asyncio.sleep(0.01)
 
     user = issue_token(settings, User(email=OWNER))
-    agent_token = issue_token(settings, User(email=OWNER, scope="agent"))
+    from doaide_code.auth import new_refresh_token
+
+    agent_token, digest = new_refresh_token()
+    app.state.store.add_refresh_token(digest, OWNER, "agent")
     agent_task = asyncio.create_task(serve(make_agent(store, executors), f"ws://127.0.0.1:{port}/agent", agent_token))
     try:
         async with connect(f"ws://127.0.0.1:{port}/ws?token={user}") as browser:

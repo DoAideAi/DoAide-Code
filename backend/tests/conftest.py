@@ -52,6 +52,8 @@ def settings(tmp_path: Path, monkeypatch) -> Settings:
     s.typesafe_api_key = ""
     s.offline_router = True
     s.owner_email = "owner@example.com"
+    # Never touch the real ~/doaide-code-workspace from tests.
+    s.workspace = str(tmp_path / "workspace")
     return s
 
 

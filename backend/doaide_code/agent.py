@@ -14,7 +14,6 @@ import contextlib
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from pathlib import Path
 from typing import Any
 
 from .commands import is_command, run_command
@@ -24,7 +23,9 @@ from .executors import Job, Turn, build_executors
 from .executors.jev import JevExecutor
 from .gemini import GeminiClient
 from .router import RouterBrain
+from .files import FileAccessError, list_dir, read_file
 from .runner import Outcome, run_job
+from .workspace import DEFAULT_WORKSPACE, working_root
 
 log = logging.getLogger(__name__)
 
@@ -32,9 +33,10 @@ Send = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 class LaptopAgent:
-    def __init__(self, store: Store, router: RouterBrain, owner_email: str):
+    def __init__(self, store: Store, router: RouterBrain, owner_email: str, *, workspace: str = DEFAULT_WORKSPACE):
         self.store = store
         self.router = router
+        self.workspace = workspace
         # Projects and the active project are kept per laptop owner in the local database.
         self.owner = owner_email
         self._task: asyncio.Task | None = None
@@ -56,6 +58,26 @@ class LaptopAgent:
             self._task = asyncio.create_task(self.run(message, send))
         elif kind == "stop" and message.get("id") == self._task_id:
             await self.cancel()
+        elif kind == "rpc" and isinstance(message.get("id"), str):
+            await send({"type": "rpc_result", "id": message["id"], **await self.rpc(message)})
+
+    async def rpc(self, message: dict[str, Any]) -> dict[str, Any]:
+        """File browsing requests from the hub UI, answered from the laptop's disk."""
+        params = message.get("params") if isinstance(message.get("params"), dict) else {}
+        rel = str(params.get("path") or "")
+        root, label = working_root(self.store, self.owner, self.workspace)
+        try:
+            if message.get("method") == "list_files":
+                result = await asyncio.to_thread(list_dir, root, rel)
+            elif message.get("method") == "read_file":
+                result = await asyncio.to_thread(read_file, root, rel)
+            else:
+                return {"error": "Unknown request", "status": 400}
+        except FileAccessError as exc:
+            return {"error": str(exc), "status": exc.status}
+        except OSError as exc:
+            return {"error": exc.strerror or "Cannot read", "status": 400}
+        return {"result": {**result, "root": label}}
 
     async def cancel(self) -> None:
         task, self._task, self._task_id = self._task, None, None
@@ -67,14 +89,14 @@ class LaptopAgent:
     async def run(self, message: dict[str, Any], send: Send) -> None:
         job_id, text = message["id"], message["text"]
         if is_command(text):
-            result = run_command(self.store, self.owner, text)
+            result = run_command(self.store, self.owner, text, workspace=self.workspace)
             await send({"type": "done", "id": job_id, "role": "system", "status": "done", "content": result.text})
             if result.project_changed:
                 await send({"type": "project", "project": self.project_name()})
             return
 
         project = self.store.active_project(self.owner)
-        cwd = Path(project["path"]) if project and Path(project["path"]).is_dir() else None
+        cwd, _ = working_root(self.store, self.owner, self.workspace)
         history = [
             Turn("assistant" if t.get("role") == "assistant" else "user", str(t.get("content", "")))
             for t in message.get("history") or []
@@ -156,7 +178,7 @@ def run_agent(settings: Settings) -> None:
         gemini=GeminiClient(settings.gemini_api_key, settings.gemini_model),
         offline=settings.offline_router,
     )
-    agent = LaptopAgent(store, router, settings.owner_email)
+    agent = LaptopAgent(store, router, settings.owner_email, workspace=settings.workspace)
     try:
         asyncio.run(serve(agent, settings.hub_url, settings.hub_token))
     except KeyboardInterrupt:

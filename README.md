@@ -67,10 +67,42 @@ from the CLI environments so they run on your subscription logins.
 
 ```
 /add-project <name> <path>   register a folder (or /add-project <path>)
+/add-project <name>          create ~/doaide-code-workspace/<name> and register it
+/workspace [<path>|reset]    show or change the default workspace folder
 /remove-project <name>
 /switch-project <name>       executors run with this folder as their working dir
 /projects   /new   /help
 ```
+
+## Workspace
+
+On the laptop, projects and files live under `~/doaide-code-workspace` by default
+(`DOAIDE_WORKSPACE` changes the default). `/workspace <path>` switches it, and the
+choice is saved in the laptop's local database (`settings` table). `/workspace reset`
+goes back to the default. Prompts with no active project run in the workspace,
+`/add-project <name>` creates `<workspace>/<name>`, and relative project paths are
+resolved inside the workspace. In local mode, `GET`/`PUT /api/settings` reads and
+writes the same value.
+
+## Interface
+
+Kept minimal: a top bar (project pill and status dot), the conversation, and the
+input box. On desktop widths, one toggle opens a file tree and a read-only code
+viewer for the active project (or the workspace). Both refresh after every answer,
+so you can see what the executors changed. Phones show only the conversation and
+the input box. On the hub, file listings are fetched from the laptop over its agent
+connection; nothing is read from the server's disk.
+
+## Sign-in
+
+Sign in once per device. Login returns a short-lived access token (1 day,
+`DOAIDE_JWT_TTL`) and a refresh token that never expires. The browser silently
+trades the refresh token for new access tokens, including when the socket reports
+an expired token. Refresh tokens are stored hashed in SQLite.
+`POST /api/auth/logout {refresh_token}` revokes one, and removing an email from
+`DOAIDE_ALLOWED_EMAILS` revokes that account's tokens on next use. The laptop
+agent token from **Connect laptop** is the same kind of never-expiring, revocable
+token, scoped to `/agent` only.
 
 ## Cross-device sync (hub + laptop agent)
 
@@ -86,7 +118,7 @@ phone / laptop browser ──/ws──▶ hub (code.doaide.com) ◀──/agent�
 1. Sign in at code.doaide.com from any device. Every device can read and send.
 2. Prompts are saved and queued on the hub. While the laptop is offline the status
    dot is gray and a banner says so.
-3. Click **Connect laptop** to get a long-lived agent token, then on the laptop run:
+3. Click **Connect laptop** to get an agent token (never expires, revocable), then on the laptop run:
 
    ```bash
    cd backend
@@ -119,7 +151,7 @@ never get a local token. Agent tokens (`POST /api/agent-token`) only work on
 | --- | --- |
 | `DOAIDE_MODE` | `local` (runs executors) or `hub` (sync server only) |
 | `DOAIDE_HUB_URL` / `DOAIDE_HUB_TOKEN` | laptop agent: `wss://code.doaide.com/agent` / unset |
-| `DOAIDE_AGENT_TTL` | `7776000` seconds (90 days) |
+| `DOAIDE_WORKSPACE` | `~/doaide-code-workspace` (default; `/workspace` overrides it per laptop) |
 | `DOAIDE_HOST` / `DOAIDE_PORT` | `127.0.0.1` / `3097` |
 | `DOAIDE_DB` | `~/.doaide-code/doaide.db` |
 | `OLLAMA_URL` / `DOAIDE_OLLAMA_MODEL` | `http://localhost:11434` / `qwen3-coder` |
@@ -129,7 +161,7 @@ never get a local token. Agent tokens (`POST /api/agent-token`) only work on
 | `GEMINI_API_KEY` (or `GEMINI_API_KEY_FILE`) | read from `$DOAIDE_KEYS_DIR/gemini_api_key[.txt]` |
 | `DOAIDE_GEMINI_MODEL` | `gemini-3.5-flash-lite` |
 | `TYPESAFE_API_KEY` (or `TYPESAFE_API_KEY_FILE`) | read from `$DOAIDE_KEYS_DIR/typesafe_api_key.txt` |
-| `DOAIDE_JWT_SECRET` | random per process (set it to keep sessions across restarts) |
+| `DOAIDE_JWT_SECRET` | random per process (set it so access tokens survive restarts; refresh tokens survive regardless) |
 | `GOOGLE_CLIENT_ID`, `DOAIDE_ALLOWED_EMAILS` | unset |
 | `DOAIDE_OWNER_EMAIL` | `local` |
 | `DOAIDE_REQUIRE_SSO`, `DOAIDE_OFFLINE_ROUTER` | off |

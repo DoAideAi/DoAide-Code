@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import uuid
-from pathlib import Path
 from typing import Any
 
 from .commands import is_command, run_command
@@ -15,6 +14,7 @@ from .gemini import GeminiClient, GeminiError
 from .router import RouterBrain
 from .runner import Outcome, run_job
 from .sync import SyncHub
+from .workspace import DEFAULT_WORKSPACE, working_root
 
 HISTORY_TURNS = 12
 
@@ -25,8 +25,17 @@ def public_message(row: dict[str, Any]) -> dict[str, Any]:
 
 
 class ChatService:
-    def __init__(self, store: Store, router: RouterBrain, hub: SyncHub, gemini: GeminiClient | None = None):
+    def __init__(
+        self,
+        store: Store,
+        router: RouterBrain,
+        hub: SyncHub,
+        gemini: GeminiClient | None = None,
+        *,
+        workspace: str = DEFAULT_WORKSPACE,
+    ):
         self.store = store
+        self.workspace = workspace
         self.router = router
         self.hub = hub
         self.gemini = gemini
@@ -93,7 +102,7 @@ class ChatService:
         await self.hub.publish(user_email, {"type": "message", "message": public_message(user_msg)})
 
         if is_command(text):
-            result = run_command(self.store, user_email, text)
+            result = run_command(self.store, user_email, text, workspace=self.workspace)
             if result.new_session:
                 project = self.store.active_project(user_email)
                 self.store.create_session(user_email, project["id"] if project else None)
@@ -115,7 +124,7 @@ class ChatService:
 
     async def _answer(self, user_email: str, session_id: str, text: str, user_msg_id: str) -> None:
         project = self.store.active_project(user_email)
-        cwd = Path(project["path"]) if project and Path(project["path"]).is_dir() else None
+        cwd, _ = working_root(self.store, user_email, self.workspace)
         history = [
             Turn("assistant" if m["role"] == "assistant" else "user", m["content"])
             for m in self.store.list_messages(session_id, HISTORY_TURNS + 1)

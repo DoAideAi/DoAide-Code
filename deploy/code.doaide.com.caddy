@@ -11,6 +11,9 @@ code.doaide.com {
         Strict-Transport-Security "max-age=31536000"
         -Server
     }
+    # The page itself must be re-checked so phones pick up new builds; hashed assets can cache.
+    @page not path /assets/* /api/* /ws /sync /agent
+    header @page Cache-Control "no-cache"
     # REST, chat socket (/ws), read-only sync relay (/sync) and the laptop agent (/agent) go to the API.
     @backend path /api/* /ws /ws/* /sync /sync/* /agent /agent/*
     handle @backend {

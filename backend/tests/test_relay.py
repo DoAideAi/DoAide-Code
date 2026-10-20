@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from doaide_code.auth import User, issue_token
+from doaide_code.auth import new_refresh_token
 from doaide_code.main import create_app
 from doaide_code.runner import NO_EXECUTOR
 
@@ -23,8 +23,10 @@ def hub(settings) -> Iterator[TestClient]:
 
 
 @pytest.fixture
-def agent_token(settings) -> str:
-    return issue_token(settings, User(email="owner@example.com", scope="agent"))
+def agent_token(hub) -> str:
+    raw, digest = new_refresh_token()
+    hub.app.state.store.add_refresh_token(digest, "owner@example.com", "agent", name="laptop")
+    return raw
 
 
 def test_hub_runs_no_executors(hub):
@@ -174,9 +176,14 @@ def test_agent_token_endpoint(hub, token, settings):
         "/api/agent-token", headers={**auth(token), "X-Forwarded-Proto": "https", "Host": "code.doaide.com"}
     ).json()
     assert body["hub_url"] == "wss://code.doaide.com/agent"
-    from doaide_code.auth import verify_token
+    from doaide_code.auth import hash_token
 
-    assert verify_token(settings, body["token"], "agent").email == "owner@example.com"
+    row = hub.app.state.store.use_refresh_token(hash_token(body["token"]), "agent")
+    assert row["user_email"] == "owner@example.com"
+    # The token is what the laptop uses on /agent.
+    with hub.websocket_connect(f"/agent?token={body['token']}") as laptop:
+        laptop.send_json({"type": "ping"})
+        assert laptop.receive_json() == {"type": "pong"}
 
 
 def test_agent_endpoints_absent_in_local_mode(client, token):

@@ -1,6 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { checkToken, createAgentToken, fetchConfig, googleLogin, loadToken, localLogin, saveToken } from './api.js'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  checkToken,
+  clearSession,
+  createAgentToken,
+  fetchConfig,
+  googleLogin,
+  loadSession,
+  localLogin,
+  refreshSession,
+  saveSession,
+} from './api.js'
 import Composer from './components/Composer.jsx'
+import { CodeViewer, FileTree } from './components/Files.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
 import MessageList from './components/MessageList.jsx'
 import SignIn from './components/SignIn.jsx'
@@ -8,7 +19,24 @@ import TopBar from './components/TopBar.jsx'
 import { connect } from './socket.js'
 import { statusColor, useChat } from './store.js'
 
-// Resolve a session token: saved token, else loopback login, else Google sign-in.
+const DESKTOP_QUERY = '(min-width: 768px)'
+const FILES_KEY = 'doaide-code-files-open'
+
+function useIsDesktop() {
+  const [desktop, setDesktop] = useState(() => window.matchMedia?.(DESKTOP_QUERY).matches ?? true)
+  useEffect(() => {
+    const query = window.matchMedia?.(DESKTOP_QUERY)
+    if (!query) return
+    const onChange = (e) => setDesktop(e.matches)
+    query.addEventListener('change', onChange)
+    return () => query.removeEventListener('change', onChange)
+  }, [])
+  return desktop
+}
+
+// Sign in once: a saved access token, else trade the saved refresh token for a new one,
+// else loopback login, else Google. The refresh token never expires, so after the first
+// sign-in this device stays signed in until it is revoked.
 function useAuth() {
   const [token, setToken] = useState(null)
   const [needsSignIn, setNeedsSignIn] = useState(false)
@@ -16,10 +44,33 @@ function useAuth() {
   const [error, setError] = useState(null)
 
   const signOut = useCallback(() => {
-    saveToken(null)
+    clearSession()
     setToken(null)
     setNeedsSignIn(true)
   }, [])
+
+  const begin = useCallback((session) => {
+    saveSession({ token: session.token, refresh: session.refresh_token })
+    setToken(session.token)
+    setNeedsSignIn(false)
+    setError(null)
+  }, [])
+
+  // Called when the server rejects the access token (expired or rotated secret).
+  const renew = useCallback(async () => {
+    const { refresh } = loadSession()
+    if (refresh) {
+      try {
+        const { token: fresh } = await refreshSession(refresh)
+        saveSession({ token: fresh })
+        setToken(fresh)
+        return
+      } catch {
+        // Revoked or unknown: fall through to a real sign-in.
+      }
+    }
+    signOut()
+  }, [signOut])
 
   useEffect(() => {
     let active = true
@@ -27,16 +78,25 @@ function useAuth() {
       const config = await fetchConfig().catch(() => ({ google_client_id: '', local_login: false }))
       if (!active) return
       setClientId(config.google_client_id)
-      const saved = loadToken()
-      if (saved && (await checkToken(saved).catch(() => false))) {
-        if (active) setToken(saved)
+      const saved = loadSession()
+      if (saved.token && (await checkToken(saved.token).catch(() => false))) {
+        if (active) setToken(saved.token)
         return
+      }
+      if (saved.refresh) {
+        try {
+          const { token: fresh } = await refreshSession(saved.refresh)
+          saveSession({ token: fresh })
+          if (active) setToken(fresh)
+          return
+        } catch {
+          // Fall through.
+        }
       }
       if (config.local_login) {
         try {
-          const { token: fresh } = await localLogin()
-          saveToken(fresh)
-          if (active) setToken(fresh)
+          const session = await localLogin()
+          if (active) begin(session)
           return
         } catch {
           // Not a loopback client; fall through to Google sign-in.
@@ -47,30 +107,52 @@ function useAuth() {
     return () => {
       active = false
     }
-  }, [])
+  }, [begin])
 
-  const onCredential = useCallback(async (credential) => {
+  const onCredential = useCallback(
+    async (credential) => {
+      try {
+        begin(await googleLogin(credential))
+      } catch {
+        setError('Sign-in was rejected for this account.')
+      }
+    },
+    [begin],
+  )
+
+  return { token, needsSignIn, clientId, error, onCredential, renew }
+}
+
+function useStoredFlag(key) {
+  const [value, setValue] = useState(() => {
     try {
-      const { token: fresh } = await googleLogin(credential)
-      saveToken(fresh)
-      setToken(fresh)
-      setNeedsSignIn(false)
-      setError(null)
+      return localStorage.getItem(key) === '1'
     } catch {
-      setError('Sign-in was rejected for this account.')
+      return false
     }
-  }, [])
-
-  return { token, needsSignIn, clientId, error, onCredential, signOut }
+  })
+  const toggle = useCallback(() => {
+    setValue((v) => {
+      try {
+        localStorage.setItem(key, v ? '0' : '1')
+      } catch {
+        // Per-device convenience only.
+      }
+      return !v
+    })
+  }, [key])
+  return [value, toggle]
 }
 
 export default function App() {
-  const { token, needsSignIn, clientId, error, onCredential, signOut } = useAuth()
+  const desktop = useIsDesktop()
+  const { token, needsSignIn, clientId, error, onCredential, renew } = useAuth()
   const { messages, project, serverStatus, mode, agentOnline, connection, apply, setConnection } = useChat()
   const socket = useRef(null)
+  const [filesOpen, toggleFiles] = useStoredFlag(FILES_KEY)
+  const [openFile, setOpenFile] = useState(null)
 
-  // Every device (laptop browser or phone) can read and send; on the hub, prompts are
-  // queued and run by the laptop agent.
+  // Every device can read and send; on the hub, prompts are queued and run by the laptop.
   useEffect(() => {
     if (!token) return
     socket.current = connect({
@@ -78,27 +160,50 @@ export default function App() {
       token,
       onEvent: apply,
       onState: setConnection,
-      onUnauthorized: signOut,
+      onUnauthorized: renew,
     })
     return () => socket.current?.close()
-  }, [token, apply, setConnection, signOut])
+  }, [token, apply, setConnection, renew])
+
+  // Re-read the tree and open file after each finished answer, so edits show up.
+  const filesVersion = useMemo(
+    () => messages.filter((m) => m.role !== 'user' && m.status !== 'streaming' && m.status !== 'queued').length,
+    [messages],
+  )
 
   if (needsSignIn) return <SignIn clientId={clientId} onCredential={onCredential} error={error} />
 
   const busy = serverStatus === 'busy'
+  // The file panel is desktop-only; phones show just the conversation.
+  const showFiles = desktop && filesOpen && token
+  const showViewer = showFiles && openFile
   return (
-    <div className="flex h-full flex-col">
-      <TopBar project={project} color={statusColor(connection, serverStatus, mode, agentOnline)} busy={busy} />
+    <div className="flex h-[100dvh] flex-col">
+      <TopBar
+        project={project}
+        color={statusColor(connection, serverStatus, mode, agentOnline)}
+        busy={busy}
+        filesOpen={filesOpen}
+        onToggleFiles={desktop ? toggleFiles : null}
+      />
       {mode === 'hub' && connection === 'open' && !agentOnline && (
         <LaptopBanner onCreateToken={() => createAgentToken(token)} />
       )}
-      <MessageList messages={messages} />
-      <Composer
-        busy={busy}
-        disabled={connection !== 'open'}
-        onSend={(text) => socket.current?.send({ type: 'send', text }) ?? false}
-        onStop={() => socket.current?.send({ type: 'stop' })}
-      />
+      <div className="flex min-h-0 flex-1">
+        {showFiles && <FileTree token={token} version={filesVersion} selected={openFile} onOpen={setOpenFile} />}
+        {showViewer && (
+          <CodeViewer token={token} path={openFile} version={filesVersion} onClose={() => setOpenFile(null)} />
+        )}
+        <section className={`flex min-w-0 flex-col ${showViewer ? 'w-[26rem] shrink-0 lg:w-[34rem]' : 'flex-1'}`}>
+          <MessageList messages={messages} />
+          <Composer
+            busy={busy}
+            disabled={connection !== 'open'}
+            onSend={(text) => socket.current?.send({ type: 'send', text }) ?? false}
+            onStop={() => socket.current?.send({ type: 'stop' })}
+          />
+        </section>
+      </div>
     </div>
   )
 }

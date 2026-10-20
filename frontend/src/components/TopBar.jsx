@@ -4,10 +4,27 @@ const DOT = {
   gray: 'bg-zinc-600',
 }
 
-export default function TopBar({ project, color, busy }) {
+export default function TopBar({ project, color, busy, filesOpen, onToggleFiles }) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4">
-      <span className="text-sm font-medium tracking-tight text-zinc-300">Doaide Code</span>
+      <div className="flex items-center gap-3">
+        {onToggleFiles && (
+          <button
+            type="button"
+            data-testid="files-toggle"
+            aria-label={filesOpen ? 'Hide files' : 'Show files'}
+            aria-pressed={filesOpen}
+            onClick={onToggleFiles}
+            className={`-ml-1 rounded p-1 ${filesOpen ? 'text-zinc-200' : 'text-zinc-500'} hover:text-zinc-200`}
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.4">
+              <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+              <path d="M6 2.5v11" />
+            </svg>
+          </button>
+        )}
+        <span className="text-sm font-medium tracking-tight text-zinc-300">Doaide Code</span>
+      </div>
       <div className="flex items-center gap-3">
         <span
           data-testid="project-pill"

@@ -7,6 +7,7 @@ in `pending_jobs`; when the laptop agent is connected it receives one job at a t
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import uuid
@@ -21,6 +22,10 @@ log = logging.getLogger(__name__)
 
 FINAL_STATUSES = {"done", "error", "stopped"}
 DISCONNECTED = "[laptop disconnected before finishing]"
+
+
+class LaptopOffline(Exception):
+    pass
 
 
 class AgentSocket(Protocol):
@@ -40,6 +45,7 @@ class RelayService:
         self._running: dict[str, str] = {}
         self._partial: dict[str, str] = {}
         self._error: dict[str, bool] = {}
+        self._rpc: dict[str, tuple[str, asyncio.Future]] = {}
 
     # Session and snapshot
 
@@ -120,6 +126,22 @@ class RelayService:
                 await agent.send_json({"type": "stop", "id": running})
         await self._publish_status(user_email)
 
+    async def rpc(self, user_email: str, method: str, params: dict[str, Any], timeout: float = 10) -> dict[str, Any]:
+        """Ask the laptop a question (file listing, file contents) and wait for its answer."""
+        agent = self._agents.get(user_email)
+        if agent is None:
+            raise LaptopOffline
+        request_id = uuid.uuid4().hex
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._rpc[request_id] = (user_email, future)
+        try:
+            await agent.send_json({"type": "rpc", "id": request_id, "method": method, "params": params})
+            return await asyncio.wait_for(future, timeout)
+        except (asyncio.TimeoutError, ConnectionError, RuntimeError) as exc:
+            raise LaptopOffline from exc
+        finally:
+            self._rpc.pop(request_id, None)
+
     # Laptop agent
 
     async def attach_agent(self, user_email: str, socket: AgentSocket) -> None:
@@ -140,6 +162,9 @@ class RelayService:
             return
         del self._agents[user_email]
         self._executors.pop(user_email, None)
+        for owner, future in list(self._rpc.values()):
+            if owner == user_email and not future.done():
+                future.set_exception(LaptopOffline())
         running = self._running.pop(user_email, None)
         if running is not None:
             partial = self._partial.pop(user_email, "")
@@ -158,6 +183,11 @@ class RelayService:
         if kind == "project":
             project = event.get("project")
             await self._set_project(user_email, project if isinstance(project, str) else None)
+            return
+        if kind == "rpc_result":
+            entry = self._rpc.get(str(event.get("id")))
+            if entry is not None and entry[0] == user_email and not entry[1].done():
+                entry[1].set_result(event)
             return
         job_id = event.get("id")
         if not job_id or self._running.get(user_email) != job_id:

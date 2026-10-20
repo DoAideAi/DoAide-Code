@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 import time
 from dataclasses import dataclass
 
@@ -27,10 +29,19 @@ class User:
     scope: str = "user"
 
 
+def new_refresh_token() -> tuple[str, str]:
+    """A random never-expiring credential and the hash that is stored for it."""
+    raw = secrets.token_urlsafe(32)
+    return raw, hash_token(raw)
+
+
+def hash_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
 def issue_token(settings: Settings, user: User) -> str:
     now = int(time.time())
-    ttl = settings.agent_ttl_seconds if user.scope == "agent" else settings.jwt_ttl_seconds
-    claims = {"sub": user.email, "name": user.name, "scope": user.scope, "iat": now, "exp": now + ttl}
+    claims = {"sub": user.email, "name": user.name, "scope": user.scope, "iat": now, "exp": now + settings.jwt_ttl_seconds}
     return jwt.encode(claims, settings.jwt_secret, algorithm=ALGORITHM)
 
 

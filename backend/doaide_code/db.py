@@ -55,6 +55,22 @@ CREATE TABLE IF NOT EXISTS pending_jobs (
     text TEXT NOT NULL,
     created_at REAL NOT NULL
 );
+-- Laptop-side preferences (for example the default workspace folder).
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+-- Long-lived sign-ins: browsers trade a refresh token for short access JWTs, and the
+-- laptop agent authenticates with one directly. They never expire; deleting the row
+-- revokes it. Only a SHA-256 hash is stored.
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_email TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    scope TEXT NOT NULL CHECK (scope IN ('user', 'agent')),
+    created_at REAL NOT NULL,
+    last_used REAL
+);
 -- Hub mode: what the laptop last reported (projects live on the laptop, not the hub).
 CREATE TABLE IF NOT EXISTS remote_state (
     user_email TEXT PRIMARY KEY,
@@ -67,6 +83,7 @@ class Store:
     """Thread-safe wrapper around one SQLite connection."""
 
     def __init__(self, path: Path | str):
+        self.path = str(path)
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
@@ -196,6 +213,38 @@ class Store:
             (session_id, limit),
         )
         return list(reversed(rows))
+
+    # Settings
+
+    def get_setting(self, key: str) -> str | None:
+        row = self._one("SELECT value FROM settings WHERE key = ?", (key,))
+        return row["value"] if row else None
+
+    def set_setting(self, key: str, value: str | None) -> None:
+        if value is None:
+            self._exec("DELETE FROM settings WHERE key = ?", (key,))
+        else:
+            self._exec(
+                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+
+    # Refresh tokens
+
+    def add_refresh_token(self, token_hash: str, user_email: str, scope: str, name: str = "") -> None:
+        self._exec(
+            "INSERT INTO refresh_tokens (token_hash, user_email, name, scope, created_at) VALUES (?, ?, ?, ?, ?)",
+            (token_hash, user_email, name, scope, time.time()),
+        )
+
+    def use_refresh_token(self, token_hash: str, scope: str) -> dict[str, Any] | None:
+        row = self._one("SELECT * FROM refresh_tokens WHERE token_hash = ? AND scope = ?", (token_hash, scope))
+        if row is not None:
+            self._exec("UPDATE refresh_tokens SET last_used = ? WHERE token_hash = ?", (time.time(), token_hash))
+        return row
+
+    def delete_refresh_token(self, token_hash: str) -> bool:
+        return self._exec("DELETE FROM refresh_tokens WHERE token_hash = ?", (token_hash,)).rowcount > 0
 
     # Hub job queue
 
