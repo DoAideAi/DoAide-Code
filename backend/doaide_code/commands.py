@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 import time
@@ -9,7 +10,9 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
+from .changes import apply_record
 from .db import Store
+from .files import FileAccessError
 from .workspace import DEFAULT_WORKSPACE, set_workspace, workspace_path
 
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -21,6 +24,8 @@ HELP = """Commands:
 /switch-project <name>       make a project active for this chat
 /projects                    list registered projects
 /workspace [<path>|reset]    show or change the default workspace folder
+/apply [<id>]                write the proposed changes (latest if no id)
+/discard [<id>]              drop proposed changes
 /usage                       tokens and cost today, this week, and this month
 /new                         start a new chat session
 /help                        show this help"""
@@ -31,6 +36,37 @@ class CommandResult:
     text: str
     project_changed: bool = False
     new_session: bool = False
+    # (message id, updated summary) when a changeset was applied or discarded.
+    changes: tuple[str | None, dict] | None = None
+
+
+def resolve_changeset(store: Store, changeset_id: str | None, verb: str) -> tuple[dict | None, str | None]:
+    row = store.get_changeset(changeset_id) if changeset_id else store.latest_changeset("pending")
+    if row is None:
+        return None, f"No changes with id {changeset_id}." if changeset_id else f"No pending changes to {verb}."
+    if row["status"] != "pending":
+        return None, f"Changes {row['id']} were already {row['status']}."
+    return row, None
+
+
+def apply_changes(store: Store, changeset_id: str | None = None) -> CommandResult:
+    row, error = resolve_changeset(store, changeset_id, "apply")
+    if row is None:
+        return CommandResult(error or "")
+    try:
+        paths = apply_record(json.loads(row["record"]))
+    except (ValueError, FileAccessError, OSError) as exc:
+        return CommandResult(f"Not applied: {exc}")
+    summary = store.set_changeset_status(row["id"], "applied")
+    return CommandResult(f"Applied {len(paths)} file(s): {', '.join(paths)}", changes=(row["message_id"], summary))
+
+
+def discard_changes(store: Store, changeset_id: str | None = None) -> CommandResult:
+    row, error = resolve_changeset(store, changeset_id, "discard")
+    if row is None:
+        return CommandResult(error or "")
+    summary = store.set_changeset_status(row["id"], "discarded")
+    return CommandResult(f"Discarded changes {row['id']}.", changes=(row["message_id"], summary))
 
 
 def is_command(text: str) -> bool:
@@ -80,6 +116,10 @@ def run_command(store: Store, user_email: str, text: str, *, workspace: str = DE
         return CommandResult(HELP)
     if cmd == "/projects":
         return CommandResult(_format_projects(store, active["id"] if active else None))
+    if cmd in {"/apply", "/discard"}:
+        if len(args) > 1:
+            return CommandResult(f"Usage: {cmd} [<id>]")
+        return (apply_changes if cmd == "/apply" else discard_changes)(store, args[0] if args else None)
     if cmd == "/usage":
         return CommandResult(format_usage(store))
     if cmd == "/new":

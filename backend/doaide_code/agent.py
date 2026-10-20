@@ -114,6 +114,9 @@ class LaptopAgent:
         job_id, text = message["id"], message["text"]
         if is_command(text):
             result = run_command(self.store, self.owner, text, workspace=self.workspace)
+            if result.changes and result.changes[0]:
+                # The reply that proposed the changes lives on the hub under the same id.
+                await send({"type": "changes", "id": result.changes[0], "changes": result.changes[1]})
             await send({"type": "done", "id": job_id, "role": "system", "status": "done", "content": result.text})
             if result.project_changed:
                 await send({"type": "project", "project": self.project_name()})
@@ -150,6 +153,8 @@ class LaptopAgent:
             log.exception("job %s failed", job_id)
             outcome.content = outcome.content or f"Laptop agent error: {exc}"
             outcome.status = "error"
+        if outcome.changes:
+            self.store.link_changeset(outcome.changes["id"], job_id)
         done = {"type": "done", "id": job_id, "status": outcome.status, "content": outcome.content}
         meta = outcome.meta()
         await send({**done, "meta": meta} if meta else done)

@@ -11,10 +11,11 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 
+from .changes import propose, repair_prompt, strip_edits
 from .config import Settings
 from .context import Ranking, rank_files
 from .db import Store
-from .executors import ExecutorError, Job, JevExecutor, build_executors
+from .executors import Executor, ExecutorError, Job, JevExecutor, Turn, build_executors
 from .fastpath import direct_answer
 from .gemini import GeminiClient
 from .router import RouterBrain
@@ -49,16 +50,21 @@ class Outcome:
     usage: Usage | None = None
     cached: bool = False
     context_files: list[str] = field(default_factory=list)
+    # Proposed edits (preview summary) awaiting /apply; the id finds them in the store.
+    changes: dict | None = None
 
     def add_usage(self, usage: Usage) -> None:
         self.usage = usage if self.usage is None else self.usage + usage
 
     def meta(self) -> dict:
         """What the UI shows for this reply (no model names)."""
-        if self.usage is None and not self.cached:
-            return {}
-        usage = (self.usage or Usage()).as_dict()
-        return {"usage": {**usage, "cached": True} if self.cached else usage}
+        meta: dict = {}
+        if self.usage is not None or self.cached:
+            usage = (self.usage or Usage()).as_dict()
+            meta["usage"] = {**usage, "cached": True} if self.cached else usage
+        if self.changes:
+            meta["changes"] = self.changes
+        return meta
 
 
 def cache_key(job: Job, ranking: Ranking | None) -> str:
@@ -101,6 +107,7 @@ async def run_job(
         outcome.content, outcome.status, outcome.executor, outcome.cached = hit["answer"], "done", hit["executor"], True
         store.record_usage(source, hit["executor"], None, 0, 0, 0.0, cached=True)
         await on_delta(hit["answer"])
+        await _preview_changes(store, job, outcome, None, None, on_delta, source)
         return outcome
 
     # 3. Route, then try executors cheapest-first with fallback.
@@ -126,23 +133,14 @@ async def run_job(
             run = replace(job, context=rendered[budget][0])
             outcome.context_files = rendered[budget][1]
         started = time.monotonic()
-        produced = False
+        streamed: list[str] = []
         try:
-            async for chunk in executor.stream(run):
-                if isinstance(chunk, Usage):
-                    outcome.add_usage(chunk)
-                    store.record_usage(
-                        source, executor.name, chunk.model, chunk.input_tokens, chunk.output_tokens, chunk.cost_usd
-                    )
-                    continue
-                produced = True
-                outcome.content += chunk
-                await on_delta(chunk)
+            await _drain(executor, run, outcome, store, source, streamed, on_delta)
         except ExecutorError as exc:
             store.record_executor(executor.name, ok=False, elapsed_ms=_ms(started))
             log.warning("%s failed: %s", executor.name, exc)
             errors.append(f"{executor.name}: {exc}")
-            if produced:
+            if streamed:
                 outcome.content += f"\n\n[stopped: {exc}]"
                 outcome.executor = executor.name
                 break
@@ -151,10 +149,73 @@ async def run_job(
         outcome.executor, outcome.status = executor.name, "done"
         if key is not None and executor.cacheable and outcome.content.strip():
             store.cache_put(key, outcome.content, executor.name)
+        await _preview_changes(store, job, outcome, executor, run, on_delta, source)
         break
     if outcome.status != "done" and not outcome.content and errors:
         outcome.content = "All executors failed.\n" + "\n".join(errors)
     return outcome
+
+
+async def _drain(
+    executor: Executor,
+    run: Job,
+    outcome: Outcome,
+    store: Store,
+    source: str,
+    streamed: list[str],
+    on_delta: Callable[[str], Awaitable[None]],
+) -> None:
+    """Stream one executor into the outcome, logging its usage."""
+    async for chunk in executor.stream(run):
+        if isinstance(chunk, Usage):
+            outcome.add_usage(chunk)
+            store.record_usage(source, executor.name, chunk.model, chunk.input_tokens, chunk.output_tokens, chunk.cost_usd)
+            continue
+        streamed.append(chunk)
+        outcome.content += chunk
+        await on_delta(chunk)
+
+
+async def _preview_changes(
+    store: Store,
+    job: Job,
+    outcome: Outcome,
+    executor: Executor | None,
+    run: Job | None,
+    on_delta: Callable[[str], Awaitable[None]],
+    source: str,
+) -> None:
+    """Turn edit blocks in the answer into a validated changeset; repair once if they fail."""
+    if job.cwd is None:
+        return
+    changeset = await propose(job.cwd, outcome.content)
+    if changeset is None:
+        return
+    # One repair round, with the same executor, when checks fail. Never on subscription CLIs.
+    if changeset.all_problems and executor is not None and run is not None and not executor.fallback:
+        notes = "\n".join(f"- {p}" for p in changeset.all_problems)
+        await on_delta(f"\n\n---\n_The proposed edit did not pass checks; asking for a fix:_\n{notes}\n\n")
+        first_answer = outcome.content
+        retry = replace(
+            run,
+            prompt=repair_prompt(job.prompt, changeset.all_problems),
+            history=[*run.history, Turn("user", job.prompt), Turn("assistant", first_answer)],
+        )
+        repaired = Outcome()
+        try:
+            await _drain(executor, retry, repaired, store, source, [], on_delta)
+        except ExecutorError as exc:
+            log.warning("repair with %s failed: %s", executor.name, exc)
+        if repaired.usage is not None:
+            outcome.add_usage(repaired.usage)
+        better = await propose(job.cwd, repaired.content) if repaired.content else None
+        if better is not None and len(better.all_problems) < len(changeset.all_problems):
+            changeset, outcome.content = better, repaired.content
+    if not changeset.changed:
+        return
+    store.add_changeset(changeset.id, changeset.record(), changeset.summary())
+    outcome.changes = changeset.summary()
+    outcome.content = strip_edits(outcome.content) or "Proposed changes:"
 
 
 def _ms(started: float) -> int:

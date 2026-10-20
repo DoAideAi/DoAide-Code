@@ -51,6 +51,15 @@ CREATE TABLE IF NOT EXISTS usage_log (
     cached INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_usage_time ON usage_log(created_at);
+-- Proposed edits awaiting /apply: what to write (record) and what the UI shows (summary).
+CREATE TABLE IF NOT EXISTS changesets (
+    id TEXT PRIMARY KEY,
+    message_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    record TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
 -- Answers to repeated requests; the key covers prompt, history and the selected files' state.
 CREATE TABLE IF NOT EXISTS response_cache (
     key TEXT PRIMARY KEY,
@@ -351,6 +360,33 @@ class Store:
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (time.time(), source, executor, model, tokens_in, tokens_out, cost_usd, int(cached)),
         )
+
+    # Changesets
+
+    def add_changeset(self, changeset_id: str, record: dict, summary: dict) -> None:
+        self._exec(
+            "INSERT INTO changesets (id, record, summary, created_at) VALUES (?, ?, ?, ?)",
+            (changeset_id, json.dumps(record), json.dumps(summary), time.time()),
+        )
+
+    def link_changeset(self, changeset_id: str, message_id: str) -> None:
+        self._exec("UPDATE changesets SET message_id = ? WHERE id = ?", (message_id, changeset_id))
+
+    def get_changeset(self, changeset_id: str) -> dict[str, Any] | None:
+        return self._one("SELECT * FROM changesets WHERE id = ?", (changeset_id,))
+
+    def latest_changeset(self, status: str = "pending") -> dict[str, Any] | None:
+        return self._one(
+            "SELECT * FROM changesets WHERE status = ? ORDER BY created_at DESC, rowid DESC LIMIT 1", (status,)
+        )
+
+    def set_changeset_status(self, changeset_id: str, status: str) -> dict:
+        row = self.get_changeset(changeset_id)
+        summary = {**json.loads(row["summary"]), "status": status} if row else {"id": changeset_id, "status": status}
+        self._exec(
+            "UPDATE changesets SET status = ?, summary = ? WHERE id = ?", (status, json.dumps(summary), changeset_id)
+        )
+        return summary
 
     def cache_get(self, key: str, max_age: float) -> dict[str, Any] | None:
         row = self._one(

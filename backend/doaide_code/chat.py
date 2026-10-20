@@ -114,6 +114,10 @@ class ChatService:
                 return
             reply = self.store.add_message(session["id"], "system", result.text)
             await self.hub.publish(user_email, {"type": "message", "message": public_message(reply)})
+            if result.changes and result.changes[0]:
+                message_id, summary = result.changes
+                self.store.update_meta(message_id, {"changes": summary})
+                await self.hub.publish(user_email, {"type": "changes", "id": message_id, "changes": summary})
             if result.project_changed:
                 project = self.store.active_project(user_email)
                 self.store.update_session(session["id"], project_id=project["id"] if project else None)
@@ -156,6 +160,8 @@ class ChatService:
             if outcome.tier is not None:
                 self.store.set_message_tier(reply_id, outcome.tier)
             meta = outcome.meta()
+            if outcome.changes:
+                self.store.link_changeset(outcome.changes["id"], reply_id)
             self.store.finish_message(reply_id, outcome.content, outcome.status, executor=outcome.executor, meta=meta)
             if self._tasks.get(user_email) is asyncio.current_task():
                 del self._tasks[user_email]

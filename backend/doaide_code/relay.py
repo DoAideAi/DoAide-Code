@@ -196,6 +196,9 @@ class RelayService:
             project = event.get("project")
             await self._set_project(user_email, project if isinstance(project, str) else None)
             return
+        if kind == "changes":
+            await self._update_changes(user_email, event)
+            return
         if kind == "rpc_result":
             entry = self._rpc.get(str(event.get("id")))
             if entry is not None and entry[0] == user_email and not entry[1].done():
@@ -218,6 +221,16 @@ class RelayService:
             await self._publish_status(user_email)
 
     # Internals
+
+    async def _update_changes(self, user_email: str, event: dict[str, Any]) -> None:
+        """The laptop applied or discarded a changeset: update that reply on every device."""
+        message = self.store.get_message(str(event.get("id")))
+        session = self.store.get_session(message["session_id"]) if message else None
+        meta = clean_meta({"changes": event.get("changes")})
+        if not session or session["user_email"] != user_email or not meta:
+            return
+        self.store.update_meta(message["id"], meta)
+        await self.hub.publish(user_email, {"type": "changes", "id": message["id"], "changes": meta["changes"]})
 
     async def _set_project(self, user_email: str, project: str | None) -> None:
         self.store.set_remote_project(user_email, project)
