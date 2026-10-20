@@ -13,6 +13,7 @@ from .db import Store
 from .executors import ExecutorError, Job, JevExecutor, build_executors
 from .gemini import GeminiClient
 from .router import RouterBrain
+from .usage import Usage
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +38,14 @@ class Outcome:
     status: str = "error"
     executor: str | None = None
     tier: int | None = None
+    usage: Usage | None = None
+
+    def add_usage(self, usage: Usage) -> None:
+        self.usage = usage if self.usage is None else self.usage + usage
+
+    def meta(self) -> dict:
+        """What the UI shows for this reply (no model names)."""
+        return {"usage": self.usage.as_dict()} if self.usage else {}
 
 
 async def run_job(
@@ -47,9 +56,16 @@ async def run_job(
     on_delta: Callable[[str], Awaitable[None]],
     *,
     project: str | None = None,
+    source: str = "chat",
 ) -> Outcome:
     decision = await router.classify(job.prompt, project=project)
     outcome.tier = decision.tier
+    if decision.usage is not None:
+        outcome.add_usage(decision.usage)
+        store.record_usage(
+            "router", None, decision.usage.model, decision.usage.input_tokens, decision.usage.output_tokens,
+            decision.usage.cost_usd,
+        )
     candidates = await router.candidates(decision.tier)
     if not candidates:
         outcome.content = NO_EXECUTOR
@@ -59,6 +75,12 @@ async def run_job(
         produced = False
         try:
             async for chunk in executor.stream(job):
+                if isinstance(chunk, Usage):
+                    outcome.add_usage(chunk)
+                    store.record_usage(
+                        source, executor.name, chunk.model, chunk.input_tokens, chunk.output_tokens, chunk.cost_usd
+                    )
+                    continue
                 produced = True
                 outcome.content += chunk
                 await on_delta(chunk)

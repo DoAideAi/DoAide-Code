@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 import time
@@ -32,9 +33,24 @@ CREATE TABLE IF NOT EXISTS messages (
     executor TEXT,
     tier INTEGER,
     status TEXT NOT NULL DEFAULT 'done',
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    -- JSON: per-reply extras shown in the UI (token usage, proposed changes).
+    meta TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
+-- One row per model call (chat, MCP, routing) for cost reporting.
+CREATE TABLE IF NOT EXISTS usage_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at REAL NOT NULL,
+    source TEXT NOT NULL,
+    executor TEXT,
+    model TEXT,
+    tokens_in INTEGER NOT NULL DEFAULT 0,
+    tokens_out INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0,
+    cached INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_usage_time ON usage_log(created_at);
 CREATE TABLE IF NOT EXISTS executor_stats (
     executor TEXT PRIMARY KEY,
     calls INTEGER NOT NULL DEFAULT 0,
@@ -109,6 +125,10 @@ class Store:
                 DROP TABLE refresh_tokens_old;
                 """
             )
+        columns = {r["name"] for r in self._conn.execute("PRAGMA table_info(messages)").fetchall()}
+        if "meta" not in columns:
+            self._conn.execute("ALTER TABLE messages ADD COLUMN meta TEXT")
+            self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()
@@ -208,11 +228,24 @@ class Store:
         self._exec("UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id))
         return self._one("SELECT * FROM messages WHERE id = ?", (message_id,))  # type: ignore[return-value]
 
-    def finish_message(self, message_id: str, content: str, status: str, executor: str | None = None) -> None:
+    def finish_message(
+        self, message_id: str, content: str, status: str, executor: str | None = None, meta: dict | None = None
+    ) -> None:
         self._exec(
             "UPDATE messages SET content = ?, status = ?, executor = COALESCE(?, executor) WHERE id = ?",
             (content, status, executor, message_id),
         )
+        if meta:
+            self.update_meta(message_id, meta)
+
+    def update_meta(self, message_id: str, meta: dict) -> dict:
+        """Merge keys into a message's meta JSON and return the result."""
+        with self._lock:
+            row = self._conn.execute("SELECT meta FROM messages WHERE id = ?", (message_id,)).fetchone()
+            merged = {**(json.loads(row["meta"]) if row and row["meta"] else {}), **meta}
+            self._conn.execute("UPDATE messages SET meta = ? WHERE id = ?", (json.dumps(merged), message_id))
+            self._conn.commit()
+        return merged
 
     def set_message_role(self, message_id: str, role: str) -> None:
         self._exec("UPDATE messages SET role = ? WHERE id = ?", (role, message_id))
@@ -290,6 +323,33 @@ class Store:
             "INSERT INTO remote_state (user_email, project) VALUES (?, ?) "
             "ON CONFLICT(user_email) DO UPDATE SET project = excluded.project",
             (user_email, project),
+        )
+
+    # Usage
+
+    def record_usage(
+        self,
+        source: str,
+        executor: str | None,
+        model: str | None,
+        tokens_in: int,
+        tokens_out: int,
+        cost_usd: float,
+        *,
+        cached: bool = False,
+    ) -> None:
+        self._exec(
+            "INSERT INTO usage_log (created_at, source, executor, model, tokens_in, tokens_out, cost_usd, cached) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (time.time(), source, executor, model, tokens_in, tokens_out, cost_usd, int(cached)),
+        )
+
+    def usage_summary(self, since: float = 0) -> list[dict[str, Any]]:
+        return self._all(
+            "SELECT COALESCE(executor, source) AS executor, COUNT(*) AS calls, SUM(tokens_in) AS tokens_in, "
+            "SUM(tokens_out) AS tokens_out, SUM(cost_usd) AS cost_usd, SUM(cached) AS cached "
+            "FROM usage_log WHERE created_at >= ? GROUP BY COALESCE(executor, source) ORDER BY cost_usd DESC",
+            (since,),
         )
 
     # Executor stats

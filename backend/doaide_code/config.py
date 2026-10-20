@@ -56,7 +56,7 @@ class Settings:
     claude_bin: str = field(default_factory=lambda: os.environ.get("DOAIDE_CLAUDE_BIN", "claude"))
     claude_haiku_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_CLAUDE_HAIKU_MODEL", "haiku"))
     claude_sonnet_model: str = field(
-        default_factory=lambda: os.environ.get("DOAIDE_CLAUDE_SONNET_MODEL", "claude-sonnet-4-5-20250514")
+        default_factory=lambda: os.environ.get("DOAIDE_CLAUDE_SONNET_MODEL", "sonnet")
     )
     claude_opus_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_CLAUDE_OPUS_MODEL", "opus"))
 
@@ -69,7 +69,16 @@ class Settings:
     cli_timeout: float = field(default_factory=lambda: float(os.environ.get("DOAIDE_CLI_TIMEOUT", "600")))
 
     gemini_api_key: str = field(default_factory=lambda: _read_secret("GEMINI_API_KEY", "gemini_api_key.txt", "gemini_api_key"))
-    gemini_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_GEMINI_MODEL", "gemini-3.5-flash-lite"))
+    # Routing classifier and session titles: the cheapest fast model ($0.25 / $1.50 per 1M tokens).
+    gemini_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_GEMINI_MODEL", "gemini-3.1-flash-lite"))
+    # Default executors per tier (Gemini API, paid-tier list prices per 1M tokens in / out):
+    # tier 1 $0.25 / $1.50, tier 2 $0.75 / $3.75, tier 3 $2 / $12.
+    gemini_lite_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_GEMINI_LITE_MODEL", "gemini-3.1-flash-lite"))
+    gemini_flash_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_GEMINI_FLASH_MODEL", "gemini-3.8-flash"))
+    gemini_pro_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_GEMINI_PRO_MODEL", "gemini-3.1-pro-preview"))
+    # Subscription CLIs are last-resort fallbacks; these switches drop them entirely.
+    use_claude_cli: bool = field(default_factory=lambda: not _flag("DOAIDE_DISABLE_CLAUDE_CLI"))
+    use_codex_cli: bool = field(default_factory=lambda: not _flag("DOAIDE_DISABLE_CODEX_CLI"))
     typesafe_api_key: str = field(default_factory=lambda: _read_secret("TYPESAFE_API_KEY", "typesafe_api_key.txt"))
 
     jwt_secret: str = field(default_factory=lambda: os.environ.get("DOAIDE_JWT_SECRET", "") or secrets.token_urlsafe(48))

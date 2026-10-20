@@ -8,17 +8,17 @@ from collections.abc import AsyncIterator
 
 import httpx
 
-from .base import Executor, ExecutorError, Job
-
-SYSTEM_PROMPT = (
-    "You are Doaide Code, a concise senior software engineer. Answer coding questions directly, "
-    "show code in fenced blocks, and say so when you are unsure."
-)
+from ..usage import Usage
+from .base import CODER_SYSTEM_PROMPT, Executor, ExecutorError, Job
 
 
 class OllamaExecutor(Executor):
     name = "ollama"
     tier = 0
+    needs_context = True
+    cacheable = True
+    # Small local models have small windows; keep their context modest.
+    context_chars = 24_000
 
     def __init__(self, base_url: str, model: str, *, transport: httpx.AsyncBaseTransport | None = None):
         self.base_url = base_url.rstrip("/")
@@ -57,13 +57,14 @@ class OllamaExecutor(Executor):
     async def available(self) -> bool:
         return await self.resolve_model() is not None
 
-    async def stream(self, job: Job) -> AsyncIterator[str]:
+    async def stream(self, job: Job) -> AsyncIterator[str | Usage]:
         model = await self.resolve_model()
         if not model:
             raise ExecutorError("Ollama is not reachable or has no coder model pulled")
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": CODER_SYSTEM_PROMPT}]
         messages += [{"role": t.role, "content": t.content} for t in job.history]
-        messages.append({"role": "user", "content": job.prompt})
+        prompt = f"{job.context}\n\n# Request\n{job.prompt}" if job.context else job.prompt
+        messages.append({"role": "user", "content": prompt})
         payload = {"model": model, "messages": messages, "stream": True}
         try:
             async with self._client(httpx.Timeout(10, read=300)) as client:
@@ -81,6 +82,8 @@ class OllamaExecutor(Executor):
                         if chunk:
                             yield chunk
                         if event.get("done"):
+                            # Local and free: report tokens so speed and size are visible, at $0.
+                            yield Usage(model, int(event.get("prompt_eval_count", 0)), int(event.get("eval_count", 0)))
                             break
         except httpx.HTTPError as exc:
             raise ExecutorError(f"Ollama request failed: {exc}") from exc

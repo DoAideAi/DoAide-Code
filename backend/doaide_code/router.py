@@ -1,8 +1,9 @@
 """Router Brain: pick the cheapest executor that can handle each message.
 
-Tiers: 0 = Ollama (free), 1 = Codex / Claude Haiku (low), 2 = Claude Sonnet (medium),
-3 = Claude Opus (high). Classification order: Jev (TypeSafe Choice + Score), then Gemini,
-then local keyword heuristics, so routing still works offline.
+Tiers: 0 = Ollama (free), 1 = Gemini Flash-Lite, 2 = Gemini Flash, 3 = Gemini Pro. Codex and
+Claude CLIs are fallbacks, tried only after every Ollama/Gemini executor. Classification order:
+Jev (TypeSafe Choice + Score), then Gemini, then local keyword heuristics, so routing still works
+offline.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from dataclasses import dataclass
 
 from .executors import Executor, JevExecutor
 from .gemini import GeminiClient, GeminiError
+from .usage import Usage
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +55,8 @@ class RouteDecision:
     complexity: float
     source: str
     confidence: float = 1.0
+    # Tokens spent deciding (Gemini classifier); None when no paid call was made.
+    usage: Usage | None = None
 
 
 def heuristic_tier(message: str) -> RouteDecision:
@@ -111,23 +115,34 @@ class RouterBrain:
             except Exception as exc:  # any SDK, network, or schema failure falls through
                 log.warning("Jev routing failed: %s", exc)
         if not self.offline and self.gemini is not None and self.gemini.enabled:
+            spent: list[Usage] = []
             try:
-                data = await self.gemini.generate_json(GEMINI_PROMPT.format(message=message[:6000]), GEMINI_SCHEMA)
+                data = await self.gemini.generate_json(
+                    GEMINI_PROMPT.format(message=message[:6000]), GEMINI_SCHEMA, usage=spent
+                )
                 return RouteDecision(
                     tier=_clamp_tier(float(data["tier"])),
                     complexity=float(data.get("complexity", data["tier"])),
                     source="gemini",
                     confidence=0.7,
+                    usage=spent[0] if spent else None,
                 )
             except (GeminiError, KeyError, TypeError, ValueError) as exc:
                 log.warning("Gemini routing failed: %s", exc)
         return heuristic_tier(message)
 
     async def candidates(self, tier: int) -> list[Executor]:
-        """Available executors to try: the target tier, then escalate, then fall back down."""
-        order = (
-            [e for e in self.executors if e.tier == tier]
-            + [e for e in self.executors if e.tier > tier]
-            + sorted((e for e in self.executors if e.tier < tier), key=lambda e: -e.tier)
+        """Available executors to try: the target tier, then escalate, then fall back down, all
+        among primary (Ollama/Gemini) executors first; subscription CLIs come last, same order."""
+
+        def ordered(pool: list[Executor]) -> list[Executor]:
+            return (
+                [e for e in pool if e.tier == tier]
+                + [e for e in pool if e.tier > tier]
+                + sorted((e for e in pool if e.tier < tier), key=lambda e: -e.tier)
+            )
+
+        order = ordered([e for e in self.executors if not e.fallback]) + ordered(
+            [e for e in self.executors if e.fallback]
         )
         return [e for e in order if await e.available()]

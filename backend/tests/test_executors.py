@@ -11,6 +11,7 @@ from doaide_code.executors import ClaudeCliExecutor, CodexCliExecutor, ExecutorE
 from doaide_code.executors.base import stream_subprocess, transcript_prompt
 from doaide_code.executors.claude_cli import ClaudeStreamParser
 from doaide_code.executors.codex_cli import parse_codex_event
+from doaide_code.usage import Usage
 
 
 def ollama_transport(models: list[str], chunks: list[str], seen: list[dict]) -> httpx.MockTransport:
@@ -20,7 +21,7 @@ def ollama_transport(models: list[str], chunks: list[str], seen: list[dict]) -> 
         assert request.url.path == "/api/chat"
         seen.append(json.loads(request.content))
         lines = [json.dumps({"message": {"content": c}, "done": False}) for c in chunks]
-        lines.append(json.dumps({"message": {"content": ""}, "done": True}))
+        lines.append(json.dumps({"message": {"content": ""}, "done": True, "prompt_eval_count": 12, "eval_count": 3}))
         return httpx.Response(200, content="\n".join(lines).encode())
 
     return httpx.MockTransport(handler)
@@ -31,7 +32,10 @@ async def test_ollama_streams_chunks_with_history():
     seen: list[dict] = []
     ex = OllamaExecutor("http://ollama", "qwen3-coder", transport=ollama_transport(["qwen3-coder:latest"], ["a", "b"], seen))
     job = Job("next", history=[Turn("user", "earlier"), Turn("assistant", "reply")])
-    assert [c async for c in ex.stream(job)] == ["a", "b"]
+    out = [c async for c in ex.stream(job)]
+    assert out[:2] == ["a", "b"]
+    # Local tokens are reported at no cost.
+    assert out[2] == Usage("qwen3-coder:latest", 12, 3, 0.0)
     payload = seen[0]
     assert payload["model"] == "qwen3-coder:latest" and payload["stream"] is True
     assert [m["role"] for m in payload["messages"]] == ["system", "user", "assistant", "user"]
@@ -62,6 +66,10 @@ def test_claude_argv_matches_spec():
     assert argv[:5] == ["claude", "-p", "do it", "--model", "claude-sonnet-4-5-20250514"]
     assert argv[argv.index("--output-format") + 1] == "stream-json"
     assert "--verbose" in argv  # required by the CLI for stream-json with -p
+    # Read-only: edits come back as blocks for preview, never written by the CLI.
+    assert "acceptEdits" not in argv and "Edit" not in argv and "Write" not in argv
+    assert argv[argv.index("--allowedTools") + 1 : argv.index("--allowedTools") + 4] == ["Read", "Grep", "Glob"]
+    assert "SEARCH" in argv[argv.index("--append-system-prompt") + 1]
 
 
 def test_claude_parser_prefers_deltas_and_reports_errors():
@@ -73,19 +81,30 @@ def test_claude_parser_prefers_deltas_and_reports_errors():
     assert ClaudeStreamParser()(full) == "Hi"
     with pytest.raises(ExecutorError, match="bad model"):
         parse({"type": "result", "is_error": True, "result": "bad model"})
-    assert parse({"type": "result", "is_error": False, "result": "Hi"}) is None
+    usage = parse(
+        {
+            "type": "result",
+            "is_error": False,
+            "result": "Hi",
+            "total_cost_usd": 0.012,
+            "usage": {"input_tokens": 10, "cache_read_input_tokens": 90, "output_tokens": 5},
+        }
+    )
+    assert usage == Usage("", 100, 5, 0.012)
 
 
 def test_codex_argv_and_parser():
     argv = CodexCliExecutor("codex", "o4-mini").argv("fix it", "/repo")
     assert argv[:4] == ["codex", "exec", "--model", "o4-mini"]
-    assert argv[argv.index("--sandbox") + 1] == "workspace-write"
+    assert argv[argv.index("--sandbox") + 1] == "read-only"
     assert argv[argv.index("--cd") + 1] == "/repo" and argv[-1] == "fix it"
 
     assert parse_codex_event({"type": "item.completed", "item": {"type": "agent_message", "text": "done"}}) == "done\n"
     change = {"type": "item.completed", "item": {"type": "file_change", "changes": [{"path": "a.py"}]}}
     assert "a.py" in parse_codex_event(change)
     assert parse_codex_event({"type": "thread.started"}) is None
+    done = {"type": "turn.completed", "usage": {"input_tokens": 1000, "output_tokens": 100}}
+    assert parse_codex_event(done, "o4-mini") == Usage("o4-mini", 1000, 100, (1000 * 1.10 + 100 * 4.40) / 1e6)
     with pytest.raises(ExecutorError):
         parse_codex_event({"type": "turn.failed", "error": {"message": "quota"}})
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import uuid
 from typing import Any, Protocol
@@ -21,6 +22,17 @@ from .sync import SyncHub
 log = logging.getLogger(__name__)
 
 FINAL_STATUSES = {"done", "error", "stopped"}
+# Reply extras the laptop may attach (token usage, proposed changes), and a size cap for them.
+META_KEYS = {"usage", "changes"}
+MAX_META_BYTES = 512_000
+
+
+def clean_meta(value: Any) -> dict[str, Any]:
+    """Keep only known, dict-valued meta keys from the laptop, within the size cap."""
+    if not isinstance(value, dict):
+        return {}
+    meta = {k: v for k, v in value.items() if k in META_KEYS and isinstance(v, dict)}
+    return meta if len(json.dumps(meta)) <= MAX_META_BYTES else {}
 DISCONNECTED = "[laptop disconnected before finishing]"
 
 
@@ -201,7 +213,7 @@ class RelayService:
             role = "system" if event.get("role") == "system" else "assistant"
             self._running.pop(user_email, None)
             self._partial.pop(user_email, None)
-            await self._finish(user_email, job_id, content, status, role)
+            await self._finish(user_email, job_id, content, status, role, clean_meta(event.get("meta")))
             await self._dispatch(user_email)
             await self._publish_status(user_email)
 
@@ -211,15 +223,16 @@ class RelayService:
         self.store.set_remote_project(user_email, project)
         await self.hub.publish(user_email, {"type": "project", "project": project})
 
-    async def _finish(self, user_email: str, job_id: str, content: str, status: str, role: str) -> None:
+    async def _finish(
+        self, user_email: str, job_id: str, content: str, status: str, role: str, meta: dict[str, Any] | None = None
+    ) -> None:
         self.store.delete_job(job_id)
-        self.store.finish_message(job_id, content, status)
+        self.store.finish_message(job_id, content, status, meta=meta)
         if role != "assistant":
             self.store.set_message_role(job_id, role)
         self._error[user_email] = status == "error"
-        await self.hub.publish(
-            user_email, {"type": "done", "id": job_id, "status": status, "content": content, "role": role}
-        )
+        done = {"type": "done", "id": job_id, "status": status, "content": content, "role": role}
+        await self.hub.publish(user_email, {**done, "meta": meta} if meta else done)
 
     async def _dispatch(self, user_email: str) -> None:
         """Send the oldest queued prompt to the laptop if it is connected and idle."""

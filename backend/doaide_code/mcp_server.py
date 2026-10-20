@@ -111,6 +111,9 @@ class LaptopTools:
             "projects": [{"name": p["name"], "path": p["path"]} for p in self.store.list_projects()],
             "executors": executors,
             "available_executors": [e["name"] for e in executors if e["available"]],
+            "usage_today": {
+                "cost_usd": round(sum(r["cost_usd"] or 0 for r in self.store.usage_summary(time.time() - 86400)), 6),
+            },
         }
 
     async def execute_code(self, prompt: str, project: str | None = None, on_progress=None) -> dict[str, Any]:
@@ -127,10 +130,18 @@ class LaptopTools:
                 last = now
                 await on_progress(len(outcome.content), f"{len(outcome.content)} characters so far")
 
-        await run_job(self.router, self.store, Job(prompt=prompt, cwd=root), outcome, on_delta, project=label)
+        await run_job(
+            self.router, self.store, Job(prompt=prompt, cwd=root), outcome, on_delta, project=label, source="mcp"
+        )
         if outcome.status != "done":
             raise ToolInputError(outcome.content or NO_EXECUTOR)
-        return {"project": label, "root": str(root), "executor": outcome.executor, "answer": outcome.content}
+        return {
+            "project": label,
+            "root": str(root),
+            "executor": outcome.executor,
+            "answer": outcome.content,
+            "usage": outcome.meta().get("usage"),
+        }
 
     async def read_file(self, path: str, start_line: int = 1, end_line: int | None = None, project: str | None = None) -> str:
         root, target = self.resolve(path, project)

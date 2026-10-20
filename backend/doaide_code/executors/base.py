@@ -11,6 +11,22 @@ from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..usage import Usage
+
+
+CODER_SYSTEM_PROMPT = """You are DoAide Code, a concise senior software engineer working in the user's project.
+Answer questions directly and show code in fenced blocks. Say so when you are unsure.
+
+When the user asks for a code change, propose it as edit blocks; never claim you applied or ran
+anything. Each edit block is the file path on its own line, then:
+<<<<<<< SEARCH
+exact lines currently in the file (enough to be unique; empty to create a new file)
+=======
+the replacement lines
+>>>>>>> REPLACE
+Keep SEARCH sections short and copied exactly from the file shown in the context. Use one block
+per change, and explain the change in a sentence or two before the blocks."""
+
 
 class ExecutorError(RuntimeError):
     """Raised when an executor cannot produce an answer."""
@@ -27,18 +43,26 @@ class Job:
     prompt: str
     history: Sequence[Turn] = ()
     cwd: Path | None = None
+    # Relevant project files, selected for executors that cannot read the disk themselves.
+    context: str = ""
 
 
 class Executor(ABC):
     name: str
     tier: int
+    # Last-resort executors (subscription CLIs) are tried only after every primary one.
+    fallback: bool = False
+    # API executors cannot open files, so they get selected context; CLI agents read for themselves.
+    needs_context: bool = False
+    # Answers that depend only on the prompt and context, so they are safe to cache.
+    cacheable: bool = False
 
     @abstractmethod
     async def available(self) -> bool: ...
 
     @abstractmethod
-    def stream(self, job: Job) -> AsyncIterator[str]:
-        """Yield answer text chunks as they arrive."""
+    def stream(self, job: Job) -> AsyncIterator[str | Usage]:
+        """Yield answer text chunks as they arrive, optionally ending with one Usage."""
 
 
 def transcript_prompt(job: Job, max_turns: int = 12) -> str:
@@ -64,7 +88,7 @@ def which(binary: str) -> str | None:
     return shutil.which(binary)
 
 
-LineParser = Callable[[dict], str | None]
+LineParser = Callable[[dict], str | Usage | None]
 
 
 async def stream_subprocess(
@@ -74,7 +98,7 @@ async def stream_subprocess(
     cwd: Path | None,
     env: dict[str, str],
     timeout: float,
-) -> AsyncIterator[str]:
+) -> AsyncIterator[str | Usage]:
     """Run `argv` and yield text parsed from each JSON line of its stdout.
 
     Non-JSON lines are passed through unchanged. A non-zero exit raises ExecutorError

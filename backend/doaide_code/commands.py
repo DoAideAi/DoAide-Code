@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import shlex
+import time
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +21,7 @@ HELP = """Commands:
 /switch-project <name>       make a project active for this chat
 /projects                    list registered projects
 /workspace [<path>|reset]    show or change the default workspace folder
+/usage                       tokens and cost today, this week, and this month
 /new                         start a new chat session
 /help                        show this help"""
 
@@ -42,6 +44,25 @@ def _format_projects(store: Store, active_id: int | None) -> str:
     return "\n".join(f"{'*' if p['id'] == active_id else ' '} {p['name']}  {p['path']}" for p in projects)
 
 
+def format_usage(store: Store) -> str:
+    now = time.time()
+    lines = []
+    for label, days in (("Today", 1), ("7 days", 7), ("30 days", 30)):
+        rows = store.usage_summary(now - days * 86400)
+        cost = sum(r["cost_usd"] or 0 for r in rows)
+        tokens = sum((r["tokens_in"] or 0) + (r["tokens_out"] or 0) for r in rows)
+        lines.append(f"{label:<8} ${cost:.4f}  {tokens:,} tokens  {sum(r['calls'] for r in rows)} calls")
+    month = store.usage_summary(now - 30 * 86400)
+    if month:
+        lines.append("")
+        lines += [
+            f"{r['executor']:<14} ${r['cost_usd'] or 0:.4f}  {(r['tokens_in'] or 0) + (r['tokens_out'] or 0):,} tokens"
+            + (f"  ({r['cached']} cached)" if r["cached"] else "")
+            for r in month
+        ]
+    return "\n".join(lines)
+
+
 def _looks_like_path(arg: str) -> bool:
     return "/" in arg or "\\" in arg or arg.startswith(("~", "."))
 
@@ -59,6 +80,8 @@ def run_command(store: Store, user_email: str, text: str, *, workspace: str = DE
         return CommandResult(HELP)
     if cmd == "/projects":
         return CommandResult(_format_projects(store, active["id"] if active else None))
+    if cmd == "/usage":
+        return CommandResult(format_usage(store))
     if cmd == "/new":
         return CommandResult("Started a new session.", new_session=True)
 

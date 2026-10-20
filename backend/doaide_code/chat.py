@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import uuid
 from typing import Any
 
@@ -21,7 +22,10 @@ HISTORY_TURNS = 12
 
 def public_message(row: dict[str, Any]) -> dict[str, Any]:
     """Fields the UI needs; model names and tiers stay server-side."""
-    return {k: row[k] for k in ("id", "role", "content", "status", "created_at")}
+    message = {k: row[k] for k in ("id", "role", "content", "status", "created_at")}
+    if row.get("meta"):
+        message["meta"] = json.loads(row["meta"])
+    return message
 
 
 class ChatService:
@@ -151,12 +155,12 @@ class ChatService:
             self._error[user_email] = outcome.status == "error"
             if outcome.tier is not None:
                 self.store.set_message_tier(reply_id, outcome.tier)
-            self.store.finish_message(reply_id, outcome.content, outcome.status, executor=outcome.executor)
+            meta = outcome.meta()
+            self.store.finish_message(reply_id, outcome.content, outcome.status, executor=outcome.executor, meta=meta)
             if self._tasks.get(user_email) is asyncio.current_task():
                 del self._tasks[user_email]
-            await self.hub.publish(
-                user_email, {"type": "done", "id": reply_id, "status": outcome.status, "content": outcome.content}
-            )
+            done = {"type": "done", "id": reply_id, "status": outcome.status, "content": outcome.content}
+            await self.hub.publish(user_email, {**done, "meta": meta} if meta else done)
             await self._status(user_email)
 
     async def _title_session(self, session_id: str, text: str) -> None:

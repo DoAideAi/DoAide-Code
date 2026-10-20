@@ -150,7 +150,9 @@ class LaptopAgent:
             log.exception("job %s failed", job_id)
             outcome.content = outcome.content or f"Laptop agent error: {exc}"
             outcome.status = "error"
-        await send({"type": "done", "id": job_id, "status": outcome.status, "content": outcome.content})
+        done = {"type": "done", "id": job_id, "status": outcome.status, "content": outcome.content}
+        meta = outcome.meta()
+        await send({**done, "meta": meta} if meta else done)
 
 
 async def serve(agent: LaptopAgent, url: str, token: str, *, max_backoff: float = 30.0) -> None:

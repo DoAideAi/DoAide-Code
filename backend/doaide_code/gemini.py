@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from .usage import Usage, usage_for
+
 API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
@@ -24,7 +26,15 @@ class GeminiClient:
     def enabled(self) -> bool:
         return bool(self.api_key)
 
-    async def generate(self, prompt: str, *, schema: dict[str, Any] | None = None, timeout: float = 20) -> str:
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        schema: dict[str, Any] | None = None,
+        timeout: float = 20,
+        usage: list[Usage] | None = None,
+    ) -> str:
+        """One completion. If `usage` is given, the call's token usage is appended to it."""
         if not self.api_key:
             raise GeminiError("Gemini API key is not configured")
         # Routing and titles need no deliberation; minimal thinking keeps latency down.
@@ -45,13 +55,20 @@ class GeminiClient:
         if resp.status_code != 200:
             raise GeminiError(f"Gemini returned {resp.status_code}")
         try:
-            parts = resp.json()["candidates"][0]["content"]["parts"]
-            return "".join(p.get("text", "") for p in parts)
+            data = resp.json()
+            parts = data["candidates"][0]["content"]["parts"]
+            if usage is not None and isinstance(data.get("usageMetadata"), dict):
+                meta = data["usageMetadata"]
+                out = int(meta.get("candidatesTokenCount", 0)) + int(meta.get("thoughtsTokenCount", 0))
+                usage.append(usage_for(self.model, int(meta.get("promptTokenCount", 0)), out))
+            return "".join(p.get("text", "") for p in parts if not p.get("thought"))
         except (KeyError, IndexError, ValueError) as exc:
             raise GeminiError("Gemini returned an unexpected response") from exc
 
-    async def generate_json(self, prompt: str, schema: dict[str, Any], *, timeout: float = 20) -> dict[str, Any]:
-        text = await self.generate(prompt, schema=schema, timeout=timeout)
+    async def generate_json(
+        self, prompt: str, schema: dict[str, Any], *, timeout: float = 20, usage: list[Usage] | None = None
+    ) -> dict[str, Any]:
+        text = await self.generate(prompt, schema=schema, timeout=timeout, usage=usage)
         try:
             data = json.loads(text)
         except json.JSONDecodeError as exc:
