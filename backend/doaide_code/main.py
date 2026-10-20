@@ -353,8 +353,14 @@ def run() -> None:
 
     import uvicorn
 
-    logging.basicConfig(level=logging.INFO)
+    # Logs go to stderr; in `mcp` mode stdout carries the MCP protocol.
+    logging.basicConfig(level=logging.INFO, stream=sys.stderr)
     settings = Settings()
+    if sys.argv[1:2] == ["mcp"]:
+        from .mcp_server import run_mcp
+
+        run_mcp(settings)
+        return
     if sys.argv[1:2] == ["agent"]:
         from .agent import run_agent
 

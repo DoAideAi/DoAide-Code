@@ -23,7 +23,7 @@ class FileAccessError(Exception):
         self.status = status
 
 
-def _resolve(root: Path, rel: str) -> Path:
+def resolve_in_root(root: Path, rel: str) -> Path:
     root = root.resolve()
     target = (root / rel).resolve() if rel else root
     if not target.is_relative_to(root):
@@ -32,7 +32,7 @@ def _resolve(root: Path, rel: str) -> Path:
 
 
 def list_dir(root: Path, rel: str = "") -> dict[str, Any]:
-    target = _resolve(root, rel)
+    target = resolve_in_root(root, rel)
     if not target.is_dir():
         raise FileAccessError(f"No such folder: {rel or '.'}", 404)
     entries = []
@@ -54,7 +54,7 @@ def list_dir(root: Path, rel: str = "") -> dict[str, Any]:
 
 
 def read_file(root: Path, rel: str) -> dict[str, Any]:
-    target = _resolve(root, rel)
+    target = resolve_in_root(root, rel)
     if not target.is_file():
         raise FileAccessError(f"No such file: {rel}", 404)
     size = target.stat().st_size

@@ -8,13 +8,25 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
+from .config import Settings
 from .db import Store
-from .executors import ExecutorError, Job
+from .executors import ExecutorError, Job, JevExecutor, build_executors
+from .gemini import GeminiClient
 from .router import RouterBrain
 
 log = logging.getLogger(__name__)
 
 NO_EXECUTOR = "No executor is available. Start Ollama or sign in to the Claude or Codex CLI."
+
+
+def build_router(settings: Settings) -> RouterBrain:
+    """Router over this machine's executors. Routing decisions use Jev, then Gemini."""
+    return RouterBrain(
+        build_executors(settings),
+        jev=JevExecutor(settings.typesafe_api_key),
+        gemini=GeminiClient(settings.gemini_api_key, settings.gemini_model),
+        offline=settings.offline_router,
+    )
 
 
 @dataclass

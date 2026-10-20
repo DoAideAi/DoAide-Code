@@ -19,12 +19,10 @@ from typing import Any
 from .commands import is_command, run_command
 from .config import Settings
 from .db import Store
-from .executors import Job, Turn, build_executors
-from .executors.jev import JevExecutor
-from .gemini import GeminiClient
-from .router import RouterBrain
+from .executors import Job, Turn
 from .files import FileAccessError, list_dir, read_file
-from .runner import Outcome, run_job
+from .router import RouterBrain
+from .runner import Outcome, build_router, run_job
 from .workspace import DEFAULT_WORKSPACE, working_root
 
 log = logging.getLogger(__name__)
@@ -172,12 +170,7 @@ def run_agent(settings: Settings) -> None:
             "Set DOAIDE_HUB_TOKEN to the token from 'Connect laptop' on the hosted UI, then run `doaide-code agent`."
         )
     store = Store(settings.db_path)
-    router = RouterBrain(
-        build_executors(settings),
-        jev=JevExecutor(settings.typesafe_api_key),
-        gemini=GeminiClient(settings.gemini_api_key, settings.gemini_model),
-        offline=settings.offline_router,
-    )
+    router = build_router(settings)
     agent = LaptopAgent(store, router, settings.owner_email, workspace=settings.workspace)
     try:
         asyncio.run(serve(agent, settings.hub_url, settings.hub_token))

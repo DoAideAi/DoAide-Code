@@ -22,6 +22,7 @@ backend/            FastAPI harness server (Python 3.11+)
     relay.py        hub mode: stores + queues prompts, relays them to the laptop agent
     agent.py        laptop agent: `doaide-code agent`, runs relayed prompts locally
     runner.py       one prompt through the executors with fallback (laptop only)
+    mcp_server.py   `doaide-code mcp`: MCP server (stdio) exposing laptop tools to Claude
     router.py       Router Brain (Jev -> Gemini -> keyword heuristics)
     chat.py         orchestration: commands, routing, fallback, persistence, fan-out
     executors/      ollama.py, claude_cli.py, codex_cli.py, jev.py (TypeSafe SDK)
@@ -144,6 +145,54 @@ Set `DOAIDE_OWNER_EMAIL` to your Google address on the laptop so its project
 registry belongs to the same account. Requests that carry proxy forwarding headers
 never get a local token. Agent tokens (`POST /api/agent-token`) only work on
 `/agent`, and browser tokens never work there.
+
+## MCP server (Claude → DoAide Code → laptop)
+
+`doaide-code mcp` runs DoAide Code as a [Model Context Protocol](https://modelcontextprotocol.io)
+server on the laptop. Claude (Desktop / Cowork / Claude Code) launches it as a
+subprocess and talks JSON-RPC over stdin/stdout, so no network port is opened. Coding
+work Claude dispatches runs on this laptop and the results go back to Claude.
+
+| Tool | What it does |
+| --- | --- |
+| `get_status` | laptop online, which local LLMs are available, workspace, projects |
+| `execute_code` | hand a coding task to the local executors (cheapest capable model; may edit files) |
+| `read_file` / `write_file` / `edit_file` | file operations (edit = exact text replacement) |
+| `run_command` | shell command in the project (stdin closed, timeout, output capped at 100 KB) |
+| `list_files` | list a folder, optionally recursive (skips `.git`, `node_modules`, venvs) |
+| `search_code` | literal or regex search with an optional file glob |
+
+Every tool works inside the active project, or `~/doaide-code-workspace` when none is
+active, or a registered project passed as `project`. Paths that resolve outside that
+root (`..`, absolute paths elsewhere, symlinks) are refused. Read-only tools are marked
+`readOnlyHint`, and writing tools are marked `destructiveHint`, so clients can ask
+before running them. Routing decisions use Jev, then Gemini; the product itself makes
+no Anthropic API calls.
+
+**Claude Code**
+
+```bash
+claude mcp add doaide-code --scope user \
+  -e DOAIDE_OWNER_EMAIL=you@example.com \
+  -- /path/to/Doaide-Code/backend/.venv/bin/doaide-code mcp
+```
+
+**Claude Desktop / Cowork** (`~/Library/Application Support/Claude/claude_desktop_config.json`)
+
+```json
+{
+  "mcpServers": {
+    "doaide-code": {
+      "command": "/path/to/Doaide-Code/backend/.venv/bin/doaide-code",
+      "args": ["mcp"],
+      "env": { "DOAIDE_OWNER_EMAIL": "you@example.com" }
+    }
+  }
+}
+```
+
+Use the same `DOAIDE_OWNER_EMAIL` as the desktop app and agent, so the MCP server sees
+the same active project. It reads the same local database (`DOAIDE_DB`).
 
 ## Configuration
 
