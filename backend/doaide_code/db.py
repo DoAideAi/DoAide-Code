@@ -51,6 +51,14 @@ CREATE TABLE IF NOT EXISTS usage_log (
     cached INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_usage_time ON usage_log(created_at);
+-- Answers to repeated requests; the key covers prompt, history and the selected files' state.
+CREATE TABLE IF NOT EXISTS response_cache (
+    key TEXT PRIMARY KEY,
+    answer TEXT NOT NULL,
+    executor TEXT,
+    created_at REAL NOT NULL,
+    hits INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS executor_stats (
     executor TEXT PRIMARY KEY,
     calls INTEGER NOT NULL DEFAULT 0,
@@ -342,6 +350,22 @@ class Store:
             "INSERT INTO usage_log (created_at, source, executor, model, tokens_in, tokens_out, cost_usd, cached) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (time.time(), source, executor, model, tokens_in, tokens_out, cost_usd, int(cached)),
+        )
+
+    def cache_get(self, key: str, max_age: float) -> dict[str, Any] | None:
+        row = self._one(
+            "SELECT * FROM response_cache WHERE key = ? AND created_at >= ?", (key, time.time() - max_age)
+        )
+        if row is not None:
+            self._exec("UPDATE response_cache SET hits = hits + 1 WHERE key = ?", (key,))
+        return row
+
+    def cache_put(self, key: str, answer: str, executor: str | None) -> None:
+        self._exec(
+            "INSERT INTO response_cache (key, answer, executor, created_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET answer = excluded.answer, executor = excluded.executor, "
+            "created_at = excluded.created_at",
+            (key, answer, executor, time.time()),
         )
 
     def usage_summary(self, since: float = 0) -> list[dict[str, Any]]:

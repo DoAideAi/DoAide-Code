@@ -66,6 +66,9 @@ class Settings:
     # Default workspace on the laptop; `/workspace <path>` overrides it in the local database.
     workspace: str = field(default_factory=lambda: os.environ.get("DOAIDE_WORKSPACE", "~/doaide-code-workspace"))
 
+    # Seconds a cached answer stays valid (0 disables the response cache).
+    cache_ttl: float = field(default_factory=lambda: float(os.environ.get("DOAIDE_CACHE_TTL", str(24 * 3600))))
+
     cli_timeout: float = field(default_factory=lambda: float(os.environ.get("DOAIDE_CLI_TIMEOUT", "600")))
 
     gemini_api_key: str = field(default_factory=lambda: _read_secret("GEMINI_API_KEY", "gemini_api_key.txt", "gemini_api_key"))

@@ -100,8 +100,11 @@ class RouterBrain:
         jev: JevExecutor | None = None,
         gemini: GeminiClient | None = None,
         offline: bool = False,
+        cache_ttl: float = 0,
     ):
         self.executors = sorted(executors, key=lambda e: e.tier)
+        # How long answers from cacheable executors are reused (0 = never).
+        self.cache_ttl = cache_ttl
         self.jev = jev
         self.gemini = gemini
         self.offline = offline
