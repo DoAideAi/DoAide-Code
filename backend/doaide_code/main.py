@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -42,6 +43,10 @@ from .workspace import set_workspace, working_root, workspace_path
 log = logging.getLogger("doaide_code")
 
 WS_UNAUTHORIZED = 4401
+# Relayed MCP calls wait for the laptop: execute_code and run_command (max 1800 s) can be slow.
+MCP_RELAY_TIMEOUT = 1900
+# Keeps relayed requests well under the agent socket's 4 MiB frame limit.
+MCP_RELAY_MAX_BYTES = 2_000_000
 
 
 class GoogleLogin(BaseModel):
@@ -203,6 +208,15 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
             "hub_url": f"{'wss' if proto == 'https' else 'ws'}://{host}/agent",
         }
 
+    @app.post("/api/mcp-token")
+    async def mcp_token(user: User = Depends(current_user)) -> dict:
+        """Long-lived bearer token for remote MCP clients (Dispatch, cloud sessions)."""
+        if not settings.is_hub:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Only the hub relays MCP; use `doaide-code mcp` locally")
+        raw, digest = new_refresh_token()
+        store.add_refresh_token(digest, user.email, "mcp", name="mcp")
+        return {"token": raw, "endpoint": "/api/v1/mcp/relay"}
+
     # Files (read-only) and laptop settings
 
     async def browse(user: User, method: str, rel: str) -> dict:
@@ -325,6 +339,49 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
                 # Shielded so the running prompt is failed and devices told even if this
                 # handler is being cancelled (server shutdown, client teardown).
                 await asyncio.shield(relay.detach_agent(user.email, ws))
+
+        def mcp_user(request: Request) -> User:
+            """A browser access token, or a never-expiring token from /api/mcp-token."""
+            raw = bearer(request.headers.get("authorization"))
+            try:
+                return verify_token(settings, raw)
+            except AuthError:
+                pass
+            row = store.use_refresh_token(hash_token(raw), "mcp") if raw else None
+            if row is None:
+                raise HTTPException(
+                    status.HTTP_401_UNAUTHORIZED, "Invalid MCP token", headers={"WWW-Authenticate": "Bearer"}
+                )
+            return User(email=row["user_email"], scope="mcp")
+
+        @app.post("/api/v1/mcp/relay")
+        async def mcp_relay(request: Request, user: User = Depends(mcp_user)) -> Response:
+            """Stateless MCP (Streamable HTTP, JSON responses) relayed to the user's laptop agent."""
+
+            def rpc_error(code: int, text: str, http: int = 200, request_id=None) -> JSONResponse:
+                body = {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": text}}
+                return JSONResponse(body, status_code=http)
+
+            raw = await request.body()
+            if len(raw) > MCP_RELAY_MAX_BYTES:
+                return rpc_error(-32600, "Request too large", status.HTTP_413_CONTENT_TOO_LARGE)
+            try:
+                message = json.loads(raw)
+            except ValueError:
+                return rpc_error(-32700, "Parse error", status.HTTP_400_BAD_REQUEST)
+            valid = isinstance(message, dict) and message.get("jsonrpc") == "2.0"
+            if not valid or not isinstance(message.get("method"), str):
+                return rpc_error(-32600, "Invalid JSON-RPC request", status.HTTP_400_BAD_REQUEST)
+            if "id" not in message:
+                # Notifications (initialized, cancelled) need no answer from the laptop.
+                return Response(status_code=status.HTTP_202_ACCEPTED)
+            try:
+                answer = await relay.rpc(user.email, "mcp", {"message": message}, timeout=MCP_RELAY_TIMEOUT)
+            except LaptopOffline:
+                return rpc_error(-32000, "Your laptop is offline", status.HTTP_503_SERVICE_UNAVAILABLE, message["id"])
+            if not isinstance(answer.get("result"), dict):
+                return rpc_error(-32603, str(answer.get("error") or "Laptop gave no answer"), request_id=message["id"])
+            return JSONResponse(answer["result"])
 
     mount_frontend(app, settings.frontend_dist)
     return app

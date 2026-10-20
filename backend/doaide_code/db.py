@@ -61,13 +61,13 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL
 );
 -- Long-lived sign-ins: browsers trade a refresh token for short access JWTs, and the
--- laptop agent authenticates with one directly. They never expire; deleting the row
--- revokes it. Only a SHA-256 hash is stored.
+-- laptop agent and remote MCP clients authenticate with one directly. They never expire;
+-- deleting the row revokes it. Only a SHA-256 hash is stored.
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     token_hash TEXT PRIMARY KEY,
     user_email TEXT NOT NULL,
     name TEXT NOT NULL DEFAULT '',
-    scope TEXT NOT NULL CHECK (scope IN ('user', 'agent')),
+    scope TEXT NOT NULL CHECK (scope IN ('user', 'agent', 'mcp')),
     created_at REAL NOT NULL,
     last_used REAL
 );
@@ -93,6 +93,22 @@ class Store:
         self._lock = threading.Lock()
         with self._lock:
             self._conn.executescript(SCHEMA)
+            self._migrate()
+
+    def _migrate(self) -> None:
+        # Databases created before the 'mcp' token scope have a narrower CHECK; rebuild the table.
+        row = self._conn.execute("SELECT sql FROM sqlite_master WHERE name = 'refresh_tokens'").fetchone()
+        if row is not None and "'mcp'" not in row["sql"]:
+            self._conn.executescript(
+                """
+                ALTER TABLE refresh_tokens RENAME TO refresh_tokens_old;
+                """
+                + SCHEMA
+                + """
+                INSERT INTO refresh_tokens SELECT * FROM refresh_tokens_old;
+                DROP TABLE refresh_tokens_old;
+                """
+            )
 
     def close(self) -> None:
         self._conn.close()

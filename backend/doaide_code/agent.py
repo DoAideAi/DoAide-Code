@@ -21,6 +21,7 @@ from .config import Settings
 from .db import Store
 from .executors import Job, Turn
 from .files import FileAccessError, list_dir, read_file
+from .mcp_server import LaptopTools, handle_relayed
 from .router import RouterBrain
 from .runner import Outcome, build_router, run_job
 from .workspace import DEFAULT_WORKSPACE, working_root
@@ -39,6 +40,9 @@ class LaptopAgent:
         self.owner = owner_email
         self._task: asyncio.Task | None = None
         self._task_id: str | None = None
+        # MCP tool calls relayed from the hub; they can run for minutes, so each gets a task.
+        self.tools = LaptopTools(store, router, owner_email, workspace=workspace)
+        self._mcp_tasks: set[asyncio.Task] = set()
 
     def project_name(self) -> str | None:
         project = self.store.active_project(self.owner)
@@ -56,6 +60,10 @@ class LaptopAgent:
             self._task = asyncio.create_task(self.run(message, send))
         elif kind == "stop" and message.get("id") == self._task_id:
             await self.cancel()
+        elif kind == "rpc" and isinstance(message.get("id"), str) and message.get("method") == "mcp":
+            task = asyncio.create_task(self.mcp(message, send))
+            self._mcp_tasks.add(task)
+            task.add_done_callback(self._mcp_tasks.discard)
         elif kind == "rpc" and isinstance(message.get("id"), str):
             await send({"type": "rpc_result", "id": message["id"], **await self.rpc(message)})
 
@@ -76,6 +84,24 @@ class LaptopAgent:
         except OSError as exc:
             return {"error": exc.strerror or "Cannot read", "status": 400}
         return {"result": {**result, "root": label}}
+
+    async def mcp(self, message: dict[str, Any], send: Send) -> None:
+        params = message.get("params") if isinstance(message.get("params"), dict) else {}
+        request = params.get("message")
+        if not isinstance(request, dict):
+            await send({"type": "rpc_result", "id": message["id"], "error": "Missing MCP message", "status": 400})
+            return
+        response = await handle_relayed(self.tools, request)
+        with contextlib.suppress(Exception):
+            await send({"type": "rpc_result", "id": message["id"], "result": response})
+
+    async def disconnect(self) -> None:
+        """The hub link dropped: stop the running job and any relayed MCP calls."""
+        await self.cancel()
+        tasks = list(self._mcp_tasks)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def cancel(self) -> None:
         task, self._task, self._task_id = self._task, None, None
@@ -159,7 +185,7 @@ async def serve(agent: LaptopAgent, url: str, token: str, *, max_backoff: float 
         except OSError as exc:
             log.warning("cannot reach hub: %s", exc)
         finally:
-            await agent.cancel()
+            await agent.disconnect()
         await asyncio.sleep(backoff)
         backoff = min(backoff * 2, max_backoff)
 

@@ -194,6 +194,17 @@ claude mcp add doaide-code --scope user \
 Use the same `DOAIDE_OWNER_EMAIL` as the desktop app and agent, so the MCP server sees
 the same active project. It reads the same local database (`DOAIDE_DB`).
 
+**Remote (cloud sessions, Dispatch)**
+
+The hub exposes the same tools at `POST https://code.doaide.com/api/v1/mcp/relay`: a
+stateless MCP endpoint (Streamable HTTP with JSON responses) that forwards each JSON-RPC
+request over the laptop agent's `/agent` socket and returns the laptop's answer. It
+needs `doaide-code agent` running on the laptop (503 otherwise). Authenticate with
+`Authorization: Bearer <token>`, using either a browser access token or a never-expiring
+MCP token from `POST /api/mcp-token`; agent tokens are refused. Supported methods are
+`initialize`, `ping`, `tools/list` and `tools/call`; notifications get 202. A call waits
+up to about 30 minutes, and requests are capped at 2 MB.
+
 ## Configuration
 
 | Variable | Default |

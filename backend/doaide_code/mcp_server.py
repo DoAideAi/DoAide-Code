@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from mcp import Client
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
@@ -38,6 +39,7 @@ MAX_OUTPUT = 100_000
 MAX_LIST = 2000
 MAX_SEARCH_FILE = 1_000_000
 COMMAND_TIMEOUT_LIMIT = 1800
+RELAYED_METHODS = {"initialize", "ping", "tools/list", "tools/call"}
 
 INSTRUCTIONS = """DoAide Code runs on the user's laptop. Tools act inside the active project
 (or the workspace ~/doaide-code-workspace when no project is active); pass `project` to
@@ -370,6 +372,51 @@ def build_server(tools: LaptopTools):
         return await guard(tools.search_code(pattern, path, glob, regex, case_sensitive, max_results, project))
 
     return server
+
+
+async def handle_relayed(tools: LaptopTools, message: dict[str, Any]) -> dict[str, Any]:
+    """Answer one JSON-RPC request relayed from the hub (POST /api/v1/mcp/relay).
+
+    The hub's endpoint is stateless, so each request runs against a fresh in-memory MCP
+    session; only the tool methods (plus initialize and ping) are supported.
+    """
+    request_id = message.get("id")
+    method = message.get("method")
+    params = message.get("params") if isinstance(message.get("params"), dict) else {}
+
+    def ok(result: dict[str, Any]) -> dict[str, Any]:
+        return {"jsonrpc": "2.0", "id": request_id, "result": result}
+
+    def fail(code: int, text: str) -> dict[str, Any]:
+        return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": text}}
+
+    if method not in RELAYED_METHODS:
+        return fail(-32601, f"Method not supported over the relay: {method}")
+    try:
+        async with Client(build_server(tools)) as client:
+            if method == "initialize":
+                return ok(
+                    {
+                        # Tool calls look the same across protocol versions, so accept the client's.
+                        "protocolVersion": params.get("protocolVersion") or client.protocol_version,
+                        "capabilities": {"tools": {}},
+                        "serverInfo": client.server_info.model_dump(mode="json", by_alias=True, exclude_none=True),
+                        "instructions": client.instructions,
+                    }
+                )
+            if method == "ping":
+                return ok({})
+            if method == "tools/list":
+                result = await client.list_tools()
+            else:
+                name = params.get("name")
+                if not isinstance(name, str):
+                    return fail(-32602, "tools/call needs a tool name")
+                arguments = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
+                result = await client.call_tool(name, arguments)
+            return ok(result.model_dump(mode="json", by_alias=True, exclude_none=True))
+    except Exception as exc:  # never leave the hub waiting
+        return fail(-32603, f"Laptop MCP error: {exc}")
 
 
 def run_mcp(settings: Settings) -> None:
