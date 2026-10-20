@@ -11,7 +11,6 @@ from typing import Any
 from .commands import is_command, run_command
 from .db import Store
 from .executors import Job, Turn
-from .gemini import GeminiClient, GeminiError
 from .router import RouterBrain
 from .runner import Outcome, run_job
 from .sync import SyncHub
@@ -34,7 +33,6 @@ class ChatService:
         store: Store,
         router: RouterBrain,
         hub: SyncHub,
-        gemini: GeminiClient | None = None,
         *,
         workspace: str = DEFAULT_WORKSPACE,
     ):
@@ -42,10 +40,8 @@ class ChatService:
         self.workspace = workspace
         self.router = router
         self.hub = hub
-        self.gemini = gemini
         self._tasks: dict[str, asyncio.Task] = {}
         self._error: dict[str, bool] = {}
-        self._background: set[asyncio.Task] = set()
 
     # Session and snapshot
 
@@ -55,6 +51,14 @@ class ChatService:
             project = self.store.active_project(user_email)
             session = self.store.create_session(user_email, project["id"] if project else None)
         return session
+
+    async def open_session(self, user_email: str, session_id: str) -> None:
+        """Switch every device of this user to another of their conversations."""
+        session = self.store.get_session(session_id)
+        if session is None or session["user_email"] != user_email:
+            return
+        self.store.touch_session(session_id)
+        await self.hub.publish(user_email, self.snapshot(user_email))
 
     def status(self, user_email: str) -> str:
         task = self._tasks.get(user_email)
@@ -68,6 +72,8 @@ class ChatService:
         return {
             "type": "snapshot",
             "session_id": session["id"],
+            "title": session["title"],
+            "source": session["source"],
             "project": project["name"] if project else None,
             "status": self.status(user_email),
             "mode": "local",
@@ -125,9 +131,7 @@ class ChatService:
             return
 
         if session["title"] is None:
-            title_task = asyncio.create_task(self._title_session(session["id"], text))
-            self._background.add(title_task)
-            title_task.add_done_callback(self._background.discard)
+            self.store.update_session(session["id"], title=text[:60])
         await self._answer(user_email, session["id"], text, user_msg["id"])
 
     async def _answer(self, user_email: str, session_id: str, text: str, user_msg_id: str) -> None:
@@ -169,18 +173,3 @@ class ChatService:
             await self.hub.publish(user_email, {**done, "meta": meta} if meta else done)
             await self._status(user_email)
 
-    async def _title_session(self, session_id: str, text: str) -> None:
-        if self.gemini is None or not self.gemini.enabled:
-            title = text[:60]
-        else:
-            try:
-                title = (
-                    await self.gemini.generate(
-                        f"Write a 3-6 word title for a coding chat that starts with this message. "
-                        f"Reply with the title only.\n\n{text[:2000]}",
-                        timeout=8,
-                    )
-                ).strip().strip('"')[:80] or text[:60]
-            except GeminiError:
-                title = text[:60]
-        self.store.update_session(session_id, title=title)

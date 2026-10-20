@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
 
-import httpx
 import pytest
 
 from doaide_code.executors import JevExecutor
-from doaide_code.gemini import GeminiClient
 from doaide_code.router import RouterBrain, heuristic_tier
 
 from .conftest import FakeExecutor
@@ -66,36 +63,6 @@ async def test_jev_choice_routes_with_score_and_choice_questions():
 async def test_jev_low_confidence_uses_complexity_score():
     brain = RouterBrain([], jev=JevExecutor("", client=FakeTypeSafe(choice="tier0", confidence=0.3, score=2.6)))
     assert (await brain.classify("something")).tier == 3
-
-
-def _gemini(payload: dict | None, status: int = 200) -> GeminiClient:
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers["x-goog-api-key"] == "k"
-        assert "key=" not in str(request.url)
-        if payload is None:
-            return httpx.Response(status, json={})
-        body = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload)}]}}]}
-        return httpx.Response(status, json=body)
-
-    return GeminiClient("k", "gemini-2.5-flash", transport=httpx.MockTransport(handler))
-
-
-@pytest.mark.anyio
-async def test_jev_failure_falls_back_to_gemini_then_heuristic():
-    jev = JevExecutor("", client=FakeTypeSafe(fail=True))
-    brain = RouterBrain([], jev=jev, gemini=_gemini({"tier": 3, "complexity": 2.5}))
-    decision = await brain.classify("hi")
-    assert (decision.tier, decision.source) == (3, "gemini")
-
-    brain = RouterBrain([], jev=jev, gemini=_gemini(None, status=500))
-    decision = await brain.classify("write a unit test")
-    assert (decision.tier, decision.source) == (1, "heuristic")
-
-
-@pytest.mark.anyio
-async def test_gemini_tier_is_clamped():
-    brain = RouterBrain([], gemini=_gemini({"tier": 9, "complexity": 9}))
-    assert (await brain.classify("x")).tier == 3
 
 
 @pytest.mark.anyio

@@ -91,7 +91,10 @@ class LaptopAgent:
         if not isinstance(request, dict):
             await send({"type": "rpc_result", "id": message["id"], "error": "Missing MCP message", "status": 400})
             return
-        response = await handle_relayed(self.tools, request)
+        reply_id = params.get("reply_id")
+        # Relayed calls the hub shows in a conversation stream their progress into that reply.
+        tools = self.tools.for_reply(reply_id, send) if isinstance(reply_id, str) else self.tools
+        response = await handle_relayed(tools, request)
         with contextlib.suppress(Exception):
             await send({"type": "rpc_result", "id": message["id"], "result": response})
 

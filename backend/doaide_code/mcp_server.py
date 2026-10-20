@@ -14,11 +14,13 @@ stdin=DEVNULL so they cannot read the protocol stream.
 from __future__ import annotations
 
 import asyncio
+import copy
 import fnmatch
 import os
 import re
 import time
 from pathlib import Path
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from mcp import Client
@@ -27,6 +29,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from . import __version__
+from .commands import apply_changes, discard_changes
 from .config import Settings
 from .db import Store
 from .executors import Job
@@ -45,8 +48,10 @@ INSTRUCTIONS = """DoAide Code runs on the user's laptop. Tools act inside the ac
 (or the workspace ~/doaide-code-workspace when no project is active); pass `project` to
 target another registered project. Paths are relative to that root and cannot leave it.
 Use execute_code to hand a whole coding task to the laptop's local models (Ollama, Codex,
-Claude CLI): it picks the cheapest capable one and may edit files. Use the file, search
-and command tools for precise steps. Call get_status first to see what is available."""
+Claude CLI): it picks the cheapest capable one. Code edits it proposes are returned as a
+diff preview under `changes` and are NOT written until apply_changes is called (the user
+can also apply them from the DoAide Code UI). Use the file, search and command tools for
+precise steps. Call get_status first to see what is available."""
 
 
 class ToolInputError(ValueError):
@@ -63,6 +68,15 @@ class LaptopTools:
         self.workspace = workspace
         # Seconds between progress notifications while execute_code streams.
         self.progress_interval = 2.0
+        # Set per relayed call (see for_reply): the hub reply that shows this call's progress.
+        self.reply_id: str | None = None
+        self.emit: Callable[[dict[str, Any]], Awaitable[None]] | None = None
+
+    def for_reply(self, reply_id: str, emit: Callable[[dict[str, Any]], Awaitable[None]]) -> LaptopTools:
+        """A copy whose execute_code streams into the hub's reply `reply_id` via `emit`."""
+        tools = copy.copy(self)
+        tools.reply_id, tools.emit = reply_id, emit
+        return tools
 
     # Roots and paths
 
@@ -125,6 +139,8 @@ class LaptopTools:
 
         async def on_delta(chunk: str) -> None:
             nonlocal last
+            if self.emit is not None and self.reply_id is not None:
+                await self.emit({"type": "mcp_delta", "id": self.reply_id, "text": chunk})
             now = time.monotonic()
             if on_progress is not None and now - last >= self.progress_interval:
                 last = now
@@ -135,13 +151,29 @@ class LaptopTools:
         )
         if outcome.status != "done":
             raise ToolInputError(outcome.content or NO_EXECUTOR)
-        return {
+        if outcome.changes and self.reply_id is not None:
+            self.store.link_changeset(outcome.changes["id"], self.reply_id)
+        result: dict[str, Any] = {
             "project": label,
             "root": str(root),
             "executor": outcome.executor,
             "answer": outcome.content,
             "usage": outcome.meta().get("usage"),
         }
+        if outcome.changes:
+            result["changes"] = outcome.changes
+            result["note"] = f"Proposed changes are not written yet; call apply_changes('{outcome.changes['id']}')."
+        return result
+
+    async def apply_changes(self, changeset_id: str | None = None, *, discard: bool = False) -> str:
+        result = (discard_changes if discard else apply_changes)(self.store, changeset_id or None)
+        if result.changes is None:
+            raise ToolInputError(result.text)
+        message_id, summary = result.changes
+        if message_id and self.emit is not None:
+            # Update the reply that showed the preview, on every device.
+            await self.emit({"type": "changes", "id": message_id, "changes": summary})
+        return result.text
 
     async def read_file(self, path: str, start_line: int = 1, end_line: int | None = None, project: str | None = None) -> str:
         root, target = self.resolve(path, project)
@@ -332,13 +364,25 @@ def build_server(tools: LaptopTools):
     @server.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True, open_world_hint=True))
     async def execute_code(prompt: str, ctx: Context, project: str | None = None) -> dict[str, Any]:
         """Hand a coding task to the laptop's local models. The router picks the cheapest capable
-        executor (Ollama, then Codex / Claude CLI) and runs it in the project folder; it may read and
-        edit files there. Returns the final answer. Can take several minutes for large tasks."""
+        executor (Ollama, then Codex / Claude CLI) and runs it in the project folder. Returns the answer
+        and, for code changes, a diff preview under `changes` that apply_changes writes. Can take
+        several minutes for large tasks."""
 
         async def progress(done: int, message: str) -> None:
             await ctx.report_progress(done, None, message)
 
         return await guard(tools.execute_code(prompt, project, on_progress=progress))
+
+    @server.tool(annotations=writes)
+    async def apply_changes(changeset_id: str | None = None) -> str:
+        """Write the changes execute_code proposed (the latest pending set if no id). Refuses if a
+        file changed since the preview."""
+        return await guard(tools.apply_changes(changeset_id))
+
+    @server.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False))
+    async def discard_changes(changeset_id: str | None = None) -> str:
+        """Drop changes execute_code proposed (the latest pending set if no id) without writing them."""
+        return await guard(tools.apply_changes(changeset_id, discard=True))
 
     @server.tool(annotations=read_only)
     async def read_file(path: str, start_line: int = 1, end_line: int | None = None, project: str | None = None) -> str:

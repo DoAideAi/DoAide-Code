@@ -3,6 +3,10 @@
 No model runs here. A prompt from any device becomes a queued assistant reply plus a row
 in `pending_jobs`; when the laptop agent is connected it receives one job at a time over
 `/agent` and streams `delta` / `done` events back, which fan out to every device.
+
+MCP tool calls relayed for a remote client (Claude Code, Dispatch) are recorded too: each
+call becomes an instruction plus a reply in a "Claude Code" conversation, and the laptop
+streams execute_code progress into that reply, so every device sees what was asked and done.
 """
 
 from __future__ import annotations
@@ -11,6 +15,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import time
 import uuid
 from typing import Any, Protocol
 
@@ -34,6 +39,48 @@ def clean_meta(value: Any) -> dict[str, Any]:
     meta = {k: v for k, v in value.items() if k in META_KEYS and isinstance(v, dict)}
     return meta if len(json.dumps(meta)) <= MAX_META_BYTES else {}
 DISCONNECTED = "[laptop disconnected before finishing]"
+# An MCP conversation idle this long is closed; the next call starts a new one.
+MCP_SESSION_IDLE = 1800
+# Characters of a tool's output kept in the conversation.
+MAX_TOOL_OUTPUT = 20_000
+
+
+def describe_call(name: str, arguments: dict[str, Any]) -> str:
+    """The instruction an MCP client gave, as shown in the conversation."""
+    def arg(key: str) -> str:
+        return str(arguments.get(key) or "")
+
+    project = f" (project {arg('project')})" if arguments.get("project") else ""
+    if name == "execute_code":
+        return arg("prompt") + project
+    if name == "run_command":
+        cwd = f" in {arg('cwd')}" if arguments.get("cwd") else ""
+        return f"$ {arg('command')}{cwd}{project}"
+    if name in {"read_file", "write_file", "edit_file"}:
+        verb = {"read_file": "Read", "write_file": "Write", "edit_file": "Edit"}[name]
+        return f"{verb} {arg('path')}{project}"
+    if name == "list_files":
+        return f"List {arg('path') or '.'}{project}"
+    if name == "search_code":
+        return f"Search for {arg('pattern')!r}{project}"
+    if name in {"apply_changes", "discard_changes"}:
+        verb = "Apply" if name == "apply_changes" else "Discard"
+        return f"{verb} changes {arg('changeset_id') or '(latest)'}"
+    return name.replace("_", " ").capitalize()
+
+
+def tool_reply(response: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
+    """(content, status, meta) for the reply to one relayed tools/call response."""
+    if not isinstance(response.get("result"), dict):
+        error = response.get("error") if isinstance(response.get("error"), dict) else {}
+        return str(error.get("message") or "Laptop gave no answer"), "error", {}
+    result = response["result"]
+    structured = result.get("structuredContent") if isinstance(result.get("structuredContent"), dict) else {}
+    texts = [b.get("text", "") for b in result.get("content") or [] if isinstance(b, dict) and b.get("type") == "text"]
+    content = structured["answer"] if isinstance(structured.get("answer"), str) else "\n".join(texts)
+    if len(content) > MAX_TOOL_OUTPUT:
+        content = content[:MAX_TOOL_OUTPUT] + "\n[output truncated]"
+    return content, "error" if result.get("isError") else "done", clean_meta(structured)
 
 
 class LaptopOffline(Exception):
@@ -58,6 +105,8 @@ class RelayService:
         self._partial: dict[str, str] = {}
         self._error: dict[str, bool] = {}
         self._rpc: dict[str, tuple[str, asyncio.Future]] = {}
+        # MCP tool-call replies being streamed: reply id -> owner.
+        self._mcp_replies: dict[str, str] = {}
 
     # Session and snapshot
 
@@ -77,12 +126,22 @@ class RelayService:
         return {
             "type": "snapshot",
             "session_id": session["id"],
+            "title": session["title"],
+            "source": session["source"],
             "project": self.store.remote_project(user_email),
             "status": self.status(user_email),
             "mode": "hub",
             "agent_online": self.agent_online(user_email),
             "messages": [public_message(m) for m in self.store.list_messages(session["id"])],
         }
+
+    async def open_session(self, user_email: str, session_id: str) -> None:
+        """Switch every device of this user to another of their conversations."""
+        session = self.store.get_session(session_id)
+        if session is None or session["user_email"] != user_email:
+            return
+        self.store.touch_session(session_id)
+        await self.hub.publish(user_email, self.snapshot(user_email))
 
     async def _publish_status(self, user_email: str) -> None:
         await self.hub.publish(user_email, {"type": "status", "state": self.status(user_email)})
@@ -154,6 +213,36 @@ class RelayService:
         finally:
             self._rpc.pop(request_id, None)
 
+    # MCP tool calls from remote clients
+
+    async def begin_mcp_call(self, user_email: str, name: str, arguments: dict[str, Any]) -> str:
+        """Record a relayed tool call as instruction + reply; returns the reply id to stream into."""
+        previous = self.store.latest_session(user_email)
+        session = self.store.latest_session_from(user_email, "mcp")
+        if session is None or session["updated_at"] < time.time() - MCP_SESSION_IDLE:
+            session = self.store.create_session(user_email, source="mcp")
+        instruction = describe_call(name, arguments)
+        if session["title"] is None:
+            self.store.update_session(session["id"], title=f"Claude Code: {instruction[:48]}")
+        meta = {"via": "mcp", "tool": name}
+        user_msg = self.store.add_message(session["id"], "user", instruction, meta=meta)
+        reply = self.store.add_message(session["id"], "assistant", "", status="streaming", meta=meta)
+        self._mcp_replies[reply["id"]] = user_email
+        if previous is None or previous["id"] != session["id"]:
+            # A new (or reopened) Claude Code conversation: bring every device to it.
+            await self.hub.publish(user_email, self.snapshot(user_email))
+        else:
+            for message in (user_msg, reply):
+                await self.hub.publish(user_email, {"type": "message", "message": public_message(message)})
+        return reply["id"]
+
+    async def end_mcp_call(self, user_email: str, reply_id: str, response: dict[str, Any] | None) -> None:
+        self._mcp_replies.pop(reply_id, None)
+        content, status, meta = tool_reply(response) if response is not None else ("Your laptop is offline", "error", {})
+        self.store.finish_message(reply_id, content, status, meta=meta)
+        done = {"type": "done", "id": reply_id, "status": status, "content": content}
+        await self.hub.publish(user_email, {**done, "meta": self.store.update_meta(reply_id, {})})
+
     # Laptop agent
 
     async def attach_agent(self, user_email: str, socket: AgentSocket) -> None:
@@ -198,6 +287,11 @@ class RelayService:
             return
         if kind == "changes":
             await self._update_changes(user_email, event)
+            return
+        if kind == "mcp_delta":
+            reply_id = str(event.get("id"))
+            if self._mcp_replies.get(reply_id) == user_email and isinstance(event.get("text"), str):
+                await self.hub.publish(user_email, {"type": "delta", "id": reply_id, "text": event["text"]})
             return
         if kind == "rpc_result":
             entry = self._rpc.get(str(event.get("id")))

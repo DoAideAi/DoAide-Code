@@ -239,3 +239,24 @@ def test_agent_tokens_are_not_browser_refresh_tokens(hub):
         with hub.websocket_connect(f"/agent?token={raw}") as ws:
             ws.receive_json()
     assert info.value.code == 4401
+
+
+def test_sessions_are_listed_and_can_be_reopened(client, token):
+    with client.websocket_connect(f"/ws?token={token}") as ws:
+        first = ws.receive_json()["session_id"]
+        ws.send_json({"type": "send", "text": "first chat"})
+        drain_until(ws, "done")
+        ws.send_json({"type": "send", "text": "/new"})
+        second = drain_until(ws, "snapshot")[-1]["session_id"]
+        assert second != first
+        listed = client.get("/api/sessions", headers=auth(token)).json()["sessions"]
+        assert [s["id"] for s in listed] == [first]  # empty sessions are not listed
+        assert listed[0]["title"] == "first chat" and listed[0]["source"] is None
+
+        ws.send_json({"type": "open", "session_id": first})
+        snapshot = drain_until(ws, "snapshot")[-1]
+        assert snapshot["session_id"] == first and snapshot["title"] == "first chat"
+        assert client.get("/api/session", headers=auth(token)).json()["session_id"] == first
+        ws.send_json({"type": "open", "session_id": "not-mine"})
+        ws.send_json({"type": "ping"})
+        assert ws.receive_json() == {"type": "pong"}  # unknown ids are ignored

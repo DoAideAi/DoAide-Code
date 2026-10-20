@@ -36,8 +36,6 @@ def parse_codex_event(event: dict, model: str = "") -> str | Usage | None:
 class CodexCliExecutor(Executor):
     name = "codex"
     tier = 1
-    # Uses the user's ChatGPT subscription: a fallback after Gemini/Ollama.
-    fallback = True
 
     def __init__(self, binary: str, model: str, *, timeout: float = 600):
         self.binary = binary

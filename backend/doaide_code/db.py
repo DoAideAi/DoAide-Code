@@ -23,7 +23,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
     title TEXT,
     created_at REAL NOT NULL,
-    updated_at REAL NOT NULL
+    updated_at REAL NOT NULL,
+    -- 'mcp' for conversations started by an MCP client (Claude Code, Dispatch); NULL for chat.
+    source TEXT
 );
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
@@ -146,6 +148,10 @@ class Store:
         if "meta" not in columns:
             self._conn.execute("ALTER TABLE messages ADD COLUMN meta TEXT")
             self._conn.commit()
+        columns = {r["name"] for r in self._conn.execute("PRAGMA table_info(sessions)").fetchall()}
+        if "source" not in columns:
+            self._conn.execute("ALTER TABLE sessions ADD COLUMN source TEXT")
+            self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()
@@ -199,12 +205,15 @@ class Store:
 
     # Sessions
 
-    def create_session(self, user_email: str, project_id: int | None = None, title: str | None = None) -> dict[str, Any]:
+    def create_session(
+        self, user_email: str, project_id: int | None = None, title: str | None = None, source: str | None = None
+    ) -> dict[str, Any]:
         now = time.time()
         session_id = uuid.uuid4().hex
         self._exec(
-            "INSERT INTO sessions (id, user_email, project_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (session_id, user_email, project_id, title, now, now),
+            "INSERT INTO sessions (id, user_email, project_id, title, created_at, updated_at, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (session_id, user_email, project_id, title, now, now, source),
         )
         return self.get_session(session_id)  # type: ignore[return-value]
 
@@ -215,6 +224,24 @@ class Store:
         return self._one(
             "SELECT * FROM sessions WHERE user_email = ? ORDER BY updated_at DESC LIMIT 1", (user_email,)
         )
+
+    def latest_session_from(self, user_email: str, source: str) -> dict[str, Any] | None:
+        return self._one(
+            "SELECT * FROM sessions WHERE user_email = ? AND source = ? ORDER BY updated_at DESC LIMIT 1",
+            (user_email, source),
+        )
+
+    def list_sessions(self, user_email: str, limit: int = 30) -> list[dict[str, Any]]:
+        """Recent sessions with at least one message, newest first."""
+        return self._all(
+            "SELECT s.id, s.title, s.source, s.updated_at FROM sessions s WHERE s.user_email = ? "
+            "AND EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id) ORDER BY s.updated_at DESC LIMIT ?",
+            (user_email, limit),
+        )
+
+    def touch_session(self, session_id: str) -> None:
+        """Make a session the user's current one (the most recently updated)."""
+        self._exec("UPDATE sessions SET updated_at = ? WHERE id = ?", (time.time(), session_id))
 
     def update_session(self, session_id: str, *, project_id: int | None = None, title: str | None = None) -> None:
         if project_id is not None:
@@ -234,13 +261,14 @@ class Store:
         tier: int | None = None,
         status: str = "done",
         message_id: str | None = None,
+        meta: dict | None = None,
     ) -> dict[str, Any]:
         message_id = message_id or uuid.uuid4().hex
         now = time.time()
         self._exec(
-            "INSERT INTO messages (id, session_id, role, content, executor, tier, status, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (message_id, session_id, role, content, executor, tier, status, now),
+            "INSERT INTO messages (id, session_id, role, content, executor, tier, status, created_at, meta) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (message_id, session_id, role, content, executor, tier, status, now, json.dumps(meta) if meta else None),
         )
         self._exec("UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id))
         return self._one("SELECT * FROM messages WHERE id = ?", (message_id,))  # type: ignore[return-value]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import socket
 from collections.abc import AsyncIterator, Iterator
 
@@ -12,10 +13,11 @@ import uvicorn
 from fastapi.testclient import TestClient
 
 from doaide_code.agent import LaptopAgent, serve
-from doaide_code.auth import hash_token, new_refresh_token
+from doaide_code.auth import User, hash_token, issue_token, new_refresh_token
 from doaide_code.db import Store
 from doaide_code.main import create_app
 from doaide_code.mcp_server import LaptopTools, handle_relayed
+from doaide_code.relay import describe_call, tool_reply
 from doaide_code.router import RouterBrain
 
 from .test_api import auth
@@ -233,3 +235,61 @@ async def test_relay_end_to_end_through_laptop(live_hub, tmp_path):
         run = {"name": "execute_code", "arguments": {"prompt": "hello"}}
         answer = (await http.post(RELAY, json=rpc("tools/call", run, request_id=4))).json()
         assert answer["result"]["structuredContent"]["answer"] == "Hello world"
+
+
+# Relayed calls are visible conversations on every device
+
+EDIT_ANSWER = "Make it louder.\n\napp.py\n<<<<<<< SEARCH\nprint('hello')\n=======\nprint('HELLO')\n>>>>>>> REPLACE\n"
+
+
+def test_describe_call_and_tool_reply():
+    assert describe_call("execute_code", {"prompt": "add tests", "project": "demo"}) == "add tests (project demo)"
+    assert describe_call("run_command", {"command": "pytest", "cwd": "backend"}) == "$ pytest in backend"
+    assert describe_call("read_file", {"path": "a.py"}) == "Read a.py"
+    assert describe_call("apply_changes", {}) == "Apply changes (latest)"
+    ok = {"result": {"content": [{"type": "text", "text": "x" * 30_000}], "structuredContent": {"usage": {"tokens_in": 1}}}}
+    content, status, meta = tool_reply(ok)
+    assert status == "done" and content.endswith("[output truncated]") and meta == {"usage": {"tokens_in": 1}}
+    assert tool_reply({"result": {"content": [], "isError": True}})[1] == "error"
+    assert tool_reply({"error": {"message": "boom"}}) == ("boom", "error", {})
+
+
+@pytest.mark.anyio
+async def test_relayed_calls_show_as_a_claude_code_conversation(live_hub, executors, settings, tmp_path):
+    from websockets.asyncio.client import connect
+
+    base, mcp_token = live_hub
+    browser = issue_token(settings, User(email=OWNER))
+    (tmp_path / "proj" / "app.py").write_text("print('hello')\n")
+    executors[0].chunks = [EDIT_ANSWER[:20], EDIT_ANSWER[20:]]
+    async with (
+        httpx.AsyncClient(base_url=base, headers=auth(mcp_token), timeout=10) as http,
+        connect(f"{base.replace('http', 'ws')}/ws?token={browser}") as ws,
+    ):
+        assert json.loads(await ws.recv())["type"] == "snapshot"
+        run = {"name": "execute_code", "arguments": {"prompt": "shout the greeting"}}
+        answer = (await http.post(RELAY, json=rpc("tools/call", run))).json()["result"]["structuredContent"]
+        assert answer["answer"] == "Make it louder." and answer["changes"]["status"] == "pending"
+        assert (tmp_path / "proj" / "app.py").read_text() == "print('hello')\n"  # preview only
+
+        events = []
+        while not events or events[-1]["type"] != "done":
+            events.append(json.loads(await ws.recv()))
+        # A new Claude Code conversation opens on every device, then the reply streams in.
+        assert events[0]["type"] == "snapshot" and events[0]["source"] == "mcp"
+        assert events[0]["title"] == "Claude Code: shout the greeting"
+        assert any(e["type"] == "delta" for e in events)
+        assert events[-1]["meta"]["changes"]["files"][0]["path"] == "app.py"
+
+        applied = (await http.post(RELAY, json=rpc("tools/call", {"name": "apply_changes", "arguments": {}}))).json()
+        assert not applied["result"].get("isError")
+        assert (tmp_path / "proj" / "app.py").read_text() == "print('HELLO')\n"
+
+        session = (await http.get("/api/session", headers=auth(browser))).json()
+        instruction, reply, apply_msg, apply_reply = session["messages"]
+        assert (instruction["role"], instruction["content"]) == ("user", "shout the greeting")
+        assert instruction["meta"] == {"via": "mcp", "tool": "execute_code"}
+        assert reply["meta"]["changes"]["status"] == "applied" and reply["content"] == "Make it louder."
+        assert apply_msg["content"] == "Apply changes (latest)" and apply_reply["content"].startswith("Applied 1 file")
+        listed = (await http.get("/api/sessions", headers=auth(browser))).json()["sessions"]
+        assert listed[0]["source"] == "mcp"

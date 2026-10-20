@@ -4,7 +4,6 @@ from ..config import Settings
 from .base import Executor, ExecutorError, Job, Turn
 from .claude_cli import ClaudeCliExecutor
 from .codex_cli import CodexCliExecutor
-from .gemini_api import GeminiApiExecutor
 from .jev import JevDecision, JevExecutor
 from .ollama import OllamaExecutor
 
@@ -13,7 +12,6 @@ __all__ = [
     "CodexCliExecutor",
     "Executor",
     "ExecutorError",
-    "GeminiApiExecutor",
     "JevDecision",
     "JevExecutor",
     "Job",
@@ -24,15 +22,9 @@ __all__ = [
 
 
 def build_executors(settings: Settings) -> list[Executor]:
-    """All answering executors. Ollama (free) and Gemini (cheap API) are the defaults; the
-    subscription CLIs (Codex, Claude) are fallbacks used only when those cannot answer."""
-    key = settings.gemini_api_key
-    executors: list[Executor] = [
-        OllamaExecutor(settings.ollama_url, settings.ollama_model),
-        GeminiApiExecutor(key, settings.gemini_lite_model, name="gemini-lite", tier=1, thinking="low"),
-        GeminiApiExecutor(key, settings.gemini_flash_model, name="gemini-flash", tier=2, thinking="medium"),
-        GeminiApiExecutor(key, settings.gemini_pro_model, name="gemini-pro", tier=3, thinking="high"),
-    ]
+    """The laptop's local executors: Ollama (free, tier 0), then the Codex and Claude CLIs on
+    the user's own subscription logins. No API keys are used."""
+    executors: list[Executor] = [OllamaExecutor(settings.ollama_url, settings.ollama_model)]
     if settings.use_codex_cli:
         executors.append(CodexCliExecutor(settings.codex_bin, settings.codex_model, timeout=settings.cli_timeout))
     if settings.use_claude_cli:

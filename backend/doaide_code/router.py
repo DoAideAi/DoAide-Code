@@ -1,9 +1,8 @@
 """Router Brain: pick the cheapest executor that can handle each message.
 
-Tiers: 0 = Ollama (free), 1 = Gemini Flash-Lite, 2 = Gemini Flash, 3 = Gemini Pro. Codex and
-Claude CLIs are fallbacks, tried only after every Ollama/Gemini executor. Classification order:
-Jev (TypeSafe Choice + Score), then Gemini, then local keyword heuristics, so routing still works
-offline.
+Tiers: 0 = Ollama (free), 1 = Codex / Claude Haiku, 2 = Claude Sonnet, 3 = Claude Opus. All
+run on the laptop; the CLIs use the user's subscription logins. Classification uses Jev
+(TypeSafe Choice + Score) only when one is passed in, else local keyword heuristics.
 """
 
 from __future__ import annotations
@@ -13,7 +12,6 @@ import re
 from dataclasses import dataclass
 
 from .executors import Executor, JevExecutor
-from .gemini import GeminiClient, GeminiError
 from .usage import Usage
 
 log = logging.getLogger(__name__)
@@ -55,7 +53,7 @@ class RouteDecision:
     complexity: float
     source: str
     confidence: float = 1.0
-    # Tokens spent deciding (Gemini classifier); None when no paid call was made.
+    # Tokens spent deciding; None when no paid call was made.
     usage: Usage | None = None
 
 
@@ -65,27 +63,6 @@ def heuristic_tier(message: str) -> RouteDecision:
         tier = max(tier, 2)
     return RouteDecision(tier=tier, complexity=float(tier), source="heuristic", confidence=0.5)
 
-
-GEMINI_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "tier": {"type": "INTEGER", "description": "0-3"},
-        "complexity": {"type": "NUMBER", "description": "0-3"},
-    },
-    "required": ["tier", "complexity"],
-}
-
-GEMINI_PROMPT = """You route coding-assistant requests to the cheapest capable model tier.
-Tier 0: simple explanations, syntax, tiny snippets (small local model).
-Tier 1: routine single-file edits, small functions, writing a test, focused bug fixes.
-Tier 2: multi-file features, non-trivial debugging, refactors needing repository context.
-Tier 3: architecture, security review, concurrency/performance deep dives, large migrations.
-Also rate complexity 0 (trivial) to 3 (high).
-
-Request:
-<<<
-{message}
->>>"""
 
 
 def _clamp_tier(value: float) -> int:
@@ -98,7 +75,6 @@ class RouterBrain:
         executors: list[Executor],
         *,
         jev: JevExecutor | None = None,
-        gemini: GeminiClient | None = None,
         offline: bool = False,
         cache_ttl: float = 0,
     ):
@@ -106,7 +82,6 @@ class RouterBrain:
         # How long answers from cacheable executors are reused (0 = never).
         self.cache_ttl = cache_ttl
         self.jev = jev
-        self.gemini = gemini
         self.offline = offline
 
     async def classify(self, message: str, *, project: str | None = None) -> RouteDecision:
@@ -117,26 +92,11 @@ class RouterBrain:
                 return RouteDecision(tier=_clamp_tier(tier), complexity=d.complexity, source="jev", confidence=d.confidence)
             except Exception as exc:  # any SDK, network, or schema failure falls through
                 log.warning("Jev routing failed: %s", exc)
-        if not self.offline and self.gemini is not None and self.gemini.enabled:
-            spent: list[Usage] = []
-            try:
-                data = await self.gemini.generate_json(
-                    GEMINI_PROMPT.format(message=message[:6000]), GEMINI_SCHEMA, usage=spent
-                )
-                return RouteDecision(
-                    tier=_clamp_tier(float(data["tier"])),
-                    complexity=float(data.get("complexity", data["tier"])),
-                    source="gemini",
-                    confidence=0.7,
-                    usage=spent[0] if spent else None,
-                )
-            except (GeminiError, KeyError, TypeError, ValueError) as exc:
-                log.warning("Gemini routing failed: %s", exc)
         return heuristic_tier(message)
 
     async def candidates(self, tier: int) -> list[Executor]:
         """Available executors to try: the target tier, then escalate, then fall back down, all
-        among primary (Ollama/Gemini) executors first; subscription CLIs come last, same order."""
+        among primary executors first; subscription CLIs come last, same order."""
 
         def ordered(pool: list[Executor]) -> list[Executor]:
             return (

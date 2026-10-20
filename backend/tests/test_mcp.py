@@ -25,6 +25,8 @@ TOOLS = {
     "run_command",
     "list_files",
     "search_code",
+    "apply_changes",
+    "discard_changes",
 }
 
 

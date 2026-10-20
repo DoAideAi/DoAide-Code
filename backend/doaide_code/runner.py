@@ -15,9 +15,8 @@ from .changes import propose, repair_prompt, strip_edits
 from .config import Settings
 from .context import Ranking, rank_files
 from .db import Store
-from .executors import Executor, ExecutorError, Job, JevExecutor, Turn, build_executors
+from .executors import Executor, ExecutorError, Job, Turn, build_executors
 from .fastpath import direct_answer
-from .gemini import GeminiClient
 from .router import RouterBrain
 from .usage import Usage
 
@@ -29,14 +28,8 @@ DEFAULT_CONTEXT_CHARS = 60_000
 
 
 def build_router(settings: Settings) -> RouterBrain:
-    """Router over this machine's executors. Routing decisions use Jev, then Gemini."""
-    return RouterBrain(
-        build_executors(settings),
-        jev=JevExecutor(settings.typesafe_api_key),
-        gemini=GeminiClient(settings.gemini_api_key, settings.gemini_model),
-        offline=settings.offline_router,
-        cache_ttl=settings.cache_ttl,
-    )
+    """Router over this machine's executors. Routing is local heuristics: no API calls."""
+    return RouterBrain(build_executors(settings), offline=True, cache_ttl=settings.cache_ttl)
 
 
 @dataclass
@@ -191,7 +184,7 @@ async def _preview_changes(
     changeset = await propose(job.cwd, outcome.content)
     if changeset is None:
         return
-    # One repair round, with the same executor, when checks fail. Never on subscription CLIs.
+    # One repair round, with the same executor, when checks fail (never on fallback executors).
     if changeset.all_problems and executor is not None and run is not None and not executor.fallback:
         notes = "\n".join(f"- {p}" for p in changeset.all_problems)
         await on_delta(f"\n\n---\n_The proposed edit did not pass checks; asking for a fix:_\n{notes}\n\n")

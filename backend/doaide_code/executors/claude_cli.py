@@ -47,9 +47,6 @@ class ClaudeStreamParser:
 
 
 class ClaudeCliExecutor(Executor):
-    # Uses the user's Claude subscription: only when no Gemini/Ollama executor can answer.
-    fallback = True
-
     def __init__(self, binary: str, model: str, *, name: str, tier: int, timeout: float = 600):
         self.binary = binary
         self.model = model

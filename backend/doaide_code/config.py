@@ -7,26 +7,6 @@ import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
-KEYS_DIR = Path(os.environ.get("DOAIDE_KEYS_DIR", "/Users/dev/projects/keys"))
-
-
-def _read_secret(env_name: str, *files: str) -> str:
-    """Return a secret from `env_name`, or else from the first readable key file."""
-    value = os.environ.get(env_name, "").strip()
-    if value:
-        return value
-    file_override = os.environ.get(f"{env_name}_FILE")
-    candidates = [Path(file_override)] if file_override else [KEYS_DIR / name for name in files]
-    for path in candidates:
-        try:
-            text = path.read_text().strip()
-        except OSError:
-            continue
-        if text:
-            return text
-    return ""
-
-
 def _flag(name: str, default: bool = False) -> bool:
     return os.environ.get(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -71,18 +51,9 @@ class Settings:
 
     cli_timeout: float = field(default_factory=lambda: float(os.environ.get("DOAIDE_CLI_TIMEOUT", "600")))
 
-    gemini_api_key: str = field(default_factory=lambda: _read_secret("GEMINI_API_KEY", "gemini_api_key.txt", "gemini_api_key"))
-    # Routing classifier and session titles: the cheapest fast model ($0.25 / $1.50 per 1M tokens).
-    gemini_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_GEMINI_MODEL", "gemini-3.1-flash-lite"))
-    # Default executors per tier (Gemini API, paid-tier list prices per 1M tokens in / out):
-    # tier 1 $0.25 / $1.50, tier 2 $0.75 / $3.75, tier 3 $2 / $12.
-    gemini_lite_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_GEMINI_LITE_MODEL", "gemini-3.1-flash-lite"))
-    gemini_flash_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_GEMINI_FLASH_MODEL", "gemini-3.8-flash"))
-    gemini_pro_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_GEMINI_PRO_MODEL", "gemini-3.1-pro-preview"))
-    # Subscription CLIs are last-resort fallbacks; these switches drop them entirely.
+    # Switches that drop the subscription CLIs from the executor list.
     use_claude_cli: bool = field(default_factory=lambda: not _flag("DOAIDE_DISABLE_CLAUDE_CLI"))
     use_codex_cli: bool = field(default_factory=lambda: not _flag("DOAIDE_DISABLE_CODEX_CLI"))
-    typesafe_api_key: str = field(default_factory=lambda: _read_secret("TYPESAFE_API_KEY", "typesafe_api_key.txt"))
 
     jwt_secret: str = field(default_factory=lambda: os.environ.get("DOAIDE_JWT_SECRET", "") or secrets.token_urlsafe(48))
     # Access tokens are short-lived; the browser renews them with its never-expiring refresh token.
@@ -97,7 +68,7 @@ class Settings:
     owner_email: str = field(default_factory=lambda: os.environ.get("DOAIDE_OWNER_EMAIL", "local").strip().lower())
     # When false, loopback clients may get a token without Google SSO (single-user desktop use).
     require_sso: bool = field(default_factory=lambda: _flag("DOAIDE_REQUIRE_SSO"))
-    # Heuristic-only routing: skips Jev and Gemini calls (used by tests and offline use).
+    # Kept for compatibility: routing is always local heuristics now (no API calls).
     offline_router: bool = field(default_factory=lambda: _flag("DOAIDE_OFFLINE_ROUTER"))
 
     @property

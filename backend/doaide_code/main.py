@@ -7,7 +7,6 @@ only stores and syncs the conversation and relays prompts to the laptop agent on
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -34,8 +33,7 @@ from .files import FileAccessError, list_dir, read_file
 from .relay import LaptopOffline, RelayService
 from .config import Settings
 from .db import Store
-from .executors import Executor, JevExecutor, build_executors
-from .gemini import GeminiClient
+from .executors import Executor, build_executors
 from .router import RouterBrain
 from .sync import SyncHub
 from .workspace import set_workspace, working_root, workspace_path
@@ -70,31 +68,19 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
     settings = settings or Settings()
     store = Store(settings.db_path)
     hub = SyncHub()
-    jev: JevExecutor | None = None
     router: RouterBrain | None = None
     chat: ChatService | RelayService
     if settings.is_hub:
         # No model, router or LLM key is used on the hub; the laptop agent does all of that.
         chat = RelayService(store, hub)
     else:
-        gemini = GeminiClient(settings.gemini_api_key, settings.gemini_model)
-        jev = JevExecutor(settings.typesafe_api_key)
-        router = RouterBrain(
-            executors if executors is not None else build_executors(settings),
-            jev=jev,
-            gemini=gemini,
-            offline=settings.offline_router,
-        )
-        chat = ChatService(
-            store, router, hub, gemini=None if settings.offline_router else gemini, workspace=settings.workspace
-        )
+        # Local executors only (Ollama, Codex CLI, Claude CLI); routing is local heuristics.
+        router = RouterBrain(executors if executors is not None else build_executors(settings), offline=True)
+        chat = ChatService(store, router, hub, workspace=settings.workspace)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         yield
-        if jev is not None:
-            with contextlib.suppress(Exception):
-                await jev.aclose()
         store.close()
 
     app = FastAPI(title="Doaide Code", version="0.1.0", lifespan=lifespan)
@@ -184,6 +170,11 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
     @app.get("/api/session")
     async def session(user: User = Depends(current_user)) -> dict:
         return chat.snapshot(user.email)
+
+    @app.get("/api/sessions")
+    async def sessions(user: User = Depends(current_user)) -> dict:
+        """Recent conversations for the switcher; source 'mcp' marks ones Claude Code started."""
+        return {"sessions": store.list_sessions(user.email)}
 
     @app.post("/api/messages", status_code=status.HTTP_202_ACCEPTED)
     async def post_message(body: SendMessage, user: User = Depends(current_user)) -> dict:
@@ -286,6 +277,8 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
                     await chat.submit(user.email, data["text"][:100_000])
                 elif kind == "stop":
                     await chat.stop(user.email)
+                elif kind == "open" and isinstance(data.get("session_id"), str):
+                    await chat.open_session(user.email, data["session_id"])
                 elif kind == "ping":
                     await ws.send_json({"type": "pong"})
         except (WebSocketDisconnect, RuntimeError, ValueError):
@@ -375,10 +368,24 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
             if "id" not in message:
                 # Notifications (initialized, cancelled) need no answer from the laptop.
                 return Response(status_code=status.HTTP_202_ACCEPTED)
+            params = message.get("params") if isinstance(message.get("params"), dict) else {}
+            reply_id = None
+            if message["method"] == "tools/call" and isinstance(params.get("name"), str) and relay.agent_online(user.email):
+                # Shown live on every device: what the client asked for and what the laptop did.
+                arguments = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
+                reply_id = await relay.begin_mcp_call(user.email, params["name"], arguments)
             try:
-                answer = await relay.rpc(user.email, "mcp", {"message": message}, timeout=MCP_RELAY_TIMEOUT)
+                answer = await relay.rpc(
+                    user.email, "mcp", {"message": message, "reply_id": reply_id}, timeout=MCP_RELAY_TIMEOUT
+                )
             except LaptopOffline:
+                if reply_id is not None:
+                    await relay.end_mcp_call(user.email, reply_id, None)
                 return rpc_error(-32000, "Your laptop is offline", status.HTTP_503_SERVICE_UNAVAILABLE, message["id"])
+            if reply_id is not None:
+                result = answer.get("result")
+                response = result if isinstance(result, dict) else {"error": {"message": answer.get("error")}}
+                await relay.end_mcp_call(user.email, reply_id, response)
             if not isinstance(answer.get("result"), dict):
                 return rpc_error(-32603, str(answer.get("error") or "Laptop gave no answer"), request_id=message["id"])
             return JSONResponse(answer["result"])
