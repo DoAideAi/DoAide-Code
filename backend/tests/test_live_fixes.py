@@ -16,7 +16,7 @@ from doaide_code.prompts import system_prompt
 from doaide_code.router import RouterBrain
 from doaide_code.runner import RESUME_MAX_CONTEXT, Outcome, answer_anchor, find_resume, run_job
 from doaide_code.usage import Usage
-from doaide_code.validate import NEEDS_FILES_REASON, NO_ACCESS_REASON, capability_claim, incomplete_reason
+from doaide_code.validate import NEEDS_FILES_REASON, NO_ACCESS_REASON, PARTIAL_REASON, capability_claim, incomplete_reason
 
 from .conftest import FakeExecutor
 
@@ -216,6 +216,60 @@ async def test_a_local_answer_from_a_partial_view_escalates(store):
     outcome = await run_job(RouterBrain([ollama, sonnet], offline=True), store, job, Outcome(), nop)
     assert outcome.executor == "claude-sonnet"
     assert outcome.meta()["route"]["escalated_from"]["reason"] == NEEDS_FILES_REASON
+
+
+LISTED = "The `frontend/src/components/` directory contains:\n\n- `LaptopBanner.jsx`\n- `Composer.jsx`\n- `SignIn.jsx`\n"
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        "\nThe remaining files are similar.",
+        "\nThe other components look much the same.",
+        "\nThe rest follow the same pattern.",
+        "\nI'll skip the rest.",
+        "\nRemaining entries omitted for brevity.",
+        "- and so on",
+        "- ...",
+        "- etc.",
+        "... (7 more)",
+        "- (+7 more)",
+        "...and 7 more",
+        "\nPlus `App.jsx` and 6 more files.",
+    ],
+)
+def test_a_list_cut_short_is_incomplete(tail):
+    assert incomplete_reason(LISTED + tail, "question") == PARTIAL_REASON
+
+
+def test_a_list_cut_short_is_caught_past_the_first_600_characters():
+    long_list = "".join(f"- `component_{n:02}.jsx`: renders part {n} of the page\n" for n in range(20))
+    assert len(long_list) > 600
+    assert incomplete_reason(f"{long_list}\n`Composer.jsx`, `SignIn.jsx`, and so on.", "question") == PARTIAL_REASON
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "It handles retries, timeouts and so on.",
+        "The pager waits 2 more seconds before retrying.",
+        "The other tests are passing.",
+        "The rest of the code is unchanged.",
+        "Rows load in pages; the rest is fetched lazily.",
+        "```python\ndef render():\n    ...\n```\n`render` is a stub.",
+    ],
+)
+def test_answers_that_merely_mention_more_or_the_rest_are_complete(answer):
+    assert incomplete_reason(answer, "question") is None
+
+
+async def test_a_local_list_cut_short_escalates(store):
+    ollama = executor("ollama", 0, [LISTED + "\nThe remaining files are similar."], tool="ollama")
+    sonnet = executor("claude-sonnet", 2, ["Ten files: `Composer.jsx`, `HowItWorksPage.jsx`, `LaptopBanner.jsx`, ..."])
+    job = Job("list the files in frontend/src/components/")
+    outcome = await run_job(RouterBrain([ollama, sonnet], offline=True), store, job, Outcome(), nop)
+    assert outcome.executor == "claude-sonnet"
+    assert outcome.meta()["route"]["escalated_from"]["reason"] == PARTIAL_REASON
 
 
 def test_claude_reading_files_itself_may_say_it_only_sees_some():

@@ -70,6 +70,24 @@ _NO_ACCESS_TO = re.compile(
 )
 NO_ACCESS_REASON = "the answer says DoAide cannot access your files, but it can"
 NEEDS_FILES_REASON = "the model said it could not see the code it needed"
+# A list cut short: a few items, then a wave at the rest ("the remaining files are similar",
+# "... (7 more)"). Anywhere in the answer: the cut comes after the items, often past 600 characters.
+_PARTIAL = re.compile(
+    r"\b(?:the\s+)?(?:remaining|rest\s+of\s+the|other)\s+(?:files?|items?|entries|ones|folders?|functions?|methods?|"
+    r"classes|tests?|routes?|endpoints?|components?|modules?)\s+(?:are|is|look|follow)\s+(?:(?:very|all|much|pretty)\s+)?"
+    r"(?:similar|the\s+same|alike)|"
+    r"\bthe\s+rest\s+(?:follows?|are|is|looks?)\s+(?:(?:all|very|much)\s+)?(?:the\s+same|similar)|"
+    r"\bi(?:'ll|\s+will)\s+skip\s+the\s+rest\b|\bskipping\s+the\s+rest\b|"
+    r"\b(?:omitted|truncated|skipped|left\s+out)\s+for\s+brevity\b|"
+    # "and so on" as a list's last item, or straight after backticked items; not "retries, timeouts and so on".
+    r"^\s*(?:[-*•]|\d+\.)?\s*(?:\.\.\.|…)?\s*(?:and\s+so\s+on|etc)\b[.…]*\s*$|`[^`\n]+`,?\s+(?:and\s+so\s+on|etc)\b|"
+    # A bare "- ..." item; "... (7 more)", "(+7 more)", "...and 7 more", "and 7 more files".
+    r"^\s*[-*•]\s*(?:\.\.\.|…)\s*$|"
+    r"\((?:\+|and\s+)?\d+\s+more\b[^)]*\)|(?:\.\.\.|…)\s*(?:and\s+|\+)?\d+\s+more\b|"
+    r"\band\s+\d+\s+more\s+(?:files?|items?|entries|folders?|functions?|methods?|classes|tests?|routes?|endpoints?)\b",
+    re.I | re.M,
+)
+PARTIAL_REASON = "it listed only some of the items and skipped the rest"
 _CLAIMS_CHANGE = re.compile(
     r"^(?:i(?:'ve| have)?\s+)?(?:updated|added|changed|renamed|fixed|modified|removed|implemented|refactored)\b"
     r"|^[\w ]{0,40}\b(?:updated|changed|modified|extended)\s+to\s+(?:accept|support|handle|use|include|return|allow)\b",
@@ -104,6 +122,8 @@ def incomplete_reason(answer: str, kind: str, *, reads_files: bool = False) -> s
         return CUT_OFF_EDIT
     if not reads_files and _NEEDS_FILES.search(text[:600]):
         return NEEDS_FILES_REASON
+    if not reads_files and _PARTIAL.search(text):
+        return PARTIAL_REASON
     if kind in _EDIT_KINDS and "```" not in text and not parse_edits(text) and len(text) < 400:
         return NO_EDIT
     if _CLAIMS_CHANGE.match(text) and "```" not in text and not parse_edits(text) and len(text) < 400:
