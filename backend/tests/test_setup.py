@@ -183,3 +183,136 @@ def test_setup_status_tracks_the_laptop(hub, token):
 def test_setup_endpoints_exist_only_on_the_hub(client, token):
     assert client.get("/api/v1/setup/installer?platform=macos", headers=auth(token)).status_code == 404
     assert client.get("/api/v1/setup/status", headers=auth(token)).status_code == 404
+
+
+# Ollama step (4/5): installs Ollama when it is missing and pulls the small coder model.
+
+OLLAMA_STUB = """#!/bin/bash
+echo "ollama $*" >>"$CALLS"
+[ "$1" = list ] && cat "$STUBS/models" 2>/dev/null
+exit 0
+"""
+# curl: the local server answers; Ollama's install.sh "installs" the stub; downloads fail if asked to.
+CURL_STUB = """#!/bin/bash
+echo "curl $*" >>"$CALLS"
+case "$*" in
+  *11434/api/version*) exit 0 ;;
+  *ollama.com/install.sh*) echo 'cp "$STUBS/ollama" "$BIN/ollama" && chmod +x "$BIN/ollama"' ;;
+  *Ollama-darwin.zip*) [ -n "${ZIP:-}" ] && cp "$ZIP" "${@: -1}" || exit 22 ;;
+  *) exit "${CURL_FAILS:-0}" ;;
+esac
+"""
+BREW_STUB = """#!/bin/bash
+echo "brew $*" >>"$CALLS"
+cp "$STUBS/ollama" "$BIN/ollama" && chmod +x "$BIN/ollama"
+"""
+
+
+def ollama_step(platform: str) -> str:
+    script = render_script(
+        platform, base_url="https://code.doaide.com", hub_url="wss://code.doaide.com/agent", token="t0k", email="a@b.c"
+    )
+    # Look for (and install) Ollama.app in a test folder, not this machine's /Applications.
+    return script[script.index('step "4/5') : script.index('step "5/5')].replace("/Applications", "$APPS_ROOT")
+
+
+def run_ollama_step(tmp_path, platform: str, *, installed: bool, models: str = "", brew: bool = False, **env) -> tuple[str, list[str]]:
+    """The installer's Ollama step against stub commands; returns its output and the commands it ran."""
+    if shutil.which("bash") is None:
+        pytest.skip("bash not installed")
+    stubs, bin_dir, home = tmp_path / "stubs", tmp_path / "bin", tmp_path / "home"
+    for d in (stubs, bin_dir, home / ".doaide-code" / "logs", tmp_path / "Applications"):
+        d.mkdir(parents=True)
+    (stubs / "ollama").write_text(OLLAMA_STUB)
+    (stubs / "models").write_text("NAME  ID  SIZE  MODIFIED\n" + models)
+    stubs_for = {"curl": CURL_STUB, **({"brew": BREW_STUB} if brew else {}), **({"ollama": OLLAMA_STUB} if installed else {})}
+    for name, body in stubs_for.items():
+        (bin_dir / name).write_text(body)
+        (bin_dir / name).chmod(0o755)
+    calls = tmp_path / "calls"
+    prelude = 'set -euo pipefail\nstep() { echo "$*"; }\nDIR="$HOME/.doaide-code"\n'
+    result = subprocess.run(
+        ["bash", "-c", prelude + ollama_step(platform) + 'echo "end OLLAMA_DIR=${OLLAMA_DIR:-}"'],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "HOME": str(home),
+            "BIN": str(bin_dir),
+            "STUBS": str(stubs),
+            "CALLS": str(calls),
+            "APPS_ROOT": str(tmp_path / "Applications"),
+            **env,
+        },
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout, calls.read_text().splitlines() if calls.exists() else []
+
+
+def test_every_installer_gets_ollama_before_it_starts_the_agent():
+    for platform in ("macos", "linux", "windows"):
+        script = render_script(
+            platform, base_url="https://code.doaide.com", hub_url="wss://code.doaide.com/agent", token="t", email="a@b.c"
+        )
+        steps = re.findall(r"""[Ss]tep ['"](\d)/(\d) """, script)
+        assert steps == [(str(n), "5") for n in range(1, 6)], platform
+        ollama, agent = script.index("4/5  Getting Ollama"), script.index("5/5  Starting the agent")
+        assert ollama < agent and "pull" in script[ollama:agent] and "qwen2.5-coder:7b" in script[ollama:agent]
+
+
+def test_windows_installs_ollama_silently_from_the_github_release():
+    script = render_script(
+        "windows", base_url="https://code.doaide.com", hub_url="wss://code.doaide.com/agent", token="t", email="a@b.c"
+    )
+    assert "releases/latest/download/OllamaSetup.exe" in script and "'/VERYSILENT'" in script
+    assert "& $ollama pull $model" in script
+
+
+def test_linux_installs_ollama_with_its_script_then_pulls_the_coder_model(tmp_path):
+    out, calls = run_ollama_step(tmp_path, "linux", installed=False)
+    assert any("ollama.com/install.sh" in c for c in calls)
+    assert "ollama pull qwen2.5-coder:7b" in calls
+    assert "Could not set up Ollama" not in out
+
+
+def test_an_existing_ollama_with_models_is_left_alone(tmp_path):
+    for platform in ("linux", "macos"):
+        _, calls = run_ollama_step(tmp_path / platform, platform, installed=True, models="qwen2.5-coder:32b  x  19 GB  now\n")
+        assert not any("install.sh" in c or c.startswith("brew") or "pull" in c for c in calls), platform
+
+
+def test_an_existing_ollama_without_models_gets_the_coder_model(tmp_path):
+    _, calls = run_ollama_step(tmp_path, "linux", installed=True)
+    assert "ollama pull qwen2.5-coder:7b" in calls
+
+
+def test_macos_installs_ollama_with_homebrew_when_it_has_it(tmp_path):
+    out, calls = run_ollama_step(tmp_path, "macos", installed=False, brew=True)
+    assert "brew install --cask ollama" in calls
+    assert "ollama pull qwen2.5-coder:7b" in calls
+    assert f"end OLLAMA_DIR={tmp_path / 'bin'}" in out
+
+
+def test_macos_without_homebrew_downloads_ollama_app_from_the_release(tmp_path):
+    # The stub download fails, so this also checks that a failed Ollama step only warns.
+    out, calls = run_ollama_step(tmp_path, "macos", installed=False)
+    assert any("releases/latest/download/Ollama-darwin.zip" in c for c in calls)
+    assert "Could not set up Ollama" in out and "end OLLAMA_DIR=\n" in out + "\n"
+
+
+def test_macos_without_homebrew_unzips_ollama_app_and_uses_its_command(tmp_path):
+    if shutil.which("ditto") is None:
+        pytest.skip("ditto is macOS only")
+    archive = tmp_path / "Ollama-darwin.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        info = zipfile.ZipInfo("Ollama.app/Contents/Resources/ollama")
+        info.create_system, info.external_attr = 3, 0o100755 << 16  # a unix file, executable
+        z.writestr(info, OLLAMA_STUB)
+    out, calls = run_ollama_step(tmp_path / "run", "macos", installed=False, ZIP=str(archive))
+    resources = tmp_path / "run" / "Applications" / "Ollama.app" / "Contents" / "Resources"
+    assert (resources / "ollama").is_file()
+    assert "ollama pull qwen2.5-coder:7b" in calls
+    # The zip puts no command on PATH, so the agent is given the app's own.
+    assert f"end OLLAMA_DIR={resources}" in out

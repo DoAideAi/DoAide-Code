@@ -30,7 +30,7 @@ command -v curl >/dev/null || fail "please install curl first"
 mkdir -p "$DIR/bin" "$DIR/logs" "$UNIT_DIR"
 chmod 700 "$DIR"
 
-step "1/4  Getting the Python installer (uv)..."
+step "1/5  Getting the Python installer (uv)..."
 UV=$(command -v uv || true)
 if [ -z "$UV" ]; then
   UV="$DIR/bin/uv"
@@ -40,18 +40,44 @@ if [ -z "$UV" ]; then
   fi
 fi
 
-step "2/4  Downloading the DoAide Code agent..."
+step "2/5  Downloading the DoAide Code agent..."
 PKG="$DIR/$PKG_NAME"
 curl -fsSL -H "Authorization: Bearer $HUB_TOKEN" "$BASE_URL/api/v1/setup/agent-package" -o "$PKG" ||
   fail "could not download the agent from $BASE_URL"
 
-step "3/4  Installing (the first time this can take a minute)..."
+step "3/5  Installing (the first time this can take a minute)..."
 [ -x "$DIR/venv/bin/python" ] || "$UV" venv --quiet --python 3.12 "$DIR/venv"
 "$UV" pip install --quiet --python "$DIR/venv/bin/python" --reinstall-package doaide-code "$PKG"
 AGENT="$DIR/venv/bin/doaide-code"
 [ -x "$AGENT" ] || fail "the agent was not installed"
 
-step "4/4  Starting the agent and turning on start-at-login..."
+step "4/5  Getting Ollama, for free local answers..."
+# Optional: Claude Code or Codex can answer without it, so a failure here only warns.
+OLLAMA_MODEL=qwen2.5-coder:7b
+ollama_up() { curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; }
+install_ollama() {
+  fresh=""
+  if ! command -v ollama >/dev/null 2>&1; then
+    fresh=1
+    # Ollama's own installer: asks for your password (sudo) and adds a systemd service.
+    curl -fsSL https://ollama.com/install.sh | sh || return 1
+    command -v ollama >/dev/null 2>&1 || return 1
+  fi
+  if ! ollama_up; then
+    (nohup ollama serve >>"$DIR/logs/ollama.log" 2>&1 &)
+    for _ in $(seq 1 30); do ollama_up && break; sleep 1; done
+    ollama_up || return 1
+  fi
+  # A new install, or one with no models yet, gets the small coder model (about 5 GB).
+  if [ -n "$fresh" ] || [ -z "$(ollama list 2>/dev/null | tail -n +2)" ]; then
+    echo "Downloading $OLLAMA_MODEL (about 5 GB; the first time this takes a while)..."
+    ollama pull "$OLLAMA_MODEL" || return 1
+  fi
+}
+install_ollama ||
+  printf '\033[33mCould not set up Ollama; DoAide Code will use Claude Code or Codex. Install it from https://ollama.com later.\033[0m\n'
+
+step "5/5  Starting the agent and turning on start-at-login..."
 # systemd starts services with a bare PATH; give the agent the one your shell uses.
 LOGIN_PATH=$("${SHELL:-/bin/bash}" -ilc 'printf "%s" "$PATH"' </dev/null 2>/dev/null | tail -n 1 || true)
 AGENT_PATH="${LOGIN_PATH:+$LOGIN_PATH:}$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"

@@ -32,7 +32,7 @@ try {
   Write-Host "DoAide Code: setting up this PC for $Email"
   New-Item -ItemType Directory -Force -Path $Dir, "$Dir\bin", "$Dir\logs" | Out-Null
 
-  Step '1/4  Getting the Python installer (uv)...'
+  Step '1/5  Getting the Python installer (uv)...'
   $uv = (Get-Command uv -ErrorAction SilentlyContinue).Source
   if (-not $uv) {
     $uv = Join-Path $Dir 'bin\uv.exe'
@@ -42,12 +42,12 @@ try {
     }
   }
 
-  Step '2/4  Downloading the DoAide Code agent...'
+  Step '2/5  Downloading the DoAide Code agent...'
   $pkg = Join-Path $Dir $PkgName
   $auth = @{ Authorization = "Bearer $Token" }
   Invoke-WebRequest -UseBasicParsing -Headers $auth -Uri "$BaseUrl/api/v1/setup/agent-package" -OutFile $pkg
 
-  Step '3/4  Installing (the first time this can take a minute)...'
+  Step '3/5  Installing (the first time this can take a minute)...'
   $python = "$Dir\venv\Scripts\python.exe"
   if (-not (Test-Path $python)) {
     & $uv venv --quiet --python 3.12 "$Dir\venv"
@@ -57,7 +57,44 @@ try {
   if ($LASTEXITCODE) { throw 'could not install the agent' }
   $agent = "$Dir\venv\Scripts\doaide-code.exe"
 
-  Step '4/4  Starting the agent and turning on start-at-login...'
+  Step '4/5  Getting Ollama, for free local answers...'
+  # Optional: Claude Code or Codex can answer without it, so a failure here only warns.
+  $model = 'qwen2.5-coder:7b'
+  $up = { try { Invoke-RestMethod -TimeoutSec 2 http://127.0.0.1:11434/api/version | Out-Null; $true } catch { $false } }
+  try {
+    $ollamaDir = Join-Path $env:LOCALAPPDATA 'Programs\Ollama'
+    $ollama = (Get-Command ollama -ErrorAction SilentlyContinue).Source
+    if (-not $ollama -and (Test-Path "$ollamaDir\ollama.exe")) { $ollama = "$ollamaDir\ollama.exe" }
+    $fresh = -not $ollama
+    if ($fresh) {
+      $setup = Join-Path $Dir 'OllamaSetup.exe'
+      Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/ollama/ollama/releases/latest/download/OllamaSetup.exe' -OutFile $setup
+      # An Inno Setup installer: /VERYSILENT is its silent mode (it ignores /S).
+      Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT', '/NORESTART', '/SUPPRESSMSGBOXES'
+      Remove-Item -Force $setup -ErrorAction SilentlyContinue
+      $ollama = "$ollamaDir\ollama.exe"
+      if (-not (Test-Path $ollama)) { throw 'the Ollama installer did not finish' }
+    }
+    # The agent started below inherits this PATH; the installer's change reaches new logins only.
+    $env:Path = "$env:Path;$(Split-Path $ollama)"
+    if (-not (& $up)) {
+      $tray = Join-Path (Split-Path $ollama) 'ollama app.exe'
+      if (Test-Path $tray) { Start-Process $tray } else { Start-Process -WindowStyle Hidden $ollama -ArgumentList 'serve' }
+      for ($i = 0; $i -lt 30 -and -not (& $up); $i++) { Start-Sleep -Seconds 1 }
+      if (-not (& $up)) { throw 'Ollama did not start' }
+    }
+    # A new install, or one with no models yet, gets the small coder model (about 5 GB).
+    $models = @(& $ollama list 2>$null | Select-Object -Skip 1)
+    if ($fresh -or $models.Count -eq 0) {
+      Write-Host "Downloading $model (about 5 GB; the first time this takes a while)..."
+      & $ollama pull $model
+      if ($LASTEXITCODE) { throw "could not download $model" }
+    }
+  } catch {
+    Write-Host "Could not set up Ollama ($($_.Exception.Message)); DoAide Code will use Claude Code or Codex. Install it from https://ollama.com later." -ForegroundColor Yellow
+  }
+
+  Step '5/5  Starting the agent and turning on start-at-login...'
   # Stop an agent from an earlier install before starting the new one.
   Get-CimInstance Win32_Process -Filter "Name='doaide-code.exe' OR Name='wscript.exe'" |
     Where-Object { $_.Name -eq 'doaide-code.exe' -or $_.CommandLine -like '*DoAide Code Agent.vbs*' } |

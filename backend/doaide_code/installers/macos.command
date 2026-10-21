@@ -29,7 +29,7 @@ printf '\033[1mDoAide Code\033[0m: setting up this Mac for %s\n' "$OWNER_EMAIL"
 mkdir -p "$DIR/bin" "$DIR/logs" "$HOME/Library/LaunchAgents"
 chmod 700 "$DIR"
 
-step "1/4  Getting the Python installer (uv)..."
+step "1/5  Getting the Python installer (uv)..."
 UV=$(command -v uv || true)
 if [ -z "$UV" ]; then
   UV="$DIR/bin/uv"
@@ -39,22 +39,71 @@ if [ -z "$UV" ]; then
   fi
 fi
 
-step "2/4  Downloading the DoAide Code agent..."
+step "2/5  Downloading the DoAide Code agent..."
 PKG="$DIR/$PKG_NAME"
 curl -fsSL -H "Authorization: Bearer $HUB_TOKEN" "$BASE_URL/api/v1/setup/agent-package" -o "$PKG" ||
   fail "could not download the agent from $BASE_URL"
 
-step "3/4  Installing (the first time this can take a minute)..."
+step "3/5  Installing (the first time this can take a minute)..."
 [ -x "$DIR/venv/bin/python" ] || "$UV" venv --quiet --python 3.12 "$DIR/venv"
 "$UV" pip install --quiet --python "$DIR/venv/bin/python" --reinstall-package doaide-code "$PKG"
 AGENT="$DIR/venv/bin/doaide-code"
 [ -x "$AGENT" ] || fail "the agent was not installed"
 
-step "4/4  Starting the agent and turning on start-at-login..."
+step "4/5  Getting Ollama, for free local answers..."
+# Optional: Claude Code or Codex can answer without it, so a failure here only warns.
+OLLAMA_MODEL=qwen2.5-coder:7b
+ollama_up() { curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; }
+# On PATH (Homebrew), or inside Ollama.app (the zip, which puts no command on PATH).
+find_ollama() {
+  command -v ollama && return
+  for app in /Applications/Ollama.app "$HOME/Applications/Ollama.app"; do
+    [ -x "$app/Contents/Resources/ollama" ] && echo "$app/Contents/Resources/ollama" && return
+  done
+  true
+}
+install_ollama() {
+  OLLAMA=$(find_ollama)
+  fresh=""
+  if [ -z "$OLLAMA" ]; then
+    fresh=1
+    if command -v brew >/dev/null 2>&1; then
+      brew install --cask ollama || return 1
+    else
+      APPS=/Applications
+      [ -w "$APPS" ] || { APPS="$HOME/Applications"; mkdir -p "$APPS"; }
+      curl -fL --progress-bar https://github.com/ollama/ollama/releases/latest/download/Ollama-darwin.zip \
+        -o "$DIR/Ollama-darwin.zip" || return 1
+      ditto -x -k "$DIR/Ollama-darwin.zip" "$APPS" || return 1
+      rm -f "$DIR/Ollama-darwin.zip"
+    fi
+    OLLAMA=$(find_ollama)
+    [ -n "$OLLAMA" ] || return 1
+  fi
+  # The app runs the server that the agent (and `ollama pull`) talk to.
+  if ! ollama_up; then
+    open -g -a Ollama >/dev/null 2>&1 || (nohup "$OLLAMA" serve >>"$DIR/logs/ollama.log" 2>&1 &)
+    for _ in $(seq 1 30); do ollama_up && break; sleep 1; done
+    ollama_up || return 1
+  fi
+  # A new install, or one with no models yet, gets the small coder model (about 5 GB).
+  if [ -n "$fresh" ] || [ -z "$("$OLLAMA" list 2>/dev/null | tail -n +2)" ]; then
+    echo "Downloading $OLLAMA_MODEL (about 5 GB; the first time this takes a while)..."
+    "$OLLAMA" pull "$OLLAMA_MODEL" || return 1
+  fi
+  OLLAMA_DIR=$(dirname "$OLLAMA")
+}
+OLLAMA_DIR=""
+install_ollama ||
+  printf '\033[33mCould not set up Ollama; DoAide Code will use Claude Code or Codex. Install it from https://ollama.com later.\033[0m\n'
+
+step "5/5  Starting the agent and turning on start-at-login..."
 # launchd starts with a bare PATH; give the agent the one your shell uses so it finds
 # claude, codex and ollama.
 LOGIN_PATH=$(/bin/zsh -ilc 'printf "%s" "$PATH"' </dev/null 2>/dev/null | tail -n 1 || true)
 AGENT_PATH="${LOGIN_PATH:+$LOGIN_PATH:}$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# Ollama.app from the zip has its CLI inside the app, not on PATH.
+AGENT_PATH="${AGENT_PATH}${OLLAMA_DIR:+:$OLLAMA_DIR}"
 umask 077
 cat >"$PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

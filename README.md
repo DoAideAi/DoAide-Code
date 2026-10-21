@@ -233,7 +233,10 @@ without a frontend build serve the hub's, fetched once.
 
    Each installer gets uv (which brings its own Python 3.12), installs the agent package from
    `GET /api/v1/setup/agent-package` (an sdist of the code the hub runs) into
-   `~/.doaide-code/venv`, starts it now and at every login, waits on
+   `~/.doaide-code/venv`, installs Ollama if it is missing (Homebrew or the Ollama.app zip
+   from Ollama's GitHub releases on macOS, `ollama.com/install.sh` on Linux, `OllamaSetup.exe
+   /VERYSILENT` on Windows) and pulls `qwen2.5-coder:7b` when Ollama is new or has no models
+   (Ollama is optional: if this step fails, setup only warns), starts the agent now and at every login, waits on
    `GET /api/v1/setup/status` until the laptop shows as connected, then deletes itself
    (it contains the token). Logs go to `~/.doaide-code/logs/agent.log`. To remove it on
    macOS: `launchctl bootout gui/$(id -u)/com.doaide.code-agent` and delete the plist.
