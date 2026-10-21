@@ -185,6 +185,15 @@ def test_a_folder_named_like_a_host_is_still_a_project_path(tmp_path):
     assert mentioned_paths("curl https://ollama.com/install.sh and open backend/app.py") == {"backend/app.py"}
 
 
+def test_home_and_outside_paths_are_not_missing_project_files(tmp_path):
+    # Live: "log ... to ~/.doaide/metrics.jsonl" was answered "doaide/metrics.jsonl is not in project".
+    assert missing_paths("log every task to a structured log file at ~/.doaide/metrics.jsonl", tmp_path) == []
+    assert missing_paths("read /etc/doaide/settings.toml", tmp_path) == []
+    assert mentioned_paths("see /etc/app/x.conf, ./backend/a.py and ~/x/y.txt") == {"/etc/app/x.conf", "backend/a.py"}
+    # Absolute paths inside the project (as in tracebacks) are still project paths.
+    assert mentioned_paths(f'File "{tmp_path}/app/main.py", line 3', tmp_path.resolve()) == {"app/main.py"}
+
+
 async def test_edit_blocks_never_reach_the_reply_even_when_nothing_applies(store, tmp_path):
     (tmp_path / "calc.py").write_text("def add(a, b):\n    return a - b\n")
     answer = "Fix add.\n\ncalc.py\n<<<<<<< SEARCH\n    return a * b\n=======\n    return a + b\n>>>>>>> REPLACE"

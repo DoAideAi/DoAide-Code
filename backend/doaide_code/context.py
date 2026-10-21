@@ -296,15 +296,20 @@ HOST = re.compile(r"^(?:[a-z0-9-]+\.)+[a-z]{2,6}$", re.IGNORECASE)
 def mentioned_paths(text: str, root: Path | None = None) -> set[str]:
     """Paths named in the request. Absolute ones under `root` (as in tracebacks) become relative."""
     found: set[str] = set()
-    # A URL's host and path ("https://ollama.com/install.sh") name no project file.
+    # A URL ("https://ollama.com/install.sh") or a home path ("~/.doaide/metrics.jsonl") names
+    # no project file.
     text = _URL.sub(" ", text)
+    text = re.sub(r"~[\w.-]*/\S*", " ", text)
     for m in re.findall(r"[`'\"]?[\w./-]+\.[A-Za-z0-9]{1,6}[`'\"]?", text):
         m = m.strip("`'\"")
-        if root is not None and m.startswith("/"):
+        if m.startswith("/"):
             try:
-                m = Path(m).resolve().relative_to(root).as_posix()
+                m = Path(m).resolve().relative_to(root).as_posix() if root is not None else m
             except (ValueError, OSError):
                 pass
+            if m.startswith("/"):
+                found.add(m)  # outside the project: kept absolute, not read as a project path
+                continue
         found.add(m.lstrip("./"))
     return found
 
