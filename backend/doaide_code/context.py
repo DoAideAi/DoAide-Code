@@ -16,6 +16,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .classify import without_urls
 from .files import IGNORED
 
 TEXT_SUFFIXES = {
@@ -288,7 +289,6 @@ def _idents(text: str, paths: set[str]) -> set[str]:
     return {f.strip("()") for f in found if len(f.strip("()")) > 2}
 
 
-_URL = re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.IGNORECASE)
 # A first path segment that is a host name ("ollama.com/install.sh", written without https://).
 HOST = re.compile(r"^(?:[a-z0-9-]+\.)+[a-z]{2,6}$", re.IGNORECASE)
 
@@ -296,9 +296,9 @@ HOST = re.compile(r"^(?:[a-z0-9-]+\.)+[a-z]{2,6}$", re.IGNORECASE)
 def mentioned_paths(text: str, root: Path | None = None) -> set[str]:
     """Paths named in the request. Absolute ones under `root` (as in tracebacks) become relative."""
     found: set[str] = set()
-    # A URL ("https://ollama.com/install.sh") or a home path ("~/.doaide/metrics.jsonl") names
-    # no project file.
-    text = _URL.sub(" ", text)
+    # A URL ("https://ollama.com/install.sh", "ollama.com/install.sh") or a home path
+    # ("~/.doaide/metrics.jsonl") names no project file.
+    text = without_urls(text)
     text = re.sub(r"~[\w.-]*/\S*", " ", text)
     for m in re.findall(r"[`'\"]?[\w./-]+\.[A-Za-z0-9]{1,6}[`'\"]?", text):
         m = m.strip("`'\"")

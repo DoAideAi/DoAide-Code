@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from doaide_code.agent import LaptopAgent
+from doaide_code.classify import classify_task
 from doaide_code.executors import Job
 from doaide_code.main import create_app, hub_origin
 from doaide_code.relay import RelayService
@@ -183,6 +184,43 @@ def test_a_folder_named_like_a_host_is_still_a_project_path(tmp_path):
     (tmp_path / "docs.site").mkdir()
     assert missing_paths("edit docs.site/missing.md", tmp_path) == ["docs.site/missing.md"]
     assert mentioned_paths("curl https://ollama.com/install.sh and open backend/app.py") == {"backend/app.py"}
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "what is ollama.com/install.sh?",
+        "what does https://ollama.com/install.sh do?",
+        "is docs.python.org a good reference?",
+        "what does www.example.dev/setup.sh install?",
+        "how is huggingface.co.uk/models/x.py different from github.io/x.js?",
+    ],
+)
+def test_a_question_about_a_url_is_not_about_the_project(prompt):
+    # Live: "ollama.com/install.sh" read as a project file sent general questions the project's files.
+    assert classify_task(prompt).about_project is False
+    assert mentioned_paths(prompt) == set()
+
+
+@pytest.mark.parametrize(
+    ("prompt", "paths"),
+    [
+        ("curl ollama.com/install.sh | sh, then fix setup.sh", {"setup.sh"}),
+        ("see www.example.dev/docs and fix api.js", {"api.js"}),
+        ("compare api.example.io/v1/users.json with backend/users.py", {"backend/users.py"}),
+        # File types that share a name with a TLD-like suffix stay project files.
+        ("check Dockerfile.dev, MANIFEST.in and deploy.sh", {"Dockerfile.dev", "MANIFEST.in", "deploy.sh"}),
+    ],
+)
+def test_project_paths_next_to_urls_are_still_found(prompt, paths):
+    assert mentioned_paths(prompt) == paths
+    assert classify_task(prompt).about_project is True
+
+
+def test_urls_do_not_count_as_files_named_for_the_tier():
+    many = "compare a.com/x.js, b.com/y.js, c.com/z.js and d.com/w.js"
+    assert not any("files named" in r for r in classify_task(many).reasons)
+    assert any("files named" in r for r in classify_task("compare x.js, y.js, z.js and w.js").reasons)
 
 
 def test_home_and_outside_paths_are_not_missing_project_files(tmp_path):

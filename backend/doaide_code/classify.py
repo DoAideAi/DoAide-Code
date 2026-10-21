@@ -38,6 +38,21 @@ _SIGNALS: list[tuple[float, str, re.Pattern[str]]] = [
     (3, "review", re.compile(r"\b(review|recent changes|what changed|my changes|the diff|last commit|uncommitted)\b", re.I)),
     (3, "explain", re.compile(r"\b(explain|walk me through|how does .+ work|summari[sz]e)\b", re.I)),
 ]
+# URLs name web pages, not project files: "https://ollama.com/install.sh", "www.x.dev/docs", and
+# bare domains on common web TLDs ("ollama.com/install.sh", "docs.python.org"). Extensions that
+# are also file types (.sh, .py, .app, .dev) only count with a scheme or "www.".
+_URL = re.compile(
+    r"\b[a-z][a-z0-9+.-]*://\S+|\bwww\.\S+|"
+    r"(?<![\w./-])(?:[a-z0-9-]+\.)+(?:com|org|net|io|ai|gov|edu|info|cloud|xyz|co\.uk|co\.in)\b(?:/[^\s`'\")]*)?",
+    re.I,
+)
+
+
+def without_urls(text: str) -> str:
+    """The text with web addresses blanked out, so they are not read as project paths."""
+    return _URL.sub(" ", text)
+
+
 # Pure questions with no project work in them (also after "In app/x.py, ...").
 _QUESTION = re.compile(r"^\s*(?:in [^,:?]+[,:]\s*)?(what|how|why|when|is|are|can|does|do|which|who|define|difference between)\b", re.I)
 # A file path or code identifier: a short non-question that names one is an instruction.
@@ -90,7 +105,8 @@ def classify_task(prompt: str) -> TaskProfile:
             kinds[kind] = kinds.get(kind, 0) + weight
             reasons.append(f"{match.group(0).lower()} (+{weight:g})")
 
-    files = set(_FILE_REF.findall(text))
+    local = without_urls(text)
+    files = set(_FILE_REF.findall(local))
     if len(files) >= 3:
         score += 2 * (len(files) - 2)
         reasons.append(f"{len(files)} files named (+{2 * (len(files) - 2):g})")
@@ -111,14 +127,14 @@ def classify_task(prompt: str) -> TaskProfile:
     else:
         kind = max(kinds, key=kinds.__getitem__)
     asks = bool(_QUESTION.search(text)) or text.endswith("?")
-    if kind == "question" and not asks and (words > 12 or words >= 4 and _NAMES_CODE.search(text)):
+    if kind == "question" and not asks and (words > 12 or words >= 4 and _NAMES_CODE.search(local)):
         # An unclassified instruction ("make the header sticky", "In x.py, make FOO accept bar")
         # is still project work.
         score += 3
         kind = "edit"
         reasons.append("instruction (+3)")
 
-    about_project = kind not in {"question", "math"} or bool(_PROJECT.search(text))
+    about_project = kind not in {"question", "math"} or bool(_PROJECT.search(local))
     if kind == "question" and about_project and _WHY.search(text):
         # "Why is X like this?" needs the reason behind the code: the 7b model guessed plausible,
         # wrong ones live; the 32b read them from the comments.
