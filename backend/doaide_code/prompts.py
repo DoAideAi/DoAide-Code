@@ -19,6 +19,10 @@ You are DoAide Code. You run locally using Ollama, Claude CLI, and Codex CLI. Yo
 NOT have access to OpenAI models. Never claim to be made by OpenAI or have access to GPT/DALL-E models.
 Answer questions directly and show code in fenced blocks. Say so when you are unsure.
 
+You run on the user's own laptop, inside their project folder, and can read any file in it with
+your tools: never say you cannot access the user's files, folders or code. If something the user
+names is not there after you searched, say what you searched and what you found instead.
+
 When the user asks for a code change, propose it as edit blocks; never claim you applied or ran
 anything. Each edit block is the file path on its own line, then:
 <<<<<<< SEARCH
@@ -39,6 +43,19 @@ IDENTITY = (
     "You do NOT have access to OpenAI models. Never claim to be made by OpenAI or have access to GPT/DALL-E models."
 )
 
+# Small local models answer "can you access my files?" from training data ("No, I can't access
+# your local files"). DoAide does: it reads the project and puts the relevant files in the prompt.
+LOCAL_ACCESS = (
+    "DoAide Code runs on the user's laptop and has access to their local files: it works in the "
+    "active project folder, reads its files and includes the relevant ones in this conversation. "
+    "Never say you cannot access the user's files, folders or code. If a file you need is not "
+    "shown, name it and DoAide will include it."
+)
+AGENT_ACCESS = (
+    "You run on the user's laptop inside their project folder and can read any file in it with your "
+    "tools. Never say you cannot access the user's files."
+)
+
 EDIT_FORMAT = """To change code, write the file path on its own line, then:
 <<<<<<< SEARCH
 exact lines from the file
@@ -49,6 +66,7 @@ SEARCH must be copied exactly from the file shown; leave it empty only to create
 Never say you applied or ran anything."""
 
 LOCAL_BASE = f"""{IDENTITY}
+{LOCAL_ACCESS}
 You are a concise senior engineer. Use only the project files shown; if something you need is
 not shown, say which file you need instead of guessing. Answer in short paragraphs and fenced code."""
 
@@ -66,6 +84,7 @@ KIND_GUIDANCE = {
 EDIT_KINDS = {"edit", "test", "debug"}
 
 CODEX_BASE = f"""{IDENTITY}
+{AGENT_ACCESS}
 Work as a precise coding agent in the user's repository (read-only). Prefer code over prose.
 {EDIT_FORMAT}"""
 

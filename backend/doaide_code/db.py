@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS cli_sessions (
     anchor TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
     cwd TEXT NOT NULL,
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    context_tokens INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS executor_stats (
     executor TEXT PRIMARY KEY,
@@ -139,6 +140,10 @@ class Store:
             self._migrate()
 
     def _migrate(self) -> None:
+        # cli_sessions predates its context_tokens column on some databases.
+        columns = {r["name"] for r in self._conn.execute("PRAGMA table_info(cli_sessions)")}
+        if "context_tokens" not in columns:
+            self._conn.execute("ALTER TABLE cli_sessions ADD COLUMN context_tokens INTEGER NOT NULL DEFAULT 0")
         # Databases created before the 'mcp' token scope have a narrower CHECK; rebuild the table.
         row = self._conn.execute("SELECT sql FROM sqlite_master WHERE name = 'refresh_tokens'").fetchone()
         if row is not None and "'mcp'" not in row["sql"]:
@@ -468,13 +473,13 @@ class Store:
             (key, answer, executor, time.time()),
         )
 
-    def cli_session_put(self, anchor: str, session_id: str, cwd: str) -> None:
+    def cli_session_put(self, anchor: str, session_id: str, cwd: str, context_tokens: int = 0) -> None:
         now = time.time()
         self._exec(
-            "INSERT INTO cli_sessions (anchor, session_id, cwd, created_at) VALUES (?, ?, ?, ?) "
+            "INSERT INTO cli_sessions (anchor, session_id, cwd, created_at, context_tokens) VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT(anchor) DO UPDATE SET session_id = excluded.session_id, cwd = excluded.cwd, "
-            "created_at = excluded.created_at",
-            (anchor, session_id, cwd, now),
+            "created_at = excluded.created_at, context_tokens = excluded.context_tokens",
+            (anchor, session_id, cwd, now, context_tokens),
         )
         self._exec("DELETE FROM cli_sessions WHERE created_at < ?", (now - 7 * 86400,))
 

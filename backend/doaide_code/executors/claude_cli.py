@@ -30,6 +30,8 @@ class ClaudeStreamParser:
         # ("first.Let me look"): set on message_start, applied to that message's first text.
         self.message_text = False
         self.pending_break = False
+        # Prompt size of the latest model call (each tool round re-sends the whole conversation).
+        self.context_tokens = 0
 
     def __call__(self, event: dict) -> str | Usage | None:
         kind = event.get("type")
@@ -37,6 +39,9 @@ class ClaudeStreamParser:
             inner = event.get("event", {})
             if inner.get("type") == "message_start":
                 self.pending_break, self.message_text = self.saw_delta, False
+                usage = (inner.get("message") or {}).get("usage") or {}
+                size = sum(int(usage.get(k) or 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+                self.context_tokens = size or self.context_tokens
                 return None
             delta = inner.get("delta", {}) if inner.get("type") == "content_block_delta" else {}
             if delta.get("type") == "text_delta":
@@ -63,6 +68,7 @@ class ClaudeStreamParser:
                 int(usage.get("output_tokens", 0)),
                 float(event.get("total_cost_usd") or 0),
                 session_id=str(event.get("session_id") or ""),
+                context_tokens=self.context_tokens,
             )
         return None
 

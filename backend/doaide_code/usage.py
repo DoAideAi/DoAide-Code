@@ -19,6 +19,8 @@ class Usage:
     cost_usd: float = 0.0
     # The CLI conversation this run belongs to (Claude Code), so a follow-up can resume it.
     session_id: str = ""
+    # Tokens in that conversation at its last model call: what resuming it would re-send.
+    context_tokens: int = 0
 
     def __add__(self, other: Usage) -> Usage:
         return Usage(
@@ -27,6 +29,7 @@ class Usage:
             output_tokens=self.output_tokens + other.output_tokens,
             cost_usd=self.cost_usd + other.cost_usd,
             session_id=other.session_id or self.session_id,
+            context_tokens=other.context_tokens or self.context_tokens,
         )
 
     def as_dict(self) -> dict:

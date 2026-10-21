@@ -3,6 +3,8 @@
 - Completeness: empty or cut-off answers, unbalanced code fences, "I can't see the file"
   replies, and edit requests answered without any code. An incomplete answer is retried once
   with more context on the next executor up (see runner.py).
+- Capability claims: DoAide runs on the user's laptop and reads their files, so an answer saying
+  it cannot access the user's files, folders or code is wrong however fluent it is.
 - Relevance: the answer must mention what the request names (files, functions, backticked
   identifiers) and share some of its words; canned refusals count as off topic. Used to decide
   whether a free local answer is good enough or the task goes to Claude (runner.py).
@@ -43,12 +45,30 @@ _STOPWORDS = frozenset(
     "code file files using use used help write give find".split()
 )
 _REFUSAL = re.compile(r"\b(?:as an ai(?: language model)?|i'?m (?:sorry|afraid),? (?:but )?i (?:can'?t|cannot))\b", re.I)
+_NO_ACCESS = re.compile(
+    r"\b(?:i|we)\s+(?:can(?:no|['’])?t|cannot|am\s+(?:not\s+able|unable)\s+to|(?:do|does)(?:n['’]t|\s+not)\s+have"
+    r"\s+(?:the\s+ability\s+to|(?:direct\s+)?access\s+to))\s+(?:directly\s+)?(?:(?:access|read|see|view|browse|open)\s+)?"
+    r"(?:to\s+)?(?:any\s+of\s+)?(?:your|the\s+user['’]?s|local)\s+(?:local\s+)?(?:files?|folders?|director(?:y|ies)|code(?:base)?"
+    r"|projects?|computer|machine|file\s*system|disk)\b"
+    r"|\b(?:can(?:no|['’])?t|cannot|unable\s+to)\s+(?:access|read|open|see)\s+(?:any\s+)?files\s+(?:on|in|from)\s+your\b",
+    re.I,
+)
+NO_ACCESS_REASON = "the answer says DoAide cannot access your files, but it can"
+NEEDS_FILES_REASON = "the model said it could not see the code it needed"
 _EDIT_KINDS = {"edit", "test", "debug"}
 _LANGS = {"python": ".py", "py": ".py", "json": ".json", "javascript": ".js", "js": ".js", "mjs": ".js"}
 
 
-def incomplete_reason(answer: str, kind: str) -> str | None:
-    """Why the answer looks unfinished, or None when it looks complete."""
+def capability_claim(answer: str) -> str | None:
+    """Why the answer misstates what DoAide can do, or None."""
+    return NO_ACCESS_REASON if _NO_ACCESS.search(answer[:1500]) else None
+
+
+def incomplete_reason(answer: str, kind: str, *, reads_files: bool = False) -> str | None:
+    """Why the answer looks unfinished, or None when it looks complete.
+
+    `reads_files`: the model searched the project itself (Claude, Codex). "I can't find X" from
+    it is a finding (X is not there), not missing context, and another model would find the same."""
     text = answer.strip()
     if not text:
         return "empty answer"
@@ -56,8 +76,8 @@ def incomplete_reason(answer: str, kind: str) -> str | None:
         return "a code block was left open"
     if text.count("<<<<<<< SEARCH") != text.count(">>>>>>> REPLACE"):
         return "an edit block was cut off"
-    if _NEEDS_FILES.search(text[:600]):
-        return "the model said it could not see the code it needed"
+    if not reads_files and _NEEDS_FILES.search(text[:600]):
+        return NEEDS_FILES_REASON
     if kind in _EDIT_KINDS and "```" not in text and not parse_edits(text) and len(text) < 400:
         return "no code or edit was proposed"
     if kind not in {"math", "question"} and len(text) < 25:
@@ -72,8 +92,8 @@ def early_problem(partial: str) -> str | None:
     if _REFUSAL.search(head[:300]):
         return "the model declined to answer"
     if _NEEDS_FILES.search(head):
-        return "the model said it could not see the code it needed"
-    return None
+        return NEEDS_FILES_REASON
+    return capability_claim(head)
 
 
 def off_topic_reason(prompt: str, answer: str) -> str | None:

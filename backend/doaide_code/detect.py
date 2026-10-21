@@ -16,6 +16,7 @@ import re
 import time
 import tomllib
 from collections.abc import Awaitable, Callable, Sequence
+from pathlib import Path
 from typing import Any
 
 from .config import Settings
@@ -302,6 +303,30 @@ _CAPABILITIES = re.compile(
     r"|\bwhat\s+(?:do|can)\s+(?:you|u)\s+(?:help|support|offer)\b|\bwhat\s+tools\s+do\s+(?:you|u)\s+have\b",
     re.I,
 )
+# "Can you access my files?", "are you able to read my code?", "do you have access to my projects
+# folder?": small models answer from training data that they cannot. DoAide can.
+_ACCESS = re.compile(
+    r"\b(?:can|could|do|are|will|would)\s+(?:you|u)\s+(?:be\s+)?(?:able\s+to\s+|have\s+access\s+to\s+)?"
+    r"(?:access|read|see|open|view|browse|look\s+(?:at|through|into)|scan|search)\b.{0,40}?"
+    r"\b(?:files?|folders?|director(?:y|ies)|code(?:base)?|projects?|repos?|repositor(?:y|ies)|computer|laptop|machine|disk)\b"
+    r"|\b(?:do|have)\s+(?:you|u)\s+(?:got\s+|have\s+)?access\s+to\b"
+    r"|\b(?:access|read)\s+(?:to\s+)?(?:my|local|the\s+local)\s+(?:local\s+)?(?:files?|folders?|code|projects?)\s*\?",
+    re.I,
+)
+# ...but "can you read app.py and fix the bug" is a task, not a question about access.
+_ACCESS_TASK = re.compile(
+    r"\.\w{1,5}\b|`|\b(?:and|then)\s+(?:fix|explain|refactor|change|add|write|implement|review|summari[sz]e|find|debug"
+    r"|test|tell|show|list|update|remove|rename)\b",
+    re.I,
+)
+# A request for code work is never a question about DoAide, whatever words it shares with one
+# ("refactor ... across the backend ... (project DoAide-Code)" is not "which backends do you have").
+# Only an imperative counts: "which models do you use to write code?" is still about DoAide.
+_CODE_TASK = re.compile(
+    r"^\s*(?:please\s+|(?:can|could|would)\s+(?:you|u)\s+(?:please\s+)?)?"
+    r"(?:refactor\w*|fix|implement|rename|propose|rewrite|write|add|remove|delete|change|update|debug|migrate|optimi[sz]e)\b",
+    re.I,
+)
 _MODEL_WORD = re.compile(r"\b(?:models?|llms?|executors?|backends?|engines?|ai\s+providers?|gpts?)\b", re.I)
 # The question is about this assistant / this laptop, not about code.
 _ABOUT_US = re.compile(
@@ -319,12 +344,14 @@ _ABOUT_CODE = re.compile(
 
 
 def meta_question(prompt: str) -> str | None:
-    """"identity", "capabilities" or "models" for questions about DoAide itself, else None."""
+    """"identity", "access", "capabilities" or "models" for questions about DoAide itself, else None."""
     text = prompt.strip()
-    if not text or len(text) > 200 or "\n" in text.strip():
+    if not text or len(text) > 200 or "\n" in text.strip() or _CODE_TASK.search(text):
         return None
     if _IDENTITY.search(text):
         return "identity"
+    if _ACCESS.search(text) and not _ACCESS_TASK.search(text):
+        return "access"
     if _MODEL_WORD.search(text) and _ABOUT_US.search(text) and not _ABOUT_CODE.search(text):
         return "models"
     if _CAPABILITIES.search(text):
@@ -347,6 +374,22 @@ CAPABILITIES = (
     "and propose code changes as diffs that are only written when you press **Apply** (or type `/apply`). "
     "Commands: `/models`, `/projects`, `/add-project`, `/switch-project`, `/workspace`, `/usage`, `/new`, `/help`."
 )
+
+
+def answer_access(folder: Path | None) -> str:
+    """The zero-token answer to "can you access my files?": yes, and which folder."""
+    where = (
+        f"Right now I'm working in `{folder}`: I can list its folders, open and search its files, and "
+        "propose code changes as diffs that are only written when you press **Apply** (or type `/apply`)."
+        if folder is not None
+        else "No project folder is selected yet."
+    )
+    return (
+        "Yes. **DoAide Code** runs on your laptop, so it reads your local files directly. "
+        f"{where}\n\nI work in one project folder at a time. To use another folder on this laptop, "
+        "add it with `/add-project <path>` (for example `/add-project ~/projects/my-app`) and switch with "
+        "`/switch-project <name>`; `/projects` lists the ones you have added."
+    )
 
 
 def answer_meta(kind: str, report: dict[str, Any]) -> str:

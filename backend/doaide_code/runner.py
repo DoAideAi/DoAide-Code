@@ -26,21 +26,32 @@ from .changes import propose, repair_prompt, strip_edits
 from .config import Settings
 from .context import Ranking, git_context, rank_files
 from .db import Store
-from .detect import ModelDetector, answer_meta, meta_question, pin_problem
+from .detect import ModelDetector, answer_access, answer_meta, meta_question, pin_problem
 from .executors import Executor, ExecutorError, Job, Turn, build_executors
 from .fastpath import direct_answer, math_answer
 from .prompts import PROMPT_VERSION
 from .router import RouteDecision, RouterBrain, heuristic_tier, is_local
 from .usage import Usage, sonnet_equivalent
-from .validate import check_code_blocks, early_problem, edit_checks, incomplete_reason, off_topic_reason
+from .validate import (
+    capability_claim,
+    check_code_blocks,
+    early_problem,
+    edit_checks,
+    incomplete_reason,
+    off_topic_reason,
+)
 
 log = logging.getLogger(__name__)
 
 NO_EXECUTOR = "No model is available on this laptop. Type /models to see what was detected and how to set one up."
 # Incomplete answers are retried this many times, each on the next executor up with more context.
 MAX_RETRIES = 1
-# Claude Code sessions are resumed for follow-ups this recent; older ones mostly hold stale reads.
-RESUME_MAX_AGE = 6 * 3600
+# Claude Code sessions are resumed for follow-ups this recent: past the prompt cache's lifetime
+# the whole session is written to the cache again at full price, and its file reads are stale.
+RESUME_MAX_AGE = 3600
+# ...and this small. Every model call in a resumed run re-sends the whole session, so a long one
+# costs more per tool round than a fresh session with a shortened transcript (about 15k tokens).
+RESUME_MAX_CONTEXT = 50_000
 
 
 def build_router(settings: Settings) -> RouterBrain:
@@ -124,6 +135,8 @@ def find_resume(store: Store, job: Job) -> Resume | None:
         return None
     anchor = max(found, key=anchors.__getitem__)
     row = found[anchor]
+    if row["context_tokens"] > RESUME_MAX_CONTEXT:
+        return None
     return Resume(row["session_id"], row["created_at"], tuple(history[anchors[anchor] + 1 :]))
 
 
@@ -148,12 +161,15 @@ async def run_job(
 ) -> Outcome:
     """`pin` ({"tool", "model"}) runs one model the user chose instead of routing."""
     # 1. Reading a file or listing a folder needs no model at all, and questions about DoAide
-    # itself (who it is, what it can do, which models it has) are answered from detection: small
-    # local models answer those from training data ("I am GPT-4, made by OpenAI").
+    # itself (who it is, what it can do, whether it can read your files, which models it has) are
+    # answered from detection: small local models answer those from training data ("I am GPT-4,
+    # made by OpenAI", "I can't access your local files").
     answer = math_answer(job.prompt)
     if answer is not None:
         pass
-    elif kind := meta_question(job.prompt):
+    elif (kind := meta_question(job.prompt)) == "access":
+        answer = answer_access(job.cwd)
+    elif kind:
         answer = answer_meta(kind, await router.models(force=True))
     elif job.cwd is not None:
         answer = await asyncio.to_thread(direct_answer, job.cwd, job.prompt)
@@ -215,7 +231,7 @@ async def run_job(
         ranking = None
 
     resume = find_resume(store, job)
-    claude_session = ""
+    claude_session, claude_context = "", 0
     errors: list[str] = []
     retries = 0
     retry_note: str | None = None
@@ -291,8 +307,9 @@ async def run_job(
                 continue
             await on_delta(outcome.content)
 
-        # Incomplete? Retry once on the next executor up, with more context.
-        reason = incomplete_reason(outcome.content, decision.kind)
+        # Incomplete? Retry once on the next executor up, with more context. CLI agents ("map"
+        # context) search the project themselves: "I can't find X" from them is a finding.
+        reason = incomplete_reason(outcome.content, decision.kind, reads_files=executor.context_mode == "map")
         nxt = _next_up(candidates, executor, decision.tier)
         if reason and not pin and retries < MAX_RETRIES and nxt is not None:
             retries += 1
@@ -302,10 +319,14 @@ async def run_job(
             continue
         detail = reason or retry_note or (f"escalated from {escalated['executor']}: {escalated['reason']}" if escalated else None)
         outcome.checks.append({"name": "complete", "ok": reason is None, "detail": detail or "looks complete"})
+        if claim := capability_claim(outcome.content):
+            outcome.checks.append({"name": "capabilities", "ok": False, "detail": claim})
         if key is not None and executor.cacheable and reason is None and outcome.content.strip():
             store.cache_put(key, outcome.content, executor.name)
         outcome.checks += code_checks if code_checks is not None else await check_code_blocks(outcome.content)
-        claude_session = (used.session_id if used else "") if executor.tool == "claude" else ""
+        claude_session, claude_context = ("", 0)
+        if used is not None and executor.tool == "claude":
+            claude_session, claude_context = used.session_id, used.context_tokens
         # A repair round starts from the full context: the resumed session predates this answer.
         await _preview_changes(store, job, outcome, executor, fresh, on_delta, source)
         outcome.checks += edit_checks(outcome.changes)
@@ -318,7 +339,7 @@ async def run_job(
     if outcome.status != "done" and not outcome.content and errors:
         outcome.content = "All executors failed.\n" + "\n".join(errors)
     if outcome.status == "done" and claude_session and job.cwd is not None and outcome.content.strip():
-        store.cli_session_put(answer_anchor(outcome.content), claude_session, str(job.cwd))
+        store.cli_session_put(answer_anchor(outcome.content), claude_session, str(job.cwd), claude_context)
     return outcome
 
 
@@ -415,7 +436,7 @@ async def _vet(job: Job, answer: str, kind: str) -> tuple[str | None, list[dict]
         return f"{bad['name']} does not parse ({bad['detail']})", code_checks, fix
     if job.cwd is not None and (changeset := await propose(job.cwd, answer)) is not None and changeset.all_problems:
         return f"its edit failed checks ({changeset.all_problems[0]})", code_checks, repair_prompt(job.prompt, changeset.all_problems)
-    if reason := off_topic_reason(job.prompt, answer):
+    if reason := capability_claim(answer) or off_topic_reason(job.prompt, answer):
         return reason, code_checks, None
     return None, code_checks, None
 
