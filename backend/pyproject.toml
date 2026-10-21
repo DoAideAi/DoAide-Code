@@ -12,6 +12,8 @@ dependencies = [
     "typesafe-sdk>=0.7.5",
     "websockets>=13",
     "mcp>=2.3",
+    # Lint checks on every edit (changes.check_file): re-imports, imports below code, undefined names.
+    "ruff>=0.6",
 ]
 
 [project.optional-dependencies]

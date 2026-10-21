@@ -15,6 +15,7 @@ import json
 import logging
 import re
 import shutil
+import sys
 import tempfile
 import tomllib
 import uuid
@@ -345,6 +346,13 @@ async def _run(argv: list[str], stdin: str | None = None) -> tuple[int, str]:
     return proc.returncode or 0, out.decode(errors="replace")
 
 
+def ruff_binary() -> str | None:
+    """ruff from DoAide's own environment, else from PATH. The laptop agent runs from a LaunchAgent
+    whose PATH lacked the folder ruff was in: every lint check was silently skipped."""
+    beside = Path(sys.executable).parent / "ruff"
+    return str(beside) if beside.is_file() else shutil.which("ruff")
+
+
 async def check_file(path: str, content: str) -> list[str]:
     """Quick checks on one file's content: syntax for Python/JSON/TOML/JS, plus ruff if installed."""
     suffix = Path(path).suffix.lower()
@@ -354,7 +362,7 @@ async def check_file(path: str, content: str) -> list[str]:
             compile(content, path, "exec")
         except SyntaxError as exc:
             return [f"{path}:{exc.lineno}: SyntaxError: {exc.msg}"]
-        if ruff := shutil.which("ruff"):
+        if ruff := ruff_binary():
             # Errors that break code (syntax, undefined names) and the damage local models do when
             # they paste a module's header into its middle: a re-import or redefinition (F811), an
             # unused import (F401), an import below code (E402). Only problems an edit introduces

@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from doaide_code.agent import LaptopAgent
-from doaide_code.changes import build_changeset, parse_edits, propose, strip_edits
+from doaide_code.changes import build_changeset, parse_edits, propose, ruff_binary, strip_edits
 from doaide_code.context import rank_files
 from doaide_code.executors import Job, OllamaExecutor
 from doaide_code.executors.ollama import FIXED_CTX, choose_model
@@ -272,6 +272,9 @@ def test_a_named_file_is_sent_whole_without_the_tree_or_unrelated_files(tmp_path
     assert "## Tree" in ctx and len(files) >= 1
 
 
+# Without ruff these checks cannot run; failing here would make every related edit look broken
+# (live: the agent's PATH had no ruff, and this test failed after every edit to changes.py).
+@pytest.mark.skipif(ruff_binary() is None, reason="ruff is not installed")
 async def test_an_edit_that_pastes_imports_and_constants_mid_file_fails_its_checks(tmp_path):
     (tmp_path / "m.py").write_text("import os\n\nLIMIT = 3\n\n\ndef f():\n    return os.sep * LIMIT\n")
     pasted = "m.py\n<<<<<<< SEARCH\ndef f():\n=======\nimport os\n\nLIMIT = 3\n\n\ndef f():\n>>>>>>> REPLACE"
