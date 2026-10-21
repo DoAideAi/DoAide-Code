@@ -56,7 +56,7 @@ NO_EXECUTOR = "No model is available on this laptop. Type /models to see what wa
 # agents with their own edit tools: they get proposals to apply, never writes underneath them.
 # Dispatch (tasks.py) hands over the whole task, as the chat does.
 AUTO_APPLY_SOURCES = {"chat", "dispatch"}
-UNNAMED_EDIT = "no file path was found above an edit block"
+UNNAMED_EDIT = "an edit block could not be read (no file path above it, or edit markers inside it)"
 # Incomplete answers are retried this many times, each on the next executor up with more context.
 MAX_RETRIES = 1
 # Claude Code sessions are resumed for follow-ups this recent: past the prompt cache's lifetime
@@ -573,11 +573,16 @@ async def _vet(job: Job, answer: str, kind: str) -> tuple[str | None, list[dict]
             "Reply with the complete, corrected answer."
         )
         return f"{bad['name']} does not parse ({bad['detail']})", code_checks, fix
-    if job.cwd is not None and (changeset := await propose(job.cwd, answer)) is not None and changeset.all_problems:
+    changeset = await propose(job.cwd, answer) if job.cwd is not None else None
+    if changeset is not None and changeset.all_problems:
         # Asking again cannot conjure a file that is not there: no repair round for that.
         fixable = not all("does not exist" in p for p in changeset.all_problems)
         fix = repair_prompt(job.prompt, changeset.all_problems) if fixable else None
         return f"its edit failed checks ({changeset.all_problems[0]})", code_checks, fix
+    if job.cwd is not None and changeset is None and any(SEARCH_RE.match(line) for line in answer.splitlines()):
+        # Live (32b, "trim the Ollama prompt"): edit blocks quoting a prompt that itself holds edit
+        # markers parsed as none, and the free answer was kept with nothing written.
+        return f"its edit failed checks ({UNNAMED_EDIT})", code_checks, None
     if reason := capability_claim(answer) or off_topic_reason(job.prompt, answer):
         return reason, code_checks, None
     return None, code_checks, None

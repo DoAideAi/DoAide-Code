@@ -11,7 +11,7 @@ from doaide_code.changes import apply_record, build_changeset, parse_edits, prop
 from doaide_code.commands import run_command
 from doaide_code.executors import Job
 from doaide_code.router import RouterBrain
-from doaide_code.runner import Outcome, run_job
+from doaide_code.runner import UNNAMED_EDIT, Outcome, run_job
 
 from .conftest import FakeExecutor
 
@@ -175,5 +175,26 @@ async def test_an_edit_block_with_no_file_says_nothing_was_written(repo, store):
 
     await run_job(RouterBrain([FakeExecutor("ollama", 0, [unnamed])]), store, Job(prompt="make the helper return 2", cwd=repo), outcome, on_delta)
     assert "def old" in (repo / "app.py").read_text()
-    assert outcome.content.endswith("Nothing written: no file path was found above an edit block.")
-    assert {"name": "edits", "ok": False, "detail": "no file path was found above an edit block"} in outcome.checks
+    assert outcome.content.endswith("Nothing written: an edit block could not be read (no file path above it, or edit markers inside it).")
+    assert {"name": "edits", "ok": False, "detail": UNNAMED_EDIT} in outcome.checks
+
+
+async def test_a_free_edit_that_cannot_be_read_goes_to_sonnet(repo, store):
+    # Live (32b): the edit quoted a prompt holding its own edit markers, so no edit parsed, and
+    # the free answer was kept with nothing written.
+    garbled = (
+        "Trim it.\n\napp.py\n<<<<<<< SEARCH\nPROMPT = '''\n<<<<<<< SEARCH\nold\n=======\nnew\n"
+        ">>>>>>> REPLACE\n'''\n=======\nPROMPT = ''\n>>>>>>> REPLACE\n"
+    ) + "\nThis keeps the prompt short, so local models read it faster." * 8  # long, as live: not "no edit"
+    ollama = FakeExecutor("ollama", 0, [garbled])
+    ollama.tool, ollama.context_mode = "ollama", "files"
+    sonnet = FakeExecutor("claude-sonnet", 2, [ANSWER])
+    outcome = Outcome()
+
+    async def on_delta(_):
+        pass
+
+    await run_job(RouterBrain([ollama, sonnet], offline=True), store, Job(prompt="tidy the helper in app.py", cwd=repo), outcome, on_delta)
+    assert outcome.executor == "claude-sonnet"
+    assert outcome.meta()["route"]["escalated_from"]["reason"] == f"its edit failed checks ({UNNAMED_EDIT})"
+    assert "def new" in (repo / "app.py").read_text()
