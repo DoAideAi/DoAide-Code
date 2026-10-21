@@ -1,5 +1,3 @@
-import { useEffect, useRef, useState } from 'react'
-import { usableTools } from '../store.js'
 
 // Everything here comes from the laptop's detection report (`ollama list`, `claude auth
 // status`, `codex login status`); the UI never lists models of its own.
@@ -31,63 +29,6 @@ export function ToolRow({ tool }) {
       </div>
       {tool.setup && <p className="mt-1 pl-3.5 text-xs text-zinc-500">{tool.setup}</p>}
     </li>
-  )
-}
-
-// Top bar: how many tools are usable, with the detected details in a dropdown and a link to the
-// cost/quality comparison. View only: routing picks the model for each task.
-export default function ModelsMenu({ models, onCompare = null }) {
-  const [open, setOpen] = useState(false)
-  const box = useRef(null)
-
-  useEffect(() => {
-    if (!open) return
-    const close = (e) => box.current && !box.current.contains(e.target) && setOpen(false)
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [open])
-
-  if (!models) return null
-  const usable = usableTools(models)
-  return (
-    <div ref={box} className="relative shrink-0">
-      <button
-        type="button"
-        data-testid="models-toggle"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200"
-      >
-        <span className={`h-2 w-2 rounded-full ${usable.length ? 'bg-emerald-400' : 'bg-red-500'}`} />
-        <span className="hidden sm:inline">{usable.length ? `${usable.length} of ${models.tools.length} models ready` : 'No models'}</span>
-      </button>
-      {open && (
-        <div
-          data-testid="models-menu"
-          className="absolute right-0 top-7 z-20 w-80 max-w-[90vw] overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-xl"
-        >
-          <div className="border-b border-zinc-800 px-3 py-2 text-xs text-zinc-500">Detected on your laptop</div>
-          <ul className="max-h-96 divide-y divide-zinc-900 overflow-y-auto">
-            {models.tools.map((t) => (
-              <ToolRow key={t.id} tool={t} />
-            ))}
-          </ul>
-          {onCompare && (
-            <button
-              type="button"
-              data-testid="models-compare-open"
-              onClick={() => {
-                setOpen(false)
-                onCompare()
-              }}
-              className="w-full border-t border-zinc-800 px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-900"
-            >
-              Compare cost &amp; quality →
-            </button>
-          )}
-        </div>
-      )}
-    </div>
   )
 }
 

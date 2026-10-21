@@ -238,24 +238,6 @@ class Store:
             "SELECT * FROM sessions WHERE user_email = ? ORDER BY updated_at DESC LIMIT 1", (user_email,)
         )
 
-    def latest_session_from(self, user_email: str, source: str) -> dict[str, Any] | None:
-        return self._one(
-            "SELECT * FROM sessions WHERE user_email = ? AND source = ? ORDER BY updated_at DESC LIMIT 1",
-            (user_email, source),
-        )
-
-    def list_sessions(self, user_email: str, limit: int = 30) -> list[dict[str, Any]]:
-        """Recent sessions with at least one message, newest first."""
-        return self._all(
-            "SELECT s.id, s.title, s.source, s.updated_at FROM sessions s WHERE s.user_email = ? "
-            "AND EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id) ORDER BY s.updated_at DESC LIMIT ?",
-            (user_email, limit),
-        )
-
-    def touch_session(self, session_id: str) -> None:
-        """Make a session the user's current one (the most recently updated)."""
-        self._exec("UPDATE sessions SET updated_at = ? WHERE id = ?", (time.time(), session_id))
-
     def update_session(self, session_id: str, *, project_id: int | None = None, title: str | None = None) -> None:
         if project_id is not None:
             self._exec("UPDATE sessions SET project_id = ? WHERE id = ?", (project_id, session_id))

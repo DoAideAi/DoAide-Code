@@ -108,6 +108,10 @@ class ClaudeCliExecutor(Executor):
             *WRITE_TOOLS,
             "--append-system-prompt",
             system_prompt("claude", kind),
+            # Per-machine sections (cwd, git status) go into the first message instead of the system
+            # prompt, so the prompt cache survives a changed git status or another folder. Measured
+            # on a follow-up in another folder: $0.05 instead of $0.35 (2026-10-21).
+            "--exclude-dynamic-system-prompt-sections",
             *(["--resume", resume] if resume else []),
         ]
 

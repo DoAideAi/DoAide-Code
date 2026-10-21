@@ -29,7 +29,7 @@ HELP = """Commands:
 /discard [<id>]              drop proposed changes
 /models                      which models and CLIs this laptop can use (detected, not guessed)
 /usage                       tokens and cost today, this week, and this month
-/new                         start a new chat session
+/new                         clear the chat and start over
 /help                        show this help"""
 
 

@@ -127,7 +127,7 @@ export default function ModelsPage({ load, models, onClose }) {
                       <td>
                         <QualityBar rate={m.quality} />
                       </td>
-                      <td>{m.cost_per_task === null ? '–' : formatCost(m.cost_per_task)}</td>
+                      <td>{m.cost_per_task === null ? 'not reported' : formatCost(m.cost_per_task)}</td>
                       <td>{versusSonnet(m)}</td>
                       <td className="text-right">{m.median_seconds === null ? '–' : `${m.median_seconds}s`}</td>
                     </tr>

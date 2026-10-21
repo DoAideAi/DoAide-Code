@@ -55,14 +55,6 @@ class ChatService:
             session = self.store.create_session(user_email, project["id"] if project else None)
         return session
 
-    async def open_session(self, user_email: str, session_id: str) -> None:
-        """Switch every device of this user to another of their conversations."""
-        session = self.store.get_session(session_id)
-        if session is None or session["user_email"] != user_email:
-            return
-        self.store.touch_session(session_id)
-        await self.hub.publish(user_email, self.snapshot(user_email))
-
     def status(self, user_email: str) -> str:
         task = self._tasks.get(user_email)
         if task is not None and not task.done():
@@ -75,8 +67,6 @@ class ChatService:
         return {
             "type": "snapshot",
             "session_id": session["id"],
-            "title": session["title"],
-            "source": session["source"],
             "project": project["name"] if project else None,
             "status": self.status(user_email),
             "mode": "local",

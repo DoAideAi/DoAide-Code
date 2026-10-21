@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   checkToken,
   clearSession,
@@ -15,7 +15,6 @@ import {
   setupStatus,
 } from './api.js'
 import Composer from './components/Composer.jsx'
-import { CodeViewer, FileTree } from './components/Files.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
 import { NoModelsBanner } from './components/Models.jsx'
 import ModelsPage from './components/ModelsPage.jsx'
@@ -26,21 +25,6 @@ import TopBar from './components/TopBar.jsx'
 import UsagePage from './components/UsagePage.jsx'
 import { connect } from './socket.js'
 import { statusColor, useChat } from './store.js'
-
-const DESKTOP_QUERY = '(min-width: 768px)'
-const FILES_KEY = 'doaide-code-files-open'
-
-function useIsDesktop() {
-  const [desktop, setDesktop] = useState(() => window.matchMedia?.(DESKTOP_QUERY).matches ?? true)
-  useEffect(() => {
-    const query = window.matchMedia?.(DESKTOP_QUERY)
-    if (!query) return
-    const onChange = (e) => setDesktop(e.matches)
-    query.addEventListener('change', onChange)
-    return () => query.removeEventListener('change', onChange)
-  }, [])
-  return desktop
-}
 
 // Sign in once: a saved access token, else trade the saved refresh token for a new one,
 // else loopback login, else Google. The refresh token never expires, so after the first
@@ -131,29 +115,7 @@ function useAuth() {
   return { token, needsSignIn, clientId, error, onCredential, renew }
 }
 
-function useStoredFlag(key) {
-  const [value, setValue] = useState(() => {
-    try {
-      return localStorage.getItem(key) === '1'
-    } catch {
-      return false
-    }
-  })
-  const toggle = useCallback(() => {
-    setValue((v) => {
-      try {
-        localStorage.setItem(key, v ? '0' : '1')
-      } catch {
-        // Per-device convenience only.
-      }
-      return !v
-    })
-  }, [key])
-  return [value, toggle]
-}
-
 export default function App() {
-  const desktop = useIsDesktop()
   const { token, needsSignIn, clientId, error, onCredential, renew } = useAuth()
   const {
     messages,
@@ -165,13 +127,8 @@ export default function App() {
     connection,
     apply,
     setConnection,
-    sessionId,
-    title,
-    source,
   } = useChat()
   const socket = useRef(null)
-  const [filesOpen, toggleFiles] = useStoredFlag(FILES_KEY)
-  const [openFile, setOpenFile] = useState(null)
   const [setupOpen, setSetupOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
   const [modelsOpen, setModelsOpen] = useState(false)
@@ -203,29 +160,16 @@ export default function App() {
     }
   }, [token, mode])
 
-  // Re-read the tree and open file after each finished answer, so edits show up.
-  const filesVersion = useMemo(
-    () => messages.filter((m) => m.role !== 'user' && m.status !== 'streaming' && m.status !== 'queued').length,
-    [messages],
-  )
-
   if (needsSignIn) return <SignIn clientId={clientId} onCredential={onCredential} error={error} />
 
   const busy = serverStatus === 'busy'
   const send = (text) => socket.current?.send({ type: 'send', text }) ?? false
-  // The file panel is desktop-only; phones show just the conversation.
-  const showFiles = desktop && filesOpen && token
-  const showViewer = showFiles && openFile
   return (
     <div className="flex h-[100dvh] flex-col">
       <TopBar
         project={project}
         color={statusColor(connection, serverStatus, mode, agentOnline)}
         busy={busy}
-        filesOpen={filesOpen}
-        onToggleFiles={desktop ? toggleFiles : null}
-        laptop={mode === 'hub' && connection === 'open' ? agentOnline : null}
-        onLaptop={() => setSetupOpen(true)}
         models={connection === 'open' ? models : null}
         onUsage={
           token
@@ -239,19 +183,9 @@ export default function App() {
           token
             ? () => {
                 setUsageOpen(false)
-                setModelsOpen(true)
+                setModelsOpen((v) => !v)
               }
             : null
-        }
-        sessions={
-          token && {
-            token,
-            title,
-            source,
-            sessionId,
-            onOpen: (id) => socket.current?.send({ type: 'open', session_id: id }),
-            onNew: () => send('/new'),
-          }
         }
       />
       {modelsOpen && token ? (
@@ -275,21 +209,13 @@ export default function App() {
             <LaptopBanner onSetup={() => setSetupOpen(true)} />
           )}
           {connection === 'open' && <NoModelsBanner models={models} />}
-          <div className="flex min-h-0 flex-1">
-            {showFiles && <FileTree token={token} version={filesVersion} selected={openFile} onOpen={setOpenFile} />}
-            {showViewer && (
-              <CodeViewer token={token} path={openFile} version={filesVersion} onClose={() => setOpenFile(null)} />
-            )}
-            <section className={`flex min-w-0 flex-col ${showViewer ? 'w-[26rem] shrink-0 lg:w-[34rem]' : 'flex-1'}`}>
-              <MessageList messages={messages} onSend={send} />
-              <Composer
-                busy={busy}
-                disabled={connection !== 'open'}
-                onSend={send}
-                onStop={() => socket.current?.send({ type: 'stop' })}
-              />
-            </section>
-          </div>
+          <MessageList messages={messages} onSend={send} />
+          <Composer
+            busy={busy}
+            disabled={connection !== 'open'}
+            onSend={send}
+            onStop={() => socket.current?.send({ type: 'stop' })}
+          />
         </>
       )}
     </div>

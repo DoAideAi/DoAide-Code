@@ -278,8 +278,8 @@ def test_usage_report_breaks_down_cost_by_model_and_day(store):
     t = report["totals"]
     assert (t["tasks"], t["free_tasks"], t["cost_usd"]) == (6, 5, 0.03)
     assert t["free_share"] == pytest.approx(5 / 6, abs=1e-3)
-    # 4 local tasks at Sonnet prices: 4 * (1000 * 3 + 200 * 15) / 1M
-    assert t["saved_usd"] == pytest.approx(0.024)
+    # 4 local tasks at Sonnet prices: 4 * (1000 * 2 + 200 * 10) / 1M
+    assert t["saved_usd"] == pytest.approx(0.016)
     assert report["headline"] == "Free local models and direct answers handled 83% of 6 tasks at no cost."
     assert [(m["model"], m["tasks"], m["free"]) for m in report["by_model"]] == [
         ("ollama-coder · qwen2.5-coder:32b", 4, True), ("No model (direct)", 1, True), ("claude-sonnet", 1, False),

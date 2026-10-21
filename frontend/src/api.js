@@ -96,10 +96,6 @@ export const localLogin = () => post('/api/auth/local')
 export const googleLogin = (credential) => post('/api/auth/google', { credential })
 export const refreshSession = (refresh) => post('/api/auth/refresh', { refresh_token: refresh })
 
-export const listFiles = (token, path = '') => get(`/api/files?path=${encodeURIComponent(path)}`, token)
-export const readFile = (token, path) => get(`/api/file?path=${encodeURIComponent(path)}`, token)
-export const listSessions = (token) => get('/api/sessions', token)
-
 export function socketUrl(path, token) {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${proto}//${location.host}${path}?token=${encodeURIComponent(token)}`

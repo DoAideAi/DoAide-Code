@@ -255,7 +255,7 @@ def test_describe_call_and_tool_reply():
 
 
 @pytest.mark.anyio
-async def test_relayed_calls_show_as_a_claude_code_conversation(live_hub, executors, settings, tmp_path):
+async def test_relayed_calls_show_in_the_one_conversation(live_hub, executors, settings, tmp_path):
     from websockets.asyncio.client import connect
 
     base, mcp_token = live_hub
@@ -266,7 +266,8 @@ async def test_relayed_calls_show_as_a_claude_code_conversation(live_hub, execut
         httpx.AsyncClient(base_url=base, headers=auth(mcp_token), timeout=10) as http,
         connect(f"{base.replace('http', 'ws')}/ws?token={browser}") as ws,
     ):
-        assert json.loads(await ws.recv())["type"] == "snapshot"
+        snapshot = json.loads(await ws.recv())
+        assert snapshot["type"] == "snapshot" and "title" not in snapshot and "source" not in snapshot
         run = {"name": "execute_code", "arguments": {"prompt": "shout the greeting"}}
         answer = (await http.post(RELAY, json=rpc("tools/call", run))).json()["result"]["structuredContent"]
         assert answer["answer"] == "Make it louder." and answer["changes"]["status"] == "pending"
@@ -275,9 +276,9 @@ async def test_relayed_calls_show_as_a_claude_code_conversation(live_hub, execut
         events = []
         while not events or events[-1]["type"] != "done":
             events.append(json.loads(await ws.recv()))
-        # A new Claude Code conversation opens on every device, then the reply streams in.
-        assert events[0]["type"] == "snapshot" and events[0]["source"] == "mcp"
-        assert events[0]["title"] == "Claude Code: shout the greeting"
+        # The call joins the same single conversation (labelled as Claude Code's), then streams in.
+        assert [e["type"] for e in events[:2]] == ["message", "message"]
+        assert events[0]["message"]["meta"] == {"via": "mcp", "tool": "execute_code"}
         assert any(e["type"] == "delta" for e in events)
         assert events[-1]["meta"]["changes"]["files"][0]["path"] == "app.py"
 
@@ -291,5 +292,4 @@ async def test_relayed_calls_show_as_a_claude_code_conversation(live_hub, execut
         assert instruction["meta"] == {"via": "mcp", "tool": "execute_code"}
         assert reply["meta"]["changes"]["status"] == "applied" and reply["content"] == "Make it louder."
         assert apply_msg["content"] == "Apply changes (latest)" and apply_reply["content"].startswith("Applied 1 file")
-        listed = (await http.get("/api/sessions", headers=auth(browser))).json()["sessions"]
-        assert listed[0]["source"] == "mcp"
+        assert session["session_id"] == snapshot["session_id"]

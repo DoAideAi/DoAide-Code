@@ -188,11 +188,6 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
     async def session(user: User = Depends(current_user)) -> dict:
         return chat.snapshot(user.email)
 
-    @app.get("/api/sessions")
-    async def sessions(user: User = Depends(current_user)) -> dict:
-        """Recent conversations for the switcher; source 'mcp' marks ones Claude Code started."""
-        return {"sessions": store.list_sessions(user.email)}
-
     @app.post("/api/messages", status_code=status.HTTP_202_ACCEPTED)
     async def post_message(body: SendMessage, user: User = Depends(current_user)) -> dict:
         task = await chat.submit(user.email, body.text)
@@ -300,8 +295,6 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
                     await chat.submit(user.email, data["text"][:100_000])
                 elif kind == "stop":
                     await chat.stop(user.email)
-                elif kind == "open" and isinstance(data.get("session_id"), str):
-                    await chat.open_session(user.email, data["session_id"])
                 elif kind == "ping":
                     await ws.send_json({"type": "pong"})
         except (WebSocketDisconnect, RuntimeError, ValueError):

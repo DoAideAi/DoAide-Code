@@ -173,12 +173,10 @@ writes the same value.
 
 ## Interface
 
-Kept minimal: a top bar (project pill and status dot), the conversation, and the
-input box. On desktop widths, one toggle opens a file tree and a read-only code
-viewer for the active project (or the workspace). Both refresh after every answer,
-so you can see what the executors changed. Phones show only the conversation and
-the input box. On the hub, file listings are fetched from the laptop over its agent
-connection; nothing is read from the server's disk.
+Kept minimal, like a dispatch: one conversation (no sessions to switch; `/new` clears it), a
+top bar (project, **Models**, **Usage**, one status dot), and the input box. Replies are short:
+a one-line footer gives the model, the cost (or "free, saved $X") and the time; only failed
+checks are shown; written changes collapse to a summary with Undo.
 
 ## Sign-in
 
@@ -310,11 +308,9 @@ MCP token from `POST /api/mcp-token`; agent tokens are refused. Supported method
 `initialize`, `ping`, `tools/list` and `tools/call`; notifications get 202. A call waits
 up to about 30 minutes, and requests are capped at 2 MB.
 
-Every relayed `tools/call` shows up in the DoAide Code UI (web and phone) in a
-"Claude Code" conversation: the instruction the client sent, then the laptop's reply,
-with `execute_code` output streaming in live and its diff preview, usage and cost when
-it finishes. Calls within 30 minutes of each other share a conversation; the switcher
-in the top bar lists every conversation (Claude Code ones are marked).
+Every relayed `tools/call` shows up in the DoAide Code UI (web and phone), in the same single
+conversation, labelled as from Claude Code: the instruction the client sent, then the laptop's
+reply, with `execute_code` output streaming in live and its diff, cost and time when it finishes.
 
 ## Configuration
 

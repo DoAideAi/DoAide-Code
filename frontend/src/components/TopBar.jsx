@@ -1,83 +1,48 @@
-import ModelsMenu from './Models.jsx'
-import Sessions from './Sessions.jsx'
+import { usableTools } from '../store.js'
 
 const DOT = {
   green: 'bg-emerald-400',
   red: 'bg-red-500',
-  gray: 'bg-zinc-600',
+  gray: 'bg-zinc-500',
 }
 
-// `laptop` is null in local mode; on the hub it is whether the laptop agent is connected.
-export default function TopBar({
-  project,
-  color,
-  busy,
-  filesOpen,
-  onToggleFiles,
-  sessions,
-  laptop = null,
-  onLaptop,
-  models = null,
-  onUsage = null,
-  onModels = null,
-}) {
+function Link({ testid, onClick, children }) {
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4">
+    <button type="button" data-testid={testid} onClick={onClick} className="flex shrink-0 items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200">
+      {children}
+    </button>
+  )
+}
+
+// One line: name and project on the left; Models, Usage and one status dot on the right (gray
+// while the laptop is offline, which the banner below explains).
+export default function TopBar({ project, color, busy, models = null, onModels = null, onUsage = null }) {
+  const ready = usableTools(models).length
+  return (
+    <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-zinc-800/80 px-4">
       <div className="flex min-w-0 items-center gap-3">
-        {onToggleFiles && (
-          <button
-            type="button"
-            data-testid="files-toggle"
-            aria-label={filesOpen ? 'Hide files' : 'Show files'}
-            aria-pressed={filesOpen}
-            onClick={onToggleFiles}
-            className={`-ml-1 rounded p-1 ${filesOpen ? 'text-zinc-200' : 'text-zinc-500'} hover:text-zinc-200`}
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.4">
-              <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
-              <path d="M6 2.5v11" />
-            </svg>
-          </button>
-        )}
         <span className="shrink-0 text-sm font-medium tracking-tight text-zinc-300">Doaide Code</span>
-        {sessions && <Sessions {...sessions} />}
-      </div>
-      <div className="flex items-center gap-3">
-        {onUsage && (
-          <button
-            type="button"
-            data-testid="usage-toggle"
-            onClick={onUsage}
-            className="shrink-0 text-xs text-zinc-400 hover:text-zinc-200"
-          >
-            Usage
-          </button>
-        )}
-        <ModelsMenu models={models} onCompare={onModels} />
-        {laptop !== null && (
-          <button
-            type="button"
-            data-testid="laptop-status"
-            data-online={laptop ? 'true' : 'false'}
-            title={laptop ? 'Laptop connected' : 'Laptop offline: click to set it up'}
-            onClick={onLaptop}
-            className="flex shrink-0 items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200"
-          >
-            <span className={`h-2 w-2 rounded-full ${laptop ? DOT.green : DOT.red}`} />
-            <span className="hidden sm:inline">{laptop ? 'Laptop online' : 'Laptop offline'}</span>
-          </button>
-        )}
-        <span
-          data-testid="project-pill"
-          className="max-w-[45vw] truncate rounded-full border border-zinc-700 bg-zinc-900 px-3 py-0.5 text-xs text-zinc-300"
-        >
+        <span data-testid="project-pill" className="truncate text-xs text-zinc-500">
           {project ?? 'no project'}
         </span>
+      </div>
+      <div className="flex items-center gap-4">
+        {onModels && (
+          <Link testid="models-toggle" onClick={onModels}>
+            {models && <span className={`h-1.5 w-1.5 rounded-full ${ready ? DOT.green : DOT.red}`} />}
+            Models
+          </Link>
+        )}
+        {onUsage && (
+          <Link testid="usage-toggle" onClick={onUsage}>
+            Usage
+          </Link>
+        )}
         <span
           data-testid="status-dot"
           data-color={color}
           aria-label={`status ${color}`}
-          className={`h-2.5 w-2.5 rounded-full ${DOT[color]} ${busy && color === 'green' ? 'animate-pulse' : ''}`}
+          className={`h-2.5 w-2.5 shrink-0 rounded-full ${DOT[color]} ${busy && color === 'green' ? 'animate-pulse' : ''}`}
         />
       </div>
     </header>

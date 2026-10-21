@@ -15,7 +15,6 @@ import asyncio
 import contextlib
 import json
 import logging
-import time
 import uuid
 from typing import Any, Protocol
 
@@ -45,8 +44,6 @@ LAPTOP_OFFLINE_MODELS = (
     "Your laptop is offline, so its models cannot be detected. Models run on the laptop: start the "
     "DoAide agent there (Set up laptop), then type /models again."
 )
-# An MCP conversation idle this long is closed; the next call starts a new one.
-MCP_SESSION_IDLE = 1800
 # Characters of a tool's output kept in the conversation.
 MAX_TOOL_OUTPUT = 20_000
 
@@ -134,8 +131,6 @@ class RelayService:
         return {
             "type": "snapshot",
             "session_id": session["id"],
-            "title": session["title"],
-            "source": session["source"],
             "project": self.store.remote_project(user_email),
             "status": self.status(user_email),
             "mode": "hub",
@@ -143,14 +138,6 @@ class RelayService:
             "models": self._models.get(user_email),
             "messages": [public_message(m) for m in self.store.list_messages(session["id"])],
         }
-
-    async def open_session(self, user_email: str, session_id: str) -> None:
-        """Switch every device of this user to another of their conversations."""
-        session = self.store.get_session(session_id)
-        if session is None or session["user_email"] != user_email:
-            return
-        self.store.touch_session(session_id)
-        await self.hub.publish(user_email, self.snapshot(user_email))
 
     async def _publish_status(self, user_email: str) -> None:
         await self.hub.publish(user_email, {"type": "status", "state": self.status(user_email)})
@@ -230,24 +217,15 @@ class RelayService:
     # MCP tool calls from remote clients
 
     async def begin_mcp_call(self, user_email: str, name: str, arguments: dict[str, Any]) -> str:
-        """Record a relayed tool call as instruction + reply; returns the reply id to stream into."""
-        previous = self.store.latest_session(user_email)
-        session = self.store.latest_session_from(user_email, "mcp")
-        if session is None or session["updated_at"] < time.time() - MCP_SESSION_IDLE:
-            session = self.store.create_session(user_email, source="mcp")
-        instruction = describe_call(name, arguments)
-        if session["title"] is None:
-            self.store.update_session(session["id"], title=f"Claude Code: {instruction[:48]}")
+        """Record a relayed tool call as instruction + reply in the user's one conversation
+        (labelled as from Claude Code); returns the reply id to stream into."""
+        session = self.current_session(user_email)
         meta = {"via": "mcp", "tool": name}
-        user_msg = self.store.add_message(session["id"], "user", instruction, meta=meta)
+        user_msg = self.store.add_message(session["id"], "user", describe_call(name, arguments), meta=meta)
         reply = self.store.add_message(session["id"], "assistant", "", status="streaming", meta=meta)
         self._mcp_replies[reply["id"]] = user_email
-        if previous is None or previous["id"] != session["id"]:
-            # A new (or reopened) Claude Code conversation: bring every device to it.
-            await self.hub.publish(user_email, self.snapshot(user_email))
-        else:
-            for message in (user_msg, reply):
-                await self.hub.publish(user_email, {"type": "message", "message": public_message(message)})
+        for message in (user_msg, reply):
+            await self.hub.publish(user_email, {"type": "message", "message": public_message(message)})
         return reply["id"]
 
     async def end_mcp_call(self, user_email: str, reply_id: str, response: dict[str, Any] | None) -> None:

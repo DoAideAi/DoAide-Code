@@ -171,14 +171,16 @@ describe('App', () => {
     expect(screen.getByLabelText('Message')).toBeTruthy()
   })
 
-  it('mobile: just the conversation and a visible input box, no file panel', async () => {
-    const ws = await boot(false)
+  it('one minimal screen: the conversation and the input box, nothing to switch or browse', async () => {
+    const ws = await boot(true)
     expect(ws.url).toContain('/ws?token=tok')
-    const composer = screen.getByTestId('composer')
-    expect(composer.className).not.toContain('hidden')
+    expect(screen.getByTestId('composer').className).not.toContain('hidden')
     expect(screen.getByLabelText('Message')).toBeTruthy()
-    expect(screen.queryByTestId('files-toggle')).toBeNull()
-    expect(screen.queryByTestId('file-tree')).toBeNull()
+    for (const gone of ['files-toggle', 'file-tree', 'sessions-toggle', 'model-picker', 'laptop-status']) {
+      expect(screen.queryByTestId(gone)).toBeNull()
+    }
+    expect(screen.getByTestId('models-toggle').textContent).toBe('Models')
+    expect(screen.getByTestId('usage-toggle').textContent).toBe('Usage')
   })
 
   it('fills the visible viewport so the input stays on screen on phones', async () => {
@@ -199,7 +201,7 @@ describe('App', () => {
     expect(globalThis.fetch.mock.calls.some(([url]) => url.startsWith('/api/v1/setup'))).toBe(false)
   })
 
-  it('hub with laptop offline: gray dot, red laptop dot, banner, queued replies, and a connect command', async () => {
+  it('hub with laptop offline: gray dot, banner, queued replies, and a connect command', async () => {
     const ws = await boot(false, {
       mode: 'hub',
       agent_online: false,
@@ -209,7 +211,7 @@ describe('App', () => {
       ],
     })
     expect(screen.getByTestId('status-dot').dataset.color).toBe('gray')
-    expect(screen.getByTestId('laptop-status').dataset.online).toBe('false')
+    expect(screen.getByTestId('laptop-banner')).toBeTruthy()
     expect(screen.getByText('Queued for your laptop…')).toBeTruthy()
     expect(screen.getByLabelText('Message').disabled).toBe(false)
 
@@ -224,7 +226,6 @@ describe('App', () => {
     await act(async () => ws.emit({ type: 'agent', online: true }))
     expect(screen.queryByTestId('laptop-banner')).toBeNull()
     expect(screen.getByTestId('status-dot').dataset.color).toBe('green')
-    expect(screen.getByTestId('laptop-status').dataset.online).toBe('true')
   })
 
   it('phone prompts are sent to the hub for the laptop to run', async () => {
@@ -233,46 +234,6 @@ describe('App', () => {
     await act(async () => fireEvent.change(input, { target: { value: 'run tests' } }))
     await act(async () => fireEvent.keyDown(input, { key: 'Enter' }))
     expect(ws.sent.at(-1)).toEqual({ type: 'send', text: 'run tests' })
-  })
-})
-
-describe('file panel (desktop)', () => {
-  it('is hidden until toggled, then shows a lazy tree and a read-only viewer', async () => {
-    await boot(true)
-    expect(screen.queryByTestId('file-tree')).toBeNull()
-
-    await act(async () => fireEvent.click(screen.getByTestId('files-toggle')))
-    await flush()
-    expect(screen.getByTestId('file-tree').textContent).toContain('README.md')
-
-    await act(async () => fireEvent.click(screen.getByText('src')))
-    await flush()
-    await act(async () => fireEvent.click(screen.getByText('app.py')))
-    await flush()
-    const viewer = screen.getByTestId('code-viewer')
-    expect(viewer.textContent).toContain('src/app.py')
-    expect(viewer.textContent).toContain('line two')
-    expect(viewer.querySelector('textarea, [contenteditable]')).toBeNull()
-
-    await act(async () => fireEvent.click(screen.getByLabelText('Close file')))
-    expect(screen.queryByTestId('code-viewer')).toBeNull()
-    expect(localStorage.getItem('doaide-code-files-open')).toBe('1')
-  })
-
-  it('reloads the open file after an answer finishes', async () => {
-    const ws = await boot(true)
-    await act(async () => fireEvent.click(screen.getByTestId('files-toggle')))
-    await flush()
-    await act(async () => fireEvent.click(screen.getByText('README.md')))
-    await flush()
-    const reads = () => fetch.mock.calls.filter(([u]) => u.startsWith('/api/file?')).length
-    const before = reads()
-    await act(async () => {
-      ws.emit({ type: 'message', message: { id: 'r', role: 'assistant', content: '', status: 'streaming' } })
-      ws.emit({ type: 'done', id: 'r', status: 'done', content: 'edited README' })
-    })
-    await flush()
-    expect(reads()).toBeGreaterThan(before)
   })
 })
 
@@ -321,8 +282,6 @@ describe('Claude Code activity and diff previews', () => {
 
   it('shows the instruction, a collapsed diff, usage, and applies via /apply', async () => {
     const ws = await boot(true, {
-      title: 'Claude Code: rename it',
-      source: 'mcp',
       messages: [
         { id: 'u', role: 'user', content: 'rename it', status: 'done', meta: { via: 'mcp', tool: 'execute_code' } },
         {
@@ -336,13 +295,12 @@ describe('Claude Code activity and diff previews', () => {
     })
     expect(screen.getByTestId('mcp-instruction').textContent).toContain('Claude Code')
     expect(screen.getByTestId('mcp-instruction').textContent).toContain('rename it')
-    expect(screen.getByTestId('sessions-toggle').textContent).toContain('Claude Code: rename it')
     // Held back (an MCP proposal): a summary line, the diff one click away.
     expect(screen.getByTestId('changeset-status').textContent).toBe('1 file not written')
     expect(screen.getByTestId('changeset').textContent).not.toContain('+b')
     fireEvent.click(screen.getByText('app.py'))
     expect(screen.getByTestId('changeset').textContent).toContain('+b')
-    expect(screen.getByTestId('usage').textContent).toBe('10 in · 2 out · $0')
+    expect(screen.getByTestId('usage').textContent).toBe('cost not reported')
     fireEvent.click(screen.getByText('Apply'))
     expect(ws.sent.at(-1)).toEqual({ type: 'send', text: '/apply c1' })
     await act(async () => ws.emit({ type: 'changes', id: 'r', changes: { ...changes, status: 'applied' } }))
@@ -381,18 +339,6 @@ describe('Claude Code activity and diff previews', () => {
     expect(screen.getByTestId('working').textContent).toContain('Working on your laptop')
   })
 
-  it('switches conversations from the menu', async () => {
-    const ws = await boot(true)
-    globalThis.fetch.mockImplementationOnce(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ sessions: [{ id: 'other', title: 'Older chat', source: 'mcp', updated_at: 0 }] }),
-    }))
-    fireEvent.click(screen.getByTestId('sessions-toggle'))
-    await flush()
-    fireEvent.click(screen.getByText('Older chat'))
-    expect(ws.sent.at(-1)).toEqual({ type: 'open', session_id: 'other' })
-  })
 })
 
 describe('laptop setup (hub)', () => {
@@ -490,13 +436,15 @@ const REPORT = {
 }
 
 describe('detected models', () => {
-  it('shows only what the laptop reported, in the top bar menu', async () => {
+  it('shows only what the laptop reported, on the Models page', async () => {
     const ws = await boot(true)
-    // Nothing reported yet: no invented list.
-    expect(screen.queryByTestId('models-toggle')).toBeNull()
+    const dot = () => screen.getByTestId('models-toggle').querySelector('span')
+    // Nothing reported yet: no readiness dot, no invented list.
+    expect(dot()).toBeNull()
     await act(async () => ws.emit({ type: 'models', models: REPORT }))
-    expect(screen.getByTestId('models-toggle').textContent).toBe('2 of 3 models ready')
+    expect(dot().className).toContain('bg-emerald-400')
     await act(async () => fireEvent.click(screen.getByTestId('models-toggle')))
+    await flush()
     expect(screen.getByTestId('model-tool-ollama').textContent).toContain('Ollama:llama3:latest, codellama:7b')
     expect(screen.getByTestId('model-tool-claude').textContent).toContain('Claude CLI:signed in · v2.1.0')
     expect(screen.getByTestId('model-tool-codex').textContent).toContain('Codex CLI:not found')
@@ -520,14 +468,14 @@ describe('detected models', () => {
     expect(banner.textContent).toContain('Ollama (not running): Start Ollama.')
     expect(banner.textContent).toContain('Claude CLI (not signed in): Sign in: `claude auth login`.')
     expect(banner.textContent).not.toContain('Codex')
-    expect(screen.getByTestId('models-toggle').textContent).toBe('No models')
+    expect(screen.getByTestId('models-toggle').querySelector('span').className).toContain('bg-red-500')
   })
 
   it('drops the report when the laptop disconnects', async () => {
     const ws = await boot(true, { mode: 'hub', agent_online: true, models: REPORT })
-    expect(screen.getByTestId('models-toggle')).toBeTruthy()
+    expect(screen.getByTestId('models-toggle').querySelector('span')).toBeTruthy()
     await act(async () => ws.emit({ type: 'agent', online: false }))
-    expect(screen.queryByTestId('models-toggle')).toBeNull()
+    expect(screen.getByTestId('models-toggle').querySelector('span')).toBeNull()
     expect(screen.getByTestId('laptop-banner')).toBeTruthy()
   })
 })
@@ -552,10 +500,9 @@ describe('models are view only', () => {
     expect(screen.queryByRole('combobox')).toBeNull()
   })
 
-  it('compares cost and quality on the Models page, opened from the models menu', async () => {
+  it('compares cost, quality and speed on the Models page', async () => {
     await boot(true, { models: REPORT })
     await act(async () => fireEvent.click(screen.getByTestId('models-toggle')))
-    await act(async () => fireEvent.click(screen.getByTestId('models-compare-open')))
     await flush()
     expect(screen.getByTestId('models-page')).toBeTruthy()
     expect(globalThis.fetch.mock.calls.some(([url]) => url === '/api/models/compare?days=30')).toBe(true)
@@ -624,7 +571,7 @@ describe('usage dashboard', () => {
 })
 
 describe('reply footer', () => {
-  it('names the model that answered and shows failed checks', async () => {
+  it('is one line of model, cost and time, and shows only failed checks', async () => {
     await boot(true, {
       messages: [
         {
@@ -634,7 +581,7 @@ describe('reply footer', () => {
           status: 'done',
           meta: {
             usage: { tokens_in: 1200, tokens_out: 80, cost_usd: 0 },
-            route: { executor: 'ollama-coder', model: 'qwen2.5-coder:32b', free: true, reasons: ['fix (+3)'] },
+            route: { executor: 'ollama-coder', model: 'qwen2.5-coder:32b', free: true, reasons: ['fix (+3)'], elapsed_ms: 4_200, would_cost_usd: 0.01 },
             checks: {
               items: [
                 { name: 'complete', ok: true, detail: 'retried on claude-sonnet with more context (empty answer from ollama)' },
@@ -645,10 +592,9 @@ describe('reply footer', () => {
         },
       ],
     })
-    expect(screen.getByTestId('usage').textContent).toBe('qwen2.5-coder:32b (free) · 1.2k in · 80 out · $0')
-    expect(screen.getByTestId('route').title).toBe('fix (+3)')
+    expect(screen.getByTestId('usage').textContent).toBe('qwen2.5-coder:32b · free, saved $0.01 · 4.2s')
+    expect(screen.getByTestId('usage').title).toBe('1.2k in, 80 out; fix (+3)')
     const checks = [...screen.getByTestId('checks').querySelectorAll('li')]
-    expect(checks.map((c) => c.dataset.ok)).toEqual(['true', 'false'])
-    expect(checks[1].textContent).toBe('✗ python block: line 1: invalid syntax')
+    expect(checks.map((c) => c.textContent)).toEqual(['✗ python block: line 1: invalid syntax'])
   })
 })

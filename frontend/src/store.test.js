@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { routeLabel, routeTitle, savingsLabel, splitFences, usageLabel } from './components/MessageList.jsx'
+import { footer, splitFences } from './components/MessageList.jsx'
 import { applyEvent, initialChat, statusColor, usableTools } from './store.js'
 
 const msg = (id, role, content, status = 'done') => ({ id, role, content, status, created_at: 0 })
@@ -13,7 +13,6 @@ describe('applyEvent', () => {
       status: 'idle',
       messages: [msg('1', 'user', 'hi')],
     })
-    expect(s.sessionId).toBe('s1')
     expect(s.project).toBe('alpha')
     expect(s.messages).toHaveLength(1)
   })
@@ -108,12 +107,6 @@ describe('reply meta', () => {
     expect(s.messages[0].meta).toMatchObject({ usage: { tokens_in: 5 }, changes: { status: 'applied' } })
   })
 
-  it('formats usage labels', () => {
-    expect(usageLabel({ tokens_in: 1500, tokens_out: 200, cost_usd: 0.0021 })).toBe('1.5k in · 200 out · $0.0021')
-    expect(usageLabel({ tokens_in: 0, tokens_out: 0, cost_usd: 0 })).toBe('no model · $0')
-    expect(usageLabel({ cached: true })).toBe('cached · $0')
-    expect(usageLabel(undefined)).toBeNull()
-  })
 })
 
 describe('models report', () => {
@@ -136,29 +129,35 @@ describe('models report', () => {
   })
 })
 
-describe('routeLabel', () => {
-  it('names the model, marks free ones, and says when no model ran', () => {
-    expect(routeLabel({ executor: 'ollama', model: 'qwen2.5-coder:7b', free: true })).toBe('qwen2.5-coder:7b (free)')
-    expect(routeLabel({ executor: 'claude-sonnet', model: 'sonnet', free: false })).toBe('claude-sonnet')
-    expect(routeLabel({ executor: 'direct', free: true })).toBe('no model')
-    expect(routeLabel(undefined)).toBeNull()
+describe('reply footer: model · cost · time', () => {
+  const usage = { tokens_in: 1500, tokens_out: 200, cost_usd: 0.21 }
+
+  it('names the model, its cost and the time; tokens and reasons on hover', () => {
+    const f = footer({ usage, route: { executor: 'claude-sonnet', model: 'sonnet', free: false, elapsed_ms: 18_400, reasons: ['fix (+3)'] } })
+    expect(f.text).toBe('claude-sonnet · $0.21 · 18s')
+    expect(f.title).toBe('1.5k in, 200 out; fix (+3)')
   })
 
-  it('says when a free answer failed its checks and Sonnet answered instead', () => {
+  it('shows free answers with what Sonnet would have cost', () => {
+    const route = { executor: 'ollama', model: 'qwen2.5-coder:7b', free: true, would_cost_usd: 0.004, elapsed_ms: 3_210 }
+    expect(footer({ usage: { ...usage, cost_usd: 0 }, route }).text).toBe('qwen2.5-coder:7b · free, saved $0.0040 · 3.2s')
+    expect(footer({ route: { executor: 'direct', free: true } }).text).toBe('no model · free')
+    expect(footer({ usage: { cached: true }, route: { executor: 'ollama', free: true } }).text).toBe('ollama · cached, free')
+  })
+
+  it('says when a free answer was escalated, and never calls an unpriced paid model free', () => {
     const route = {
       executor: 'claude-sonnet',
       model: 'sonnet',
       free: false,
-      reasons: ['fix (+3)'],
       escalated_from: { executor: 'ollama-coder', model: 'qwen2.5-coder:32b', reason: 'python block does not parse' },
     }
-    expect(routeLabel(route)).toBe('claude-sonnet (escalated from qwen2.5-coder:32b)')
-    expect(routeTitle(route)).toBe('escalated: python block does not parse, fix (+3)')
-    expect(savingsLabel(route)).toBeNull()
-  })
-
-  it('prices a free answer at Sonnet rates', () => {
-    expect(savingsLabel({ executor: 'ollama', free: true, would_cost_usd: 0.006 })).toBe('saved $0.0060 vs Sonnet')
-    expect(savingsLabel({ executor: 'ollama', free: true })).toBeNull()
+    const f = footer({ usage, route })
+    expect(f.text).toBe('claude-sonnet (escalated from qwen2.5-coder:32b) · $0.21')
+    expect(f.title).toBe('1.5k in, 200 out; escalated: python block does not parse')
+    expect(footer({ usage: { ...usage, cost_usd: 0 }, route: { executor: 'codex', model: 'gpt-6-astra', free: false } }).text).toBe(
+      'gpt-6-astra · cost not reported',
+    )
+    expect(footer(undefined)).toBeNull()
   })
 })

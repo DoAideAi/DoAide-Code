@@ -63,50 +63,48 @@ export function formatCost(usd) {
   return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`
 }
 
-// Tokens and cost of one reply; "no model" for answers read straight from disk.
-export function usageLabel(usage) {
-  if (!usage) return null
-  if (usage.cached) return 'cached · $0'
-  if (!usage.tokens_in && !usage.tokens_out) return 'no model · $0'
-  return `${formatTokens(usage.tokens_in)} in · ${formatTokens(usage.tokens_out)} out · ${formatCost(usage.cost_usd)}`
-}
-
 function modelName(route) {
   return route.model && !route.executor.includes(route.model) ? route.model : route.executor
 }
 
-// Which model answered: "qwen2.5-coder:32b (free)", "claude-sonnet", "no model", and
-// "claude-sonnet (escalated from qwen2.5-coder:32b)" when the free answer failed its checks.
-export function routeLabel(route) {
-  if (!route) return null
-  if (route.executor === 'direct') return 'no model'
-  const name = modelName(route)
-  if (route.escalated_from) return `${name} (escalated from ${modelName(route.escalated_from)})`
-  return route.free ? `${name} (free)` : name
+export function formatSeconds(ms) {
+  if (!ms && ms !== 0) return null
+  return ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms / 1000)}s`
 }
 
-// Why this model: the escalation reason first, then the classifier's reasons.
-export function routeTitle(route) {
-  const parts = [...(route?.escalated_from ? [`escalated: ${route.escalated_from.reason}`] : []), ...(route?.reasons ?? [])]
-  return parts.join(', ') || undefined
+// The reply's footer in the three metrics: which model (quality is shown by failed checks),
+// what it cost, how long it took. Tokens and the routing reasons are on hover.
+export function footer(meta) {
+  const route = meta?.route
+  const usage = meta?.usage
+  if (!route && !usage) return null
+  let model = null
+  if (route) {
+    model = route.executor === 'direct' ? 'no model' : modelName(route)
+    if (route.escalated_from) model += ` (escalated from ${modelName(route.escalated_from)})`
+  }
+  let cost
+  if (usage?.cached) cost = 'cached, free'
+  else if (route?.free || route?.executor === 'direct')
+    cost = route?.would_cost_usd > 0 ? `free, saved ${formatCost(route.would_cost_usd)}` : 'free'
+  else cost = usage?.cost_usd ? formatCost(usage.cost_usd) : 'cost not reported'
+  const why = [...(route?.escalated_from ? [`escalated: ${route.escalated_from.reason}`] : []), ...(route?.reasons ?? [])]
+  const tokens = usage && (usage.tokens_in || usage.tokens_out) ? `${formatTokens(usage.tokens_in)} in, ${formatTokens(usage.tokens_out)} out` : null
+  return {
+    text: [model, cost, formatSeconds(route?.elapsed_ms)].filter(Boolean).join(' · '),
+    title: [tokens, ...why].filter(Boolean).join('; ') || undefined,
+  }
 }
 
-// What a free answer would have cost on Claude Sonnet.
-export function savingsLabel(route) {
-  return route?.free && route.would_cost_usd > 0 ? `saved ${formatCost(route.would_cost_usd)} vs Sonnet` : null
-}
-
-// Validation results under a reply: completeness, code syntax, proposed edits.
+// Failed checks under a reply (completeness, code syntax, edits); passing ones are not shown.
 function Checks({ checks }) {
-  const items = checks?.items ?? []
-  if (!items.length) return null
-  const shown = items.filter((c) => !(c.name === 'complete' && c.ok && c.detail === 'looks complete'))
+  const failed = (checks?.items ?? []).filter((c) => !c.ok)
+  if (!failed.length) return null
   return (
     <ul data-testid="checks" className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
-      {shown.length === 0 && <li className="text-zinc-600">✓ checks passed</li>}
-      {shown.map((c, i) => (
-        <li key={i} data-ok={c.ok ? 'true' : 'false'} className={c.ok ? 'text-zinc-500' : 'text-red-300/90'}>
-          {c.ok ? '✓' : '✗'} {c.name}: {c.detail}
+      {failed.map((c, i) => (
+        <li key={i} className="text-red-300/90">
+          ✗ {c.name}: {c.detail}
         </li>
       ))}
     </ul>
@@ -309,9 +307,7 @@ function Message({ message, onSend }) {
   if (message.status === 'queued') {
     return <div className="text-sm text-zinc-500">Queued for your laptop…</div>
   }
-  const usage = usageLabel(message.meta?.usage)
-  const model = routeLabel(message.meta?.route)
-  const saved = savingsLabel(message.meta?.route)
+  const foot = footer(message.meta)
   const changes = message.meta?.changes
   return (
     <div className={`leading-relaxed ${message.status === 'error' ? 'text-red-300' : 'text-zinc-200'}`}>
@@ -327,25 +323,9 @@ function Message({ message, onSend }) {
       )}
       {changes?.files?.length > 0 && <ChangeSet changes={changes} onSend={onSend} />}
       {message.status === 'stopped' && <div className="mt-1 text-xs text-zinc-500">stopped</div>}
-      {(usage || model) && !streaming && (
-        <div data-testid="usage" className="mt-1.5 font-mono text-[11px] text-zinc-600">
-          {model && (
-            <span data-testid="route" title={routeTitle(message.meta.route)}>
-              {model}
-              {usage ? ' · ' : ''}
-            </span>
-          )}
-          {usage}
-          {saved && (
-            <span
-              data-testid="saved"
-              className="text-emerald-400/70"
-              title={`Handled by ${modelName(message.meta.route)} for free. Claude Sonnet would have cost about ${formatCost(message.meta.route.would_cost_usd)}.`}
-            >
-              {' · '}
-              {saved}
-            </span>
-          )}
+      {foot && !streaming && (
+        <div data-testid="usage" title={foot.title} className="mt-1.5 text-[11px] text-zinc-600">
+          {foot.text}
         </div>
       )}
       {!streaming && <Checks checks={message.meta?.checks} />}

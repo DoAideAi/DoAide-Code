@@ -188,7 +188,10 @@ def model_comparison(store: Store, user_email: str, *, days: int = 30, now: floa
                 "escalated": r["escalated"],
                 # Local: answers good enough on the first try. Paid: answers that passed every check.
                 "quality": rate(r["answered"], tries) if r["kind"] == "local" else rate(r["passed"], r["checked"]),
-                "cost_per_task": round(r["cost_usd"] / r["answered"], 6) if r["answered"] else None,
+                # A paid model that reported no cost (Codex) is "not reported", never free.
+                "cost_per_task": round(r["cost_usd"] / r["answered"], 6)
+                if r["answered"] and (r["kind"] == "local" or r["cost_usd"] > 0)
+                else None,
                 "tokens_per_task": r["tokens"] // r["answered"] if r["answered"] else None,
                 "median_seconds": round(times[len(times) // 2] / 1000, 1) if times else None,
                 "saved_usd": round(r["would_cost_usd"], 4),

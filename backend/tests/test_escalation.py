@@ -57,8 +57,8 @@ async def test_a_good_local_answer_is_shown_and_sonnet_never_runs(store):
     assert sonnet.jobs == [] and outcome.executor == "ollama" and sent == GOOD
     route = outcome.meta()["route"]
     assert route["free"] is True and "escalated_from" not in route
-    # What Sonnet would have charged: (1000 * 3 + 200 * 15) / 1M.
-    assert route["would_cost_usd"] == pytest.approx(0.006)
+    # What Sonnet would have charged: (1000 * 2 + 200 * 10) / 1M.
+    assert route["would_cost_usd"] == pytest.approx(0.004)
 
 
 @pytest.mark.parametrize(

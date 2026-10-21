@@ -86,8 +86,9 @@ def usage_for(model: str, input_tokens: int, output_tokens: int) -> Usage:
 
 
 # Claude Sonnet list price per 1M tokens (input, output): what a free answer would have cost had
-# it gone to the default paid model ("saved" in the UI and the usage dashboard).
-SONNET_RATES = (3.00, 15.00)
+# it gone to the default paid model ("saved" in the UI and the usage dashboard). Claude Sonnet 5.5,
+# which the CLI's `sonnet` alias runs (platform.claude.com/docs/en/about-claude/pricing, 2026-10-21).
+SONNET_RATES = (2.00, 10.00)
 
 
 def sonnet_equivalent(input_tokens: int, output_tokens: int) -> float:

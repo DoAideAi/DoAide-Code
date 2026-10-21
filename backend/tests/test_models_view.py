@@ -97,3 +97,10 @@ async def test_an_edit_that_fails_its_checks_is_not_written(repo, store):
 def test_prompts_keep_code_out_of_the_reply(style):
     prompt = system_prompt(style, "edit")
     assert "Do not print code blocks in your reply" in prompt and "fenced" not in prompt
+
+
+def test_a_paid_model_with_no_reported_cost_is_not_shown_as_free(store):
+    session = store.create_session("me@x.com")["id"]
+    reply(store, session, 1, {"executor": "codex", "model": "gpt-6-astra", "free": False}, cost=0.0)
+    row = model_comparison(store, "me@x.com", days=30, now=NOW)["models"][0]
+    assert row["kind"] == "paid" and row["cost_per_task"] is None and row["cost_vs_sonnet"] is None

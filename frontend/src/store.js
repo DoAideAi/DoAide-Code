@@ -1,9 +1,6 @@
 import { create } from 'zustand'
 
 export const initialChat = {
-  sessionId: null,
-  title: null,
-  source: null, // 'mcp' when Claude Code (via MCP) started this conversation
   project: null,
   messages: [],
   serverStatus: 'idle', // idle | busy | error
@@ -12,7 +9,6 @@ export const initialChat = {
   // What the laptop can run, detected from `ollama list` / `claude auth status` /
   // `codex login status`; null until the laptop (or local server) reports it.
   models: null,
-  // The model picked in the UI ({ tool, model }), or null for automatic routing.
 }
 
 // Pure reducer for server events, kept separate from the store so it is easy to test.
@@ -21,9 +17,6 @@ export function applyEvent(state, event) {
     case 'snapshot':
       return {
         ...state,
-        sessionId: event.session_id,
-        title: event.title ?? null,
-        source: event.source ?? null,
         project: event.project,
         messages: event.messages,
         serverStatus: event.status,
