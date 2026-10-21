@@ -105,7 +105,8 @@ Work as a precise coding agent in the user's repository (read-only). Prefer code
 # One worked example of the edit-block format, for small models on edit-shaped tasks.
 FEW_SHOT_EDIT = (
     "## File: app/util.py\n```python\ndef add(a, b):\n    return a - b\n```\n\n# Request\nfix add, it subtracts",
-    "`add` subtracts instead of adding.\n\napp/util.py\n<<<<<<< SEARCH\n    return a - b\n=======\n"
+    # Says the change, not the bug: small models copy this line's shape ("X returns a float").
+    "Make `add` add instead of subtract.\n\napp/util.py\n<<<<<<< SEARCH\n    return a - b\n=======\n"
     "    return a + b\n>>>>>>> REPLACE",
 )
 
