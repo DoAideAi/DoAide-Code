@@ -17,8 +17,10 @@ import asyncio
 import contextlib
 import json
 import logging
+import shutil
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from .chat import public_message
@@ -327,6 +329,56 @@ async def warm_models(router: RouterBrain) -> None:
             await executor.warm()
 
 
+def frontend_stale(dist: Path) -> bool:
+    """In a source checkout, is the UI build older than frontend/src? The backend is an editable
+    install, so a restart runs new code, but the UI only changes when it is rebuilt: a stale build
+    served the old chat (no Dispatch label, an Undo button) after both had changed."""
+    source = dist.parent / "src"
+    if not source.is_dir():
+        return False  # an installed agent ships a build and no sources
+    index = dist / "index.html"
+    if not index.is_file():
+        return True
+    built = index.stat().st_mtime
+    inputs = [p for p in source.rglob("*") if p.is_file()]
+    inputs += [dist.parent / name for name in ("index.html", "package.json") if (dist.parent / name).is_file()]
+    return any(p.stat().st_mtime > built for p in inputs)
+
+
+async def rebuild_frontend(dist: Path, command: tuple[str, ...] = ("npm", "run", "build")) -> bool:
+    """Rebuild a stale UI before serving it; on any failure the old build is served as before."""
+    if not frontend_stale(dist):
+        return False
+    if shutil.which(command[0]) is None:
+        log.warning("UI build in %s is older than its sources and %s is not on PATH", dist, command[0])
+        return False
+    log.info("UI build is older than frontend/src; rebuilding")
+    # vite empties dist/ before it builds, so keep the old build to put back if this one fails.
+    previous = dist.with_name(dist.name + ".previous")
+    shutil.rmtree(previous, ignore_errors=True)
+    if dist.is_dir():
+        shutil.copytree(dist, previous)
+    failure = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *command, cwd=dist.parent, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+        )
+        output, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
+        if proc.returncode != 0:
+            failure = f"exit {proc.returncode}: {output.decode(errors='replace')[-2000:]}"
+    except (TimeoutError, OSError) as exc:
+        failure = str(exc) or type(exc).__name__
+    if failure is not None and previous.is_dir():
+        shutil.rmtree(dist, ignore_errors=True)
+        previous.rename(dist)
+    shutil.rmtree(previous, ignore_errors=True)
+    if failure is not None:
+        log.warning("UI rebuild failed, serving the old build: %s", failure)
+        return False
+    log.info("UI rebuilt")
+    return True
+
+
 async def serve_local_ui(settings: Settings, store: Store, router: RouterBrain, hub: MirrorHub) -> None:
     """The laptop's own UI at http://127.0.0.1:<port>, sharing this process's store and models.
     If the port is taken (say, by a separately started `doaide-code`), the agent runs without it."""
@@ -334,6 +386,7 @@ async def serve_local_ui(settings: Settings, store: Store, router: RouterBrain, 
 
     from .main import create_app
 
+    await rebuild_frontend(settings.frontend_dist)
     local_settings = replace(settings, mode="local")
     app = create_app(local_settings, store=store, router=router, hub=hub)
     server = uvicorn.Server(uvicorn.Config(app, host=settings.host, port=settings.port, log_level="warning"))

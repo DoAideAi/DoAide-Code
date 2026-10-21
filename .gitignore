@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 node_modules/
 frontend/dist/
+frontend/dist.previous/
 *.db
 *.db-wal
 *.db-shm

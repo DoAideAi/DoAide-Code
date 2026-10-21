@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
 import pytest
 
-from doaide_code.agent import LaptopAgent
+from doaide_code.agent import LaptopAgent, frontend_stale, rebuild_frontend
 from doaide_code.router import RouterBrain
 from doaide_code.runner import NO_EXECUTOR
 
@@ -183,3 +184,50 @@ async def test_serve_end_to_end_against_real_hub(settings, store, executors, tmp
         agent_task.cancel()
         server.should_exit = True
         await asyncio.gather(agent_task, server_task, return_exceptions=True)
+
+
+def ui_checkout(tmp_path: Path, built: float, edited: float) -> Path:
+    """frontend/ with a build made at `built` and a source file last changed at `edited`."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "dist").mkdir()
+    source, index = tmp_path / "src" / "App.jsx", tmp_path / "dist" / "index.html"
+    source.write_text("export default 1")
+    index.write_text("<html></html>")
+    os.utime(source, (edited, edited))
+    os.utime(index, (built, built))
+    return tmp_path / "dist"
+
+
+def test_a_build_older_than_the_ui_sources_is_stale(tmp_path):
+    # Live: the agent served a build from before the Dispatch label, so tasks looked unlabelled.
+    assert frontend_stale(ui_checkout(tmp_path, built=1_000, edited=2_000))
+
+
+def test_a_build_newer_than_the_ui_sources_is_current(tmp_path):
+    assert not frontend_stale(ui_checkout(tmp_path, built=2_000, edited=1_000))
+
+
+def test_an_installed_agent_without_ui_sources_is_never_rebuilt(tmp_path):
+    (tmp_path / "dist").mkdir()
+    assert not frontend_stale(tmp_path / "dist")
+
+
+async def test_a_stale_ui_is_rebuilt_before_it_is_served(tmp_path):
+    dist = ui_checkout(tmp_path, built=1_000, edited=2_000)
+    build = ("sh", "-c", "echo '<html>new</html>' > dist/index.html")
+    assert await rebuild_frontend(dist, build)
+    assert "new" in (dist / "index.html").read_text()
+    assert not frontend_stale(dist)
+
+
+async def test_a_current_ui_is_not_rebuilt(tmp_path):
+    dist = ui_checkout(tmp_path, built=2_000, edited=1_000)
+    assert not await rebuild_frontend(dist, ("sh", "-c", "exit 1"))
+
+
+async def test_a_failed_rebuild_keeps_serving_the_old_build(tmp_path):
+    dist = ui_checkout(tmp_path, built=1_000, edited=2_000)
+    assert not await rebuild_frontend(dist, ("sh", "-c", "rm dist/index.html; exit 1"))
+    assert (dist / "index.html").read_text() == "<html></html>"
+    assert not (tmp_path / "dist.previous").exists()
+    assert not await rebuild_frontend(dist, ("no-such-build-tool",))
