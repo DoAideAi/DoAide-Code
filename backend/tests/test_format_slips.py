@@ -11,6 +11,7 @@ from doaide_code.executors import Job
 from doaide_code.executors.base import user_message
 from doaide_code.router import RouterBrain
 from doaide_code.runner import Outcome, run_job
+from doaide_code.validate import incomplete_reason
 
 from .conftest import FakeExecutor
 
@@ -76,3 +77,14 @@ def test_a_why_question_is_answered_not_debugged():
     assert asking.tier == 1 and classify_task("why is the sky blue").tier == 0
     assert classify_task("why does test_charge fail").kind == "debug"
     assert classify_task("why is add in util.py wrong").kind == "debug"
+
+
+def test_a_short_instruction_naming_code_is_an_edit_and_a_claimed_edit_must_exist():
+    # Live: classed as a question, the 7b model replied "Usage RE updated to accept 'what calls X'
+    # questions." and changed nothing.
+    task = classify_task("In backend/doaide_code/fastpath.py, make USAGE_RE also accept 'what calls X' questions.")
+    assert task.kind == "edit" and task.tier == 1
+    assert incomplete_reason("Usage RE updated to accept 'what calls X' questions.", "question")
+    assert incomplete_reason("Updated the handler.", "explain")
+    assert incomplete_reason("It returns the updated list.", "question") is None
+    assert incomplete_reason("The limit was changed to 5 in 2021 by the config loader.", "question") is None

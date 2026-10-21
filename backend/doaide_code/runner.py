@@ -31,7 +31,7 @@ from .db import Store
 from .detect import ModelDetector, answer_access, answer_meta, meta_question
 from .executors import Executor, ExecutorError, Job, Turn, build_executors
 from .executors.base import user_message
-from .fastpath import direct_answer, math_answer
+from .fastpath import direct_answer, math_answer, rename_answer
 from .history import fit_history
 from .prompts import PROMPT_VERSION
 from .router import RouteDecision, RouterBrain, is_local
@@ -222,6 +222,15 @@ async def _run_job(
         outcome.add_usage(Usage("none"))
         store.record_usage(source, "direct", None, 0, 0, 0.0)
         await on_delta(answer)
+        return outcome
+    if job.cwd is not None and (renamed := await asyncio.to_thread(rename_answer, job.cwd, job.prompt)):
+        # A rename is mechanical: edit blocks from a project search, checked and tested like any edit.
+        outcome.route = {"executor": "direct", "model": None, "free": True, "reasons": ["renamed without a model"]}
+        outcome.content, outcome.status, outcome.executor = renamed, "done", "direct"
+        outcome.add_usage(Usage("none"))
+        store.record_usage(source, "direct", None, 0, 0, 0.0)
+        await _preview_changes(store, job, outcome, None, None, on_delta, source)
+        await on_delta(outcome.content)
         return outcome
 
     # Earlier meta questions were answered (or, before detection, made up) outside the models'

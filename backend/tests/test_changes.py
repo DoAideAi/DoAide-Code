@@ -94,7 +94,7 @@ async def test_chat_edits_that_pass_are_written_and_undo_restores_them(repo, sto
         pass
 
     before = (repo / "app.py").read_text()
-    await run_job(router, store, Job(prompt="rename old to new", cwd=repo), outcome, on_delta)
+    await run_job(router, store, Job(prompt="tidy the helper: rename old to new", cwd=repo), outcome, on_delta)
     # Only the summary in the reply: the code went to the files.
     assert outcome.content == "Rename the helper." and "<<<<<<<" not in outcome.content
     changes = outcome.meta()["changes"]
@@ -115,7 +115,7 @@ async def test_undo_refuses_files_edited_since(repo, store):
     async def on_delta(_):
         pass
 
-    await run_job(router, store, Job(prompt="rename old to new", cwd=repo), outcome, on_delta)
+    await run_job(router, store, Job(prompt="tidy the helper: rename old to new", cwd=repo), outcome, on_delta)
     (repo / "app.py").write_text("edited by hand\n")
     assert "changed after DoAide wrote it" in run_command(store, "owner@example.com", "/undo").text
     assert (repo / "app.py").read_text() == "edited by hand\n" and (repo / "notes.txt").exists()
@@ -128,7 +128,7 @@ async def test_mcp_edits_are_proposed_then_apply_writes(repo, store):
     async def on_delta(_):
         pass
 
-    await run_job(router, store, Job(prompt="rename old to new", cwd=repo), outcome, on_delta, source="mcp")
+    await run_job(router, store, Job(prompt="tidy the helper: rename old to new", cwd=repo), outcome, on_delta, source="mcp")
     assert outcome.content == "Rename the helper."
     changes = outcome.meta()["changes"]
     assert changes["status"] == "pending" and "def old" in (repo / "app.py").read_text()

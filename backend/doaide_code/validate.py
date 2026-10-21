@@ -55,6 +55,11 @@ _NO_ACCESS = re.compile(
 )
 NO_ACCESS_REASON = "the answer says DoAide cannot access your files, but it can"
 NEEDS_FILES_REASON = "the model said it could not see the code it needed"
+_CLAIMS_CHANGE = re.compile(
+    r"^(?:i(?:'ve| have)?\s+)?(?:updated|added|changed|renamed|fixed|modified|removed|implemented|refactored)\b"
+    r"|^[\w ]{0,40}\b(?:updated|changed|modified|extended)\s+to\s+(?:accept|support|handle|use|include|return|allow)\b",
+    re.I,
+)
 CUT_OFF_EDIT = "an edit block was cut off"
 # Incomplete answers a model fixes when told what was wrong (not missing context or a refusal).
 FORMAT_SLIPS = {CUT_OFF_EDIT}
@@ -83,6 +88,9 @@ def incomplete_reason(answer: str, kind: str, *, reads_files: bool = False) -> s
         return NEEDS_FILES_REASON
     if kind in _EDIT_KINDS and "```" not in text and not parse_edits(text) and len(text) < 400:
         return "no code or edit was proposed"
+    if _CLAIMS_CHANGE.match(text) and "```" not in text and not parse_edits(text) and len(text) < 400:
+        # Live: "Usage RE updated to accept 'what calls X' questions." with no edit at all.
+        return "it says it changed code but shows no edit"
     if kind not in {"math", "question"} and len(text) < 25:
         return "answer too short"
     return None

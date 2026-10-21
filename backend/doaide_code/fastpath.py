@@ -8,6 +8,7 @@ import math
 import operator
 import os
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 from .context import LANG, MAX_FILE_BYTES, MAX_SCAN_FILES, SKIP_NAMES, _is_test, _is_text
@@ -42,6 +43,28 @@ _IMPORT_LINE = re.compile(r"^\s*(?:from\s+\S+\s+)?import\b|^\s*(?:const|let|var)
 MAX_HITS = 40
 
 
+def _files_with(root: Path, needle: str) -> Iterator[tuple[str, str]]:
+    """(path, text) of the project's text files that contain `needle`."""
+    scanned = 0
+    for current, dirs, names in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in IGNORED and not d.startswith(".") and not d.endswith(".egg-info"))
+        for fname in sorted(names):
+            path = Path(current) / fname
+            if fname in IGNORED or fname in SKIP_NAMES or not _is_text(fname):
+                continue
+            scanned += 1
+            try:
+                if path.stat().st_size > MAX_FILE_BYTES:
+                    continue
+                text = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            if needle in text:
+                yield path.relative_to(root).as_posix(), text
+        if scanned >= MAX_SCAN_FILES:
+            return
+
+
 def _definition(name: str) -> re.Pattern[str]:
     n = re.escape(name)
     return re.compile(rf"^\s*(?:async\s+)?(?:def|class|function|func|fn)\s+{n}\b|^\s*(?:export\s+)?(?:const|let|var)\s+{n}\s*=|^{n}\s*(?::[^=]+)?=(?!=)")
@@ -58,31 +81,13 @@ def usage_answer(root: Path, prompt: str) -> str | None:
     word, definition = re.compile(rf"(?<![\w.]){re.escape(name)}\b|(?<=\.){re.escape(name)}\b"), _definition(name)
     defined: list[str] = []
     used: list[str] = []
-    scanned = 0
-    for current, dirs, names in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in IGNORED and not d.startswith(".") and not d.endswith(".egg-info"))
-        for fname in sorted(names):
-            path = Path(current) / fname
-            if fname in IGNORED or fname in SKIP_NAMES or not _is_text(fname):
+    for rel, text in _files_with(root, name):
+        for number, line in enumerate(text.splitlines(), 1):
+            if not word.search(line) or _IMPORT_LINE.match(line):
                 continue
-            scanned += 1
-            try:
-                if path.stat().st_size > MAX_FILE_BYTES:
-                    continue
-                text = path.read_text(encoding="utf-8", errors="ignore")
-            except OSError:
-                continue
-            if name not in text:
-                continue
-            rel = path.relative_to(root).as_posix()
-            for number, line in enumerate(text.splitlines(), 1):
-                if not word.search(line) or _IMPORT_LINE.match(line):
-                    continue
-                tick = "``" if "`" in line else "`"
-                hit = f"- `{rel}:{number}` {tick}{line.strip()[:120]}{tick}"
-                (defined if definition.match(line) else used).append(hit)
-        if scanned >= MAX_SCAN_FILES:
-            break
+            tick = "``" if "`" in line else "`"
+            hit = f"- `{rel}:{number}` {tick}{line.strip()[:120]}{tick}"
+            (defined if definition.match(line) else used).append(hit)
     if not defined and not re.search(r"_|[a-z][A-Z]|^[A-Z]", name) and "`" not in match.group(0):
         return None  # a plain word ("where is caching used?") may be a concept, not a name
     if not defined and not used:
@@ -100,6 +105,47 @@ def usage_answer(root: Path, prompt: str) -> str | None:
     else:
         parts.append("It is not used anywhere else.")
     return "\n".join(parts)
+
+
+# "Rename X to Y" (optionally "in app/x.py"): every whole-word occurrence across the project,
+# written as edit blocks so it is validated, applied and undoable like a model's edit. Models
+# renamed the definition and missed the uses, then Sonnet was paid to finish.
+_IDENT = r"`?([A-Za-z_]\w*)(?:\(\))?`?"
+_IN_PATH = r"(?:\s+in\s+`?([\w./-]+\.\w+)`?)?"
+RENAME_RE = re.compile(
+    rf"^\s*(?:in\s+`?([\w./-]+\.\w+)`?,\s*)?rename\s+(?:the\s+)?"
+    rf"(?:(?:constant|function|method|class|variable|var|field|attribute|parameter|param|helper|type)\s+)?"
+    rf"{_IDENT}{_IN_PATH}\s+to\s+{_IDENT}{_IN_PATH}\s*[.!]?\s*$",
+    re.I,
+)
+
+
+def rename_answer(root: Path, prompt: str) -> str | None:
+    """Edit blocks renaming a name everywhere, or None when a model should handle the request
+    (not a plain rename, the name is not in the named file, or the new name is already taken)."""
+    match = RENAME_RE.match(prompt)
+    if not match:
+        return None
+    first, old, path_a, new, path_b = match.groups()
+    named = first or path_a or path_b
+    if old == new:
+        return None
+    word = re.compile(rf"\b{re.escape(old)}\b")
+    files = [(rel, text) for rel, text in _files_with(root, old) if word.search(text)]
+    if not files or any(re.search(rf"\b{re.escape(new)}\b", text) for _, text in _files_with(root, new)):
+        return None
+    if named and not any(rel == named.lstrip("./") or rel.endswith("/" + named.lstrip("./")) for rel, _ in files):
+        return None
+    blocks, count = [], 0
+    for rel, text in files:
+        lines = text.splitlines()
+        hits = [i for i, line in enumerate(lines) if word.search(line)]
+        span = lines[hits[0] : hits[-1] + 1]
+        count += sum(len(word.findall(line)) for line in span)
+        renamed = [word.sub(new, line) for line in span]
+        blocks.append(f"{rel}\n<<<<<<< SEARCH\n" + "\n".join(span) + "\n=======\n" + "\n".join(renamed) + "\n>>>>>>> REPLACE")
+    where = f"{len(files)} file{'s' * (len(files) != 1)}"
+    return f"Renamed `{old}` to `{new}`: {count} occurrence{'s' * (count != 1)} in {where}.\n\n" + "\n\n".join(blocks)
 
 
 _MATH_PROMPT = re.compile(

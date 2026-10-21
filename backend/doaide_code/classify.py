@@ -40,6 +40,8 @@ _SIGNALS: list[tuple[float, str, re.Pattern[str]]] = [
 ]
 # Pure questions with no project work in them (also after "In app/x.py, ...").
 _QUESTION = re.compile(r"^\s*(?:in [^,?]+,\s*)?(what|how|why|when|is|are|can|does|do|which|who|define|difference between)\b", re.I)
+# A file path or code identifier: a short non-question that names one is an instruction.
+_NAMES_CODE = re.compile(r"[\w-]+\.[a-z]{1,5}\b|`[^`]+`|\b_*[A-Za-z]+_\w+\b|\b[a-z]+[A-Z]\w*\b")
 _WHY = re.compile(r"^\s*(?:in [^,?]+,\s*)?why\b", re.I)
 # "calculate"/"compute" only with a number in the request: "what does charge() compute" is code.
 _MATH = re.compile(r"^[\s\d+\-*/%^().,=?x×÷]+$|\b(?:calculate|compute)\b(?=.*\d)|\b(convert \d|how much is|what is \d)", re.I)
@@ -108,8 +110,9 @@ def classify_task(prompt: str) -> TaskProfile:
         kind = "math" if _MATH.search(text) else "question"
     else:
         kind = max(kinds, key=kinds.__getitem__)
-    if kind == "question" and not _QUESTION.search(text) and words > 12:
-        # An unclassified instruction ("make the header sticky") is still project work.
+    if kind == "question" and not _QUESTION.search(text) and (words > 12 or words >= 4 and _NAMES_CODE.search(text)):
+        # An unclassified instruction ("make the header sticky", "In x.py, make FOO accept bar")
+        # is still project work.
         score += 3
         kind = "edit"
         reasons.append("instruction (+3)")
