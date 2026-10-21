@@ -366,6 +366,18 @@ class Store:
     def list_jobs(self, user_email: str) -> list[dict[str, Any]]:
         return self._all("SELECT * FROM pending_jobs WHERE user_email = ? ORDER BY created_at, rowid", (user_email,))
 
+    def get_job(self, job_id: str) -> dict[str, Any] | None:
+        return self._one("SELECT * FROM pending_jobs WHERE id = ?", (job_id,))
+
+    def fail_interrupted(self) -> int:
+        """Replies left "streaming" by a restart with no queued job behind them (those are re-sent):
+        mark them interrupted, so no device waits on them forever. Returns how many."""
+        return self._exec(
+            "UPDATE messages SET status = 'error', content = content || ? "
+            "WHERE status = 'streaming' AND id NOT IN (SELECT id FROM pending_jobs)",
+            ("\n\n[interrupted by a restart]",),
+        ).rowcount
+
     def delete_job(self, job_id: str) -> None:
         self._exec("DELETE FROM pending_jobs WHERE id = ?", (job_id,))
 

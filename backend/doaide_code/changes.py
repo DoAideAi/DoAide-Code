@@ -12,6 +12,7 @@ import asyncio
 import difflib
 import hashlib
 import json
+import logging
 import re
 import shutil
 import tempfile
@@ -22,6 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from .files import FileAccessError, resolve_in_root
+
+log = logging.getLogger(__name__)
 
 SEARCH_RE = re.compile(r"^\s*<{5,9}\s*SEARCH\s*$")
 DIVIDER_RE = re.compile(r"^\s*={5,9}\s*$")
@@ -120,8 +123,40 @@ def _path_before(lines: list[str], index: int) -> str | None:
     return None
 
 
+def _normalize(text: str) -> list[str]:
+    """Lines of an answer, with a marker glued to the next text split off (">>>>>>> REPLACEapp.py")."""
+    return re.sub(r"^(\s*>{5,9}\s*REPLACE)[ \t]*(\S)", r"\1\n\2", text, flags=re.M).splitlines()
+
+
+def _block(lines: list[str], i: int) -> tuple[list[str], list[str], int] | None:
+    """The edit block whose SEARCH marker is line i: (search, replace, index of its last line),
+    or None if it is cut off. Local models sometimes drop the ======= divider and put the new code
+    after the REPLACE marker; that form is read too, the replacement running up to the next block."""
+    j = i + 1
+    while j < len(lines) and not (DIVIDER_RE.match(lines[j]) or REPLACE_RE.match(lines[j]) or SEARCH_RE.match(lines[j])):
+        j += 1
+    if j >= len(lines) or SEARCH_RE.match(lines[j]):
+        return None
+    if DIVIDER_RE.match(lines[j]):
+        k = j + 1
+        while k < len(lines) and not REPLACE_RE.match(lines[k]):
+            k += 1
+        return (lines[i + 1 : j], lines[j + 1 : k], k) if k < len(lines) else None
+    # No divider: SEARCH lines, REPLACE marker, then the replacement until the next block's path.
+    nxt = next((n for n in range(j + 1, len(lines)) if SEARCH_RE.match(lines[n])), len(lines))
+    end = nxt - 1
+    if nxt < len(lines):
+        while end > j and (not lines[end].strip() or FENCE_RE.match(lines[end].strip())):
+            end -= 1
+        if end > j and _path_before(lines, nxt) is not None and lines[end].strip().strip("`*#: ") == _path_before(lines, nxt):
+            end -= 1
+    while end > j and (not lines[end].strip() or FENCE_RE.match(lines[end].strip())):
+        end -= 1
+    return lines[i + 1 : j], lines[j + 1 : end + 1], end
+
+
 def parse_edits(text: str) -> list[Edit]:
-    lines = text.splitlines()
+    lines = _normalize(text)
     edits: list[Edit] = []
     i = 0
     while i < len(lines):
@@ -129,19 +164,15 @@ def parse_edits(text: str) -> list[Edit]:
             i += 1
             continue
         path = _path_before(lines, i)
-        search: list[str] = []
-        replace: list[str] = []
-        j = i + 1
-        while j < len(lines) and not DIVIDER_RE.match(lines[j]):
-            search.append(lines[j])
-            j += 1
-        k = j + 1
-        while k < len(lines) and not REPLACE_RE.match(lines[k]):
-            replace.append(lines[k])
-            k += 1
-        if path and j < len(lines) and k < len(lines):
-            edits.append(Edit(path, _join(search), _join(replace)))
-        i = k + 1
+        block = _block(lines, i)
+        if block is None:
+            break
+        search, replace, end = block
+        edit = Edit(path, _join(search), _join(replace)) if path else None
+        # The same block written twice is one edit.
+        if edit is not None and edit not in edits:
+            edits.append(edit)
+        i = end + 1
     return edits
 
 
@@ -151,7 +182,7 @@ def _join(lines: list[str]) -> str:
 
 def strip_edits(text: str) -> str:
     """The answer's prose with edit blocks (and the fences/paths around them) removed."""
-    lines = text.splitlines()
+    lines = _normalize(text)
     drop: set[int] = set()
     i = 0
     while i < len(lines):
@@ -174,9 +205,8 @@ def strip_edits(text: str) -> str:
                 break
             drop.add(back)
             back -= 1
-        end = i
-        while end < len(lines) and not REPLACE_RE.match(lines[end]):
-            end += 1
+        block = _block(lines, i)
+        end = block[2] if block else len(lines) - 1
         if seen_fence and end + 1 < len(lines) and FENCE_RE.match(lines[end + 1].strip()):
             end += 1
         drop.update(range(i, min(end + 1, len(lines))))
@@ -199,7 +229,48 @@ def _replace_once(content: str, search: str, replace: str) -> tuple[str | None, 
     for start in range(len(have) - len(want) + 1):
         if [line.rstrip() for line in have[start : start + len(want)]] == want:
             return "".join(have[:start]) + replace + "".join(have[start + len(want) :]), None
+    # Same lines at another indentation (small models often get the nesting depth wrong): match
+    # them, and move the replacement by the same amount.
+    bare = [line.strip() for line in want]
+    for start in range(len(have) - len(want) + 1):
+        window = have[start : start + len(want)]
+        if [line.strip() for line in window] == bare and any(bare):
+            shift = len(_indent(window)) - len(_indent(want))
+            log.info("SEARCH matched at a different indentation; replacement moved %+d", shift)
+            return "".join(have[:start]) + _reindent(replace, shift) + "".join(have[start + len(want) :]), None
     return None, None
+
+
+def _indent(lines: list[str]) -> str:
+    """Leading whitespace of the first non-blank line."""
+    first = next((line for line in lines if line.strip()), "")
+    return first[: len(first) - len(first.lstrip())]
+
+
+def _reindent(text: str, shift: int) -> str:
+    """Every non-blank line moved right (shift > 0) or left by `shift` spaces."""
+    if shift == 0:
+        return text
+    out = []
+    for line in text.splitlines(keepends=True):
+        if not line.strip():
+            out.append(line)
+        elif shift > 0:
+            out.append(" " * shift + line)
+        else:
+            lead = len(line) - len(line.lstrip(" "))
+            out.append(line[min(lead, -shift) :])
+    return "".join(out)
+
+
+def _compiles(path: str, text: str) -> bool:
+    if not path.endswith(".py"):
+        return True
+    try:
+        compile(text, path, "exec")
+    except SyntaxError:
+        return False
+    return True
 
 
 def build_changeset(root: Path, edits: list[Edit]) -> Changeset:
@@ -226,6 +297,14 @@ def build_changeset(root: Path, edits: list[Edit]) -> Changeset:
             change.problems.append(f"{rel}: file does not exist; SEARCH cannot match")
             continue
         updated, warning = _replace_once(change.new, edit.search, edit.replace)
+        if updated is not None and not _compiles(rel, updated) and _compiles(rel, change.new):
+            # The replacement's own indentation is off from the code it replaces: align it.
+            shift = len(_indent(edit.search.splitlines())) - len(_indent(edit.replace.splitlines()))
+            aligned, _ = _replace_once(change.new, edit.search, _reindent(edit.replace, shift)) if shift else (None, None)
+            if aligned is not None and _compiles(rel, aligned):
+                # A repair, not a problem: the syntax and lint checks still run on the result.
+                log.info("%s: replacement re-indented %+d to match the code it replaces", rel, shift)
+                updated = aligned
         if updated is None:
             first = edit.search.strip().splitlines()[0][:80]
             change.problems.append(f"{rel}: SEARCH text not found (starts with {first!r})")

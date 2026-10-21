@@ -24,7 +24,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from .changes import apply_record, propose, repair_prompt, strip_edits
+from .changes import apply_record, parse_edits, propose, repair_prompt, strip_edits, undo_record
 from .config import Settings
 from .context import Ranking, git_context, mentioned_paths, rank_files
 from .db import Store
@@ -35,6 +35,7 @@ from .history import fit_history
 from .prompts import PROMPT_VERSION
 from .router import RouteDecision, RouterBrain, is_local
 from .usage import Usage, sonnet_equivalent
+from .verify import failing_tests
 from .validate import (
     capability_claim,
     check_code_blocks,
@@ -327,6 +328,7 @@ async def _run_job(
             continue
         store.record_executor(executor.name, ok=True, elapsed_ms=_ms(started))
         outcome.executor, outcome.status = executor.name, "done"
+        outcome.content = _without_narration(outcome.content, used)
         outcome.route = _route(executor, decision, used, escalated=escalated, skipped=skipped)
         if run.resume and resumed:
             outcome.route["reasons"].append(resumed)
@@ -334,6 +336,7 @@ async def _run_job(
             outcome.route["reasons"].append(note)
 
         code_checks: list[dict] | None = None
+        verified = False
         if trial:
             problem, code_checks, fix = await _vet(job, outcome.content, decision.kind)
             if problem and fix:
@@ -346,6 +349,10 @@ async def _run_job(
                     if again is None:
                         retry_note = f"fixed by {executor.name} on a second try ({problem})"
                         outcome.content, problem, code_checks = repaired.content, None, again_checks
+            if problem is None and source in AUTO_APPLY_SOURCES:
+                # Passes the checks; does it pass the project's tests? (Written, tested, undone.)
+                problem = await _test_edits(job, outcome.content)
+                verified = problem is None
             if problem:
                 log.info("escalating from %s: %s", executor.name, problem)
                 escalated = _escalated_from(executor, used, problem)
@@ -375,7 +382,7 @@ async def _run_job(
         if used is not None and executor.tool == "claude":
             claude_session, claude_context = used.session_id, used.context_tokens
         # A repair round starts from the full context: the resumed session predates this answer.
-        await _preview_changes(store, job, outcome, executor, fresh, on_delta, source)
+        await _preview_changes(store, job, outcome, executor, fresh, on_delta, source, verified=verified)
         outcome.checks += edit_checks(outcome.changes)
         outcome.content = trim_reply(outcome.content)
         break
@@ -389,6 +396,15 @@ async def _run_job(
     if outcome.status == "done" and claude_session and job.cwd is not None and outcome.content.strip():
         store.cli_session_put(answer_anchor(outcome.content), claude_session, str(job.cwd), claude_context)
     return outcome
+
+
+def _without_narration(content: str, used: Usage | None) -> str:
+    """An agent's reply without the narration of its tool rounds ("Let me read runner.py..."): its
+    last message, when that message holds every edit block of the whole answer."""
+    final = (used.final_text if used else "").strip()
+    if not final or final == content.strip():
+        return content
+    return final if parse_edits(final) == parse_edits(content) else content
 
 
 def _resumed(job: Job, resume: Resume, ranking: Ranking | None, diff: str) -> tuple[Job, str]:
@@ -427,6 +443,25 @@ async def _drain_resumable(
         log.info("could not resume session %s (%s); starting a new one", run.resume, exc)
         outcome.content = ""
         return await _drain(executor, fresh, outcome, store, source, streamed, on_delta), fresh
+
+
+async def _test_edits(job: Job, answer: str) -> str | None:
+    """Write the answer's edits, run the project's tests, put the files back. Why the tests fail
+    (None when they pass, or there are no edits or tests)."""
+    if job.cwd is None or (changeset := await propose(job.cwd, answer)) is None or not changeset.changed:
+        return None
+    if changeset.all_problems:
+        return None
+    record = changeset.record()
+    try:
+        await asyncio.to_thread(apply_record, record)
+    except (ValueError, OSError):
+        return None
+    try:
+        return await failing_tests(job.cwd, [f.path for f in changeset.changed])
+    finally:
+        with contextlib.suppress(ValueError, OSError):
+            await asyncio.to_thread(undo_record, record)
 
 
 class _Abandoned(Exception):
@@ -602,6 +637,8 @@ async def _preview_changes(
     run: Job | None,
     on_delta: Callable[[str], Awaitable[None]],
     source: str,
+    *,
+    verified: bool = False,
 ) -> None:
     """Turn edit blocks in the answer into a validated changeset, repairing it once (silently) if
     it fails. A changeset that passes every check is written to the files at once for chat jobs
@@ -654,6 +691,14 @@ async def _preview_changes(
         except (ValueError, OSError) as exc:
             log.warning("could not write changes %s: %s", changeset.id, exc)
             outcome.content = f"{summary}\n\nNot written: {exc}".strip()
+            return
+        # The project's tests decide whether the edit stays (unless they already ran on it).
+        failure = None if verified else await failing_tests(job.cwd, [f.path for f in changeset.changed])
+        if failure:
+            with contextlib.suppress(ValueError, OSError):
+                await asyncio.to_thread(undo_record, record)
+            outcome.checks.append({"name": "tests", "ok": False, "detail": f"{failure}; the edit was undone"})
+            outcome.content = f"{summary or f'Proposed changes to {files}.'}\n\nNot kept: {failure} (type /apply to write it anyway)."
             return
         outcome.changes = store.set_changeset_status(changeset.id, "applied")
         outcome.content = summary or f"Updated {files}."

@@ -283,6 +283,7 @@ class RelayService:
     async def on_agent_event(self, user_email: str, event: dict[str, Any]) -> None:
         kind = event.get("type")
         if kind == "hello":
+            await self._adopt(user_email, event.get("running"))
             project = event.get("project")
             self._executors[user_email] = [str(e) for e in event.get("executors") or []]
             await self._set_models(user_email, event.get("models"))
@@ -328,6 +329,23 @@ class RelayService:
             await self._publish_status(user_email)
 
     # Internals
+
+    async def _adopt(self, user_email: str, running: Any) -> None:
+        """The laptop reconnected with a job still running. If it is still this user's queued job
+        (the hub restarted), wait for its answer instead of running it again; otherwise the hub
+        already gave up on it, so stop it."""
+        if not isinstance(running, str):
+            return
+        job = self.store.get_job(running)
+        if job is not None and job["user_email"] == user_email:
+            if self._running.get(user_email) in (None, running):
+                self._running[user_email] = running
+                self._partial.setdefault(user_email, "")
+            return
+        agent = self._agents.get(user_email)
+        if agent is not None:
+            with contextlib.suppress(Exception):
+                await agent.send_json({"type": "stop", "id": running})
 
     def _owned(self, user_email: str, message_id: str) -> dict[str, Any] | None:
         message = self.store.get_message(message_id) if MIRROR_ID.match(message_id) else None

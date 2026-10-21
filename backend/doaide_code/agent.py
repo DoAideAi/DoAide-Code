@@ -52,6 +52,9 @@ class LaptopAgent:
         self.store = store
         # The local UI's sync hub: jobs from the phone are shown there too (see _show_locally).
         self.local = local
+        # The current hub connection's sender. A running job outlives a dropped connection and
+        # reports through whichever connection is current when it finishes.
+        self._send: Send | None = None
         self.router = router
         self.workspace = workspace
         # Projects and the active project are kept per laptop owner in the local database.
@@ -72,7 +75,20 @@ class LaptopAgent:
         executors = [e.name for e in self.router.executors if await e.available()]
         models = await self.router.models(force=True)
         self._models = models
-        return {"type": "hello", "project": self.project_name(), "executors": executors, "models": models}
+        running = self._task_id if self._task is not None and not self._task.done() else None
+        # The job still running from before a reconnect: the hub adopts it or tells us to stop.
+        return {"type": "hello", "project": self.project_name(), "executors": executors, "models": models, "running": running}
+
+    def connected(self, send: Send | None) -> None:
+        self._send = send
+
+    async def emit(self, event: dict[str, Any], fallback: Send | None = None) -> None:
+        """Send to the hub over the current connection (else `fallback`, the one the job came on);
+        a dead connection drops the event, and the hub re-sends or fails the job."""
+        target = self._send or fallback
+        if target is not None:
+            with contextlib.suppress(Exception):
+                await target(event)
 
     async def watch_models(self, send: Send, interval: float = 60) -> None:
         """Re-detect models now and then, and tell the hub when something was installed, started,
@@ -90,6 +106,8 @@ class LaptopAgent:
     async def on_message(self, message: dict[str, Any], send: Send) -> None:
         kind = message.get("type")
         if kind == "job" and isinstance(message.get("id"), str) and isinstance(message.get("text"), str):
+            if message["id"] == self._task_id and self._task is not None and not self._task.done():
+                return  # re-sent after a reconnect: it is still running and will report when done
             await self.cancel()
             self._task_id = message["id"]
             self._task = asyncio.create_task(self.run(message, send))
@@ -134,8 +152,9 @@ class LaptopAgent:
             await send({"type": "rpc_result", "id": message["id"], "result": response})
 
     async def disconnect(self) -> None:
-        """The hub link dropped: stop the running job and any relayed MCP calls."""
-        await self.cancel()
+        """The hub link dropped: stop relayed MCP calls. A running job carries on (a hub restart
+        re-sends it, and it reports on the new connection); the hub stops it if it gave up on it."""
+        self._send = None
         tasks = list(self._mcp_tasks)
         for task in tasks:
             task.cancel()
@@ -149,6 +168,11 @@ class LaptopAgent:
                 await task
 
     async def run(self, message: dict[str, Any], send: Send) -> None:
+        arrived_on = send
+
+        async def send(event: dict[str, Any]) -> None:
+            # The connection current at each send, not necessarily the one the job arrived on.
+            await self.emit(event, arrived_on)
         job_id, text = message["id"], message["text"]
         if is_models_command(text):
             models = await self.router.models(force=True)
@@ -236,6 +260,7 @@ async def serve(agent: LaptopAgent, url: str, token: str, *, max_backoff: float 
                 async def send(data: dict[str, Any]) -> None:
                     await ws.send(json.dumps(data))
 
+                agent.connected(send)
                 await send(await agent.hello())
                 if agent.local is not None:
                     agent.local.uplink = send
@@ -275,12 +300,14 @@ def run_agent(settings: Settings) -> None:
     # Answers cached by an earlier build may predate today's prompt and checks; start clean.
     if cleared := store.cache_clear():
         log.info("cleared %d cached answers", cleared)
+    if interrupted := store.fail_interrupted():
+        log.info("marked %d replies interrupted by the restart", interrupted)
     router = build_router(settings)
     local = MirrorHub() if settings.local_ui else None
     agent = LaptopAgent(store, router, settings.owner_email, workspace=settings.workspace, local=local)
 
     async def main() -> None:
-        jobs = [serve(agent, settings.hub_url, settings.hub_token)]
+        jobs = [serve(agent, settings.hub_url, settings.hub_token), warm_models(router)]
         if local is not None:
             jobs.append(serve_local_ui(settings, store, router, local))
         await asyncio.gather(*jobs)
@@ -291,6 +318,13 @@ def run_agent(settings: Settings) -> None:
         pass
     finally:
         store.close()
+
+
+async def warm_models(router: RouterBrain) -> None:
+    """Load the local models now, so the first task does not wait for them (see OllamaExecutor)."""
+    for executor in router.executors:
+        if hasattr(executor, "warm"):
+            await executor.warm()
 
 
 async def serve_local_ui(settings: Settings, store: Store, router: RouterBrain, hub: MirrorHub) -> None:

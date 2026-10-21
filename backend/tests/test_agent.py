@@ -53,6 +53,7 @@ async def test_hello_reports_project_and_available_executors(store, executors, t
         "type": "hello",
         "project": "alpha",
         "executors": ["ollama", "claude-sonnet", "claude-opus"],
+        "running": None,
     }
     # Without a detector the report comes from executor availability, never from a model.
     assert {t["id"]: t["usable"] for t in models["tools"]} == {

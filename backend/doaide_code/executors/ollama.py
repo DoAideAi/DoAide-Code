@@ -10,6 +10,7 @@ tokens and silently cuts longer prompts.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import time
@@ -23,15 +24,25 @@ from .base import Executor, ExecutorError, Job
 
 # Tokens kept free for the answer, and the window bounds (qwen2.5-coder supports 32k).
 ANSWER_RESERVE = 3072
-MIN_CTX, MAX_CTX = 4096, 32768
-# Keep models loaded between requests; reloading a 32B model takes ~10 s.
-KEEP_ALIVE = "30m"
+MAX_CTX = 32768
+# One window for every request: Ollama reloads a model whenever num_ctx changes (~2 s for a 32B
+# model from the page cache, much more from disk), so a fixed 16k that fits DoAide's context and
+# history budgets keeps it loaded. Only a prompt that does not fit gets a larger window.
+FIXED_CTX = 16384
+# Keep models loaded between requests (DOAIDE_OLLAMA_KEEP_ALIVE), and load them when the agent
+# starts (warm), so the first task after a break does not wait for a load either.
+KEEP_ALIVE = os.environ.get("DOAIDE_OLLAMA_KEEP_ALIVE", "2h")
+log = logging.getLogger(__name__)
+
+
+FAST_CODERS = ("qwen3-coder",)
 
 
 def num_ctx(messages: list[dict]) -> int:
-    """A window that fits the prompt plus an answer, in 2k steps (~3.5 characters per token)."""
+    """FIXED_CTX, or for a prompt (plus an answer) that does not fit, a larger window in 8k steps
+    (~3.5 characters per token)."""
     tokens = sum(len(m["content"]) for m in messages) // 3.5 + ANSWER_RESERVE
-    return int(min(MAX_CTX, max(MIN_CTX, -(-tokens // 2048) * 2048)))
+    return int(min(MAX_CTX, max(FIXED_CTX, -(-tokens // 8192) * 8192)))
 
 
 def choose_model(
@@ -48,6 +59,11 @@ def choose_model(
         return configured if configured in names else wanted
     coders = [n for n in names if "coder" in n]
     if largest_under is not None and sizes:
+        # A mixture-of-experts coder (Qwen3-Coder 30B: ~3B parameters active per token) is about
+        # as good as a dense 32B one and several times faster: preferred when it fits.
+        fast = [n for n in coders if n.startswith(FAST_CODERS) and 0 < sizes.get(n, 0) <= largest_under]
+        if fast:
+            return fast[-1]
         fitting = [n for n in coders if 0 < sizes.get(n, 0) <= largest_under]
         if fitting:
             return fitting[-1]
@@ -123,6 +139,21 @@ class OllamaExecutor(Executor):
     async def available(self) -> bool:
         return await self.resolve_model() is not None
 
+    async def warm(self) -> bool:
+        """Load the model (with the window requests use) without generating anything."""
+        model = await self.resolve_model()
+        if not model:
+            return False
+        payload = {"model": model, "keep_alive": KEEP_ALIVE, "options": {"num_ctx": FIXED_CTX}}
+        try:
+            async with self._client(httpx.Timeout(10, read=180)) as client:
+                resp = await client.post("/api/generate", json=payload)
+        except httpx.HTTPError as exc:
+            log.warning("could not preload %s: %s", model, exc)
+            return False
+        log.info("preloaded %s", model)
+        return resp.status_code == 200
+
     @property
     def history_tokens(self) -> int:  # type: ignore[override]
         """~4k tokens of history for small models, ~8k for 14B and larger (or the coder tier)."""
@@ -170,6 +201,15 @@ class OllamaExecutor(Executor):
                             yield chunk
                         if event.get("done"):
                             # Local and free: report tokens so speed and size are visible, at $0.
+                            log.info(
+                                "%s: load %.1fs, read %d tokens in %.1fs, wrote %d in %.1fs",
+                                model,
+                                event.get("load_duration", 0) / 1e9,
+                                event.get("prompt_eval_count", 0),
+                                event.get("prompt_eval_duration", 0) / 1e9,
+                                event.get("eval_count", 0),
+                                event.get("eval_duration", 0) / 1e9,
+                            )
                             yield Usage(model, int(event.get("prompt_eval_count", 0)), int(event.get("eval_count", 0)))
                             break
         except httpx.HTTPError as exc:

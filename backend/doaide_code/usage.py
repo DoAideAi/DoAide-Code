@@ -21,6 +21,9 @@ class Usage:
     session_id: str = ""
     # Tokens in that conversation at its last model call: what resuming it would re-send.
     context_tokens: int = 0
+    # The agent's last message alone, without the narration of its earlier tool rounds ("Let me
+    # read runner.py..."): the reply to show. Empty when unknown.
+    final_text: str = ""
 
     def __add__(self, other: Usage) -> Usage:
         return Usage(
@@ -30,6 +33,7 @@ class Usage:
             cost_usd=self.cost_usd + other.cost_usd,
             session_id=other.session_id or self.session_id,
             context_tokens=other.context_tokens or self.context_tokens,
+            final_text=other.final_text or self.final_text,
         )
 
     def as_dict(self) -> dict:

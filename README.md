@@ -108,6 +108,13 @@ the project map and the files it read, so only the turns it missed and a list of
 since are sent; if the session is gone, a fresh one starts. In a measured follow-up this cost
 $0.040 against $0.092 for a fresh session.
 
+**Speed.** Ollama gets one fixed 16k window (it reloads a model whenever `num_ctx` changes, and
+a fixed window also keeps its prompt cache), models stay loaded for 2h
+(`DOAIDE_OLLAMA_KEEP_ALIVE`) and are preloaded when the agent starts, and a mixture-of-experts
+coder (`qwen3-coder`) is preferred over a dense 32B one when installed. Edit blocks are read
+tolerantly (a missing `=======`, repeated blocks, a path glued to a marker), and a replacement
+at the wrong indentation is re-indented, so more free answers land instead of escalating.
+
 **History per model** (`history.py`). Each job carries the last 40 messages
 (`DOAIDE_HISTORY_MESSAGES`); each executor then gets its own window: 8 messages and ~4k tokens
 for a 7B Ollama model, 12 and ~8k for 14B and up, 20 and ~32k for the Claude and Codex CLIs.
@@ -141,7 +148,9 @@ Models answer with SEARCH/REPLACE edit blocks and never write files themselves. 
 blocks become a changeset with quick checks (target text found, syntax, ruff) and one silent
 repair round if they fail. A changeset that passes every check is written to the files at once
 and the reply is a one-line summary: no code in the chat, the diff collapsed under it, and
-**Undo** (`/undo [<id>]`) to put the files back (refused if you edited them since). A changeset
+**Undo** (`/undo [<id>]`) to put the files back (refused if you edited them since). For Python projects with a `.venv` and tests,
+the project's tests then run (`verify.py`; off with `DOAIDE_RUN_TESTS=0`): an edit that parses and
+lints but breaks them is undone, and a free model's attempt escalates instead. A changeset
 that fails its checks is held back: **Apply** / `/apply [<id>]` writes it anyway. Requests from
 Claude Code over MCP stay proposals for `apply_changes`, so DoAide never writes under another
 agent. Long code blocks in other answers are collapsed behind "Show code".

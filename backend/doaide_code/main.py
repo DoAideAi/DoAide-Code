@@ -83,6 +83,8 @@ def create_app(
     # Answers cached by an earlier build may predate today's prompt and checks; start clean.
     if owns_store and (cleared := store.cache_clear()):
         log.info("cleared %d cached answers", cleared)
+    if owns_store and (interrupted := store.fail_interrupted()):
+        log.info("marked %d replies interrupted by the restart", interrupted)
     hub = hub or SyncHub()
     chat: ChatService | RelayService
     if settings.is_hub:

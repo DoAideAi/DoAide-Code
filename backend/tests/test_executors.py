@@ -97,7 +97,7 @@ def test_claude_parser_prefers_deltas_and_reports_errors():
             "usage": {"input_tokens": 10, "cache_read_input_tokens": 90, "output_tokens": 5},
         }
     )
-    assert usage == Usage("", 100, 5, 0.012)
+    assert usage == Usage("", 100, 5, 0.012, final_text="Hi")
 
 
 def test_codex_argv_and_parser():

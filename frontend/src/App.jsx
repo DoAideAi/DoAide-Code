@@ -174,7 +174,9 @@ export default function App() {
 
   if (needsSignIn) return <SignIn clientId={clientId} onCredential={onCredential} error={error} />
 
-  const busy = serverStatus === 'busy'
+  // Busy only while a reply is actually streaming or queued, so a stale status can never leave
+  // Stop showing after the answer finished.
+  const busy = serverStatus === 'busy' && messages.some((m) => m.status === 'streaming' || m.status === 'queued')
   const send = (text) => socket.current?.send({ type: 'send', text }) ?? false
   return (
     <div className="flex h-[100dvh] flex-col">

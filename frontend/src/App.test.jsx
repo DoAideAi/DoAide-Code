@@ -252,6 +252,14 @@ describe('App', () => {
     expect(screen.queryByTestId('open-local')).toBeNull()
   })
 
+  it('Stop shows only while a reply is streaming, even if a busy status is stale', async () => {
+    const ws = await boot(true, { status: 'busy', messages: [{ id: 'r', role: 'assistant', content: '', status: 'streaming' }] })
+    expect(screen.getByText('Stop')).toBeTruthy()
+    await act(async () => ws.emit({ type: 'done', id: 'r', status: 'done', content: 'Done.' }))
+    // No idle status arrived (lost in a restart): the finished reply still clears Stop.
+    expect(screen.queryByText('Stop')).toBeNull()
+  })
+
   it('phone prompts are sent to the hub for the laptop to run', async () => {
     const ws = await boot(false, { mode: 'hub', agent_online: true })
     const input = screen.getByLabelText('Message')

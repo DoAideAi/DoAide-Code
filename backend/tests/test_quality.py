@@ -175,10 +175,12 @@ async def test_ollama_payload_uses_local_prompt_few_shot_and_a_fitting_window():
     roles = [m["role"] for m in payload["messages"]]
     assert roles == ["system", "user", "assistant", "user"]  # system, one worked example, the request
     assert payload["messages"][0]["content"] == system_prompt("local", "edit")
-    assert payload["keep_alive"] == "30m"
+    assert payload["keep_alive"] == "2h"
     # 40k characters of context needs more than Ollama's default window.
     assert payload["options"]["num_ctx"] >= 14_336
-    assert num_ctx([{"content": "hi"}]) == 4096 and num_ctx([{"content": "x" * 500_000}]) == 32768
+    # One fixed window (no reload between requests) unless a prompt needs more.
+    assert num_ctx([{"content": "hi"}]) == 16384 == num_ctx([{"content": "x" * 40_000}])
+    assert num_ctx([{"content": "x" * 60_000}]) == 24576 and num_ctx([{"content": "x" * 500_000}]) == 32768
 
 
 def test_coder_tier_picks_the_largest_coder_that_fits():

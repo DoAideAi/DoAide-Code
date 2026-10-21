@@ -32,6 +32,8 @@ class ClaudeStreamParser:
         self.pending_break = False
         # Prompt size of the latest model call (each tool round re-sends the whole conversation).
         self.context_tokens = 0
+        # Text of the current (in the end, the last) assistant message.
+        self.last_text: list[str] = []
 
     def __call__(self, event: dict) -> str | Usage | None:
         kind = event.get("type")
@@ -42,10 +44,12 @@ class ClaudeStreamParser:
                 usage = (inner.get("message") or {}).get("usage") or {}
                 size = sum(int(usage.get(k) or 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
                 self.context_tokens = size or self.context_tokens
+                self.last_text = []
                 return None
             delta = inner.get("delta", {}) if inner.get("type") == "content_block_delta" else {}
             if delta.get("type") == "text_delta":
                 text = delta.get("text") or ""
+                self.last_text.append(text)
                 if self.pending_break and not self.message_text and text:
                     text = "\n\n" + text
                 self.saw_delta = self.message_text = True
@@ -69,6 +73,7 @@ class ClaudeStreamParser:
                 float(event.get("total_cost_usd") or 0),
                 session_id=str(event.get("session_id") or ""),
                 context_tokens=self.context_tokens,
+                final_text="".join(self.last_text),
             )
         return None
 
