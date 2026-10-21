@@ -17,6 +17,8 @@ class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0
+    # The CLI conversation this run belongs to (Claude Code), so a follow-up can resume it.
+    session_id: str = ""
 
     def __add__(self, other: Usage) -> Usage:
         return Usage(
@@ -24,6 +26,7 @@ class Usage:
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
             cost_usd=self.cost_usd + other.cost_usd,
+            session_id=other.session_id or self.session_id,
         )
 
     def as_dict(self) -> dict:

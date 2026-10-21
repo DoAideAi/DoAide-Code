@@ -64,6 +64,13 @@ class Ranking:
     candidates: list[Candidate] = field(default_factory=list)
     # The request's search terms, used to cut large files down to their relevant parts.
     terms: set[str] = field(default_factory=set)
+    # Every scanned file's modification time, for "what changed since the last turn".
+    mtimes: dict[str, float] = field(default_factory=dict)
+
+    def changed_since(self, when: float, limit: int = 20) -> list[str]:
+        """Files modified after `when`, newest first."""
+        changed = sorted((m, p) for p, m in self.mtimes.items() if m > when)
+        return [p for _, p in reversed(changed)][:limit]
 
     @property
     def fingerprint(self) -> str:
@@ -248,6 +255,7 @@ def rank_files(root: Path, request: str) -> Ranking:
         if len(files) >= MAX_SCAN_FILES:
             break
 
+    ranking.mtimes = {rel: st.st_mtime for rel, st in files}
     terms = _terms(request)
     ranking.terms = terms
     mentioned = _mentioned_paths(request, root)

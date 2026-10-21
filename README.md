@@ -95,6 +95,19 @@ reason on hover. Free answers show what Sonnet would have cost. The classifier i
 here: Opus-tier work and scores of 10 or more skip the local attempt. Without a paid CLI the
 local answer streams as before.
 
+Before escalating, the local model gets one free repair round when the problem is concrete
+(code that does not parse, an edit that does not apply), with the error spelled out. A local
+answer that refuses, or says it cannot see the code, is stopped as soon as that shows and goes
+straight to Sonnet.
+
+**Fewer paid tokens.** A follow-up resumes the Claude Code session that gave the previous answer
+(`claude --resume`), found by a hash of that answer in the history. The session already holds
+the project map and the files it read, so only the turns it missed and a list of files changed
+since are sent; if the session is gone, a fresh one starts. In a measured follow-up this cost
+$0.040 against $0.092 for a fresh session. Without a session to resume, long transcripts are
+shortened deterministically: older assistant replies lose their code blocks (the agent can
+re-read the files) once the transcript passes 12k characters; the last four turns stay verbatim.
+
 **Context per executor.** Ollama gets the 2-3 most relevant files (large ones as excerpts
 around the matching lines) and an explicit `num_ctx`, since Ollama's default window silently
 truncates; general-knowledge questions get no files at all. Claude and Codex read files

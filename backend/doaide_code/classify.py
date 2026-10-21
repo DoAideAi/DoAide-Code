@@ -39,7 +39,8 @@ _SIGNALS: list[tuple[float, str, re.Pattern[str]]] = [
 ]
 # Pure questions with no project work in them.
 _QUESTION = re.compile(r"^\s*(what|how|why|when|is|are|can|does|do|which|who|define|difference between)\b", re.I)
-_MATH = re.compile(r"^[\s\d+\-*/%^().,=?x×÷]+$|\b(calculate|compute|convert \d|how much is|what is \d)", re.I)
+# "calculate"/"compute" only with a number in the request: "what does charge() compute" is code.
+_MATH = re.compile(r"^[\s\d+\-*/%^().,=?x×÷]+$|\b(?:calculate|compute)\b(?=.*\d)|\b(convert \d|how much is|what is \d)", re.I)
 _FILE_REF = re.compile(r"[\w./-]+\.(?:py|js|jsx|ts|tsx|go|rs|java|kt|swift|rb|php|c|h|cpp|cs|vue|svelte|sql|sh)\b")
 _TRACEBACK = re.compile(r"Traceback \(most recent call last\)|^\s+at .+\(.+:\d+:\d+\)|File \".+\", line \d+|"
                         r"\w+Error: |error\[E\d+\]|panic:", re.M)

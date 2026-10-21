@@ -3,20 +3,27 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from pathlib import Path
 
 import pytest
 
 from doaide_code.dashboard import usage_report
-from doaide_code.executors import Job
+from doaide_code.executors import ExecutorError, Job, Turn
+from doaide_code.executors.base import transcript_prompt
 from doaide_code.router import RouterBrain, heuristic_tier
-from doaide_code.runner import Outcome, run_job
+from doaide_code.runner import Outcome, answer_anchor, run_job
 from doaide_code.usage import Usage
 from doaide_code.validate import off_topic_reason
 
 from .conftest import FakeExecutor
 
 pytestmark = pytest.mark.anyio
+
+
+async def nop(_chunk: str) -> None:
+    pass
 
 
 def local(name: str, tier: int, chunks, **kw) -> FakeExecutor:
@@ -155,3 +162,108 @@ def test_dashboard_counts_escalations(store):
     )
     report = usage_report(store, "me@x.com", days=1, now=now)
     assert report["totals"]["escalated"] == 1 and report["recent"][0]["escalated"] is True
+
+
+# Fewer paid tokens: a free repair round, early stops, resumed Claude sessions, shorter transcripts.
+
+
+class Scripted(FakeExecutor):
+    """Answers each run with the next script entry (the last one repeats)."""
+
+    def __init__(self, name, tier, answers, tool):
+        super().__init__(name, tier)
+        self.answers, self.tool = list(answers), tool
+
+    async def stream(self, job):
+        self.jobs.append(job)
+        answer = self.answers[min(len(self.jobs), len(self.answers)) - 1]
+        for chunk in answer if isinstance(answer, list) else [answer]:
+            yield chunk
+
+
+async def test_a_fixable_local_answer_gets_one_free_repair_before_escalating(store):
+    broken = "Here:\n```python\ndef sort_list(xs)\n    return sorted(xs)\n```"
+    fixed = "Here:\n```python\ndef sort_list(xs):\n    return sorted(xs)\n```"
+    ollama = Scripted("ollama", 0, [broken, fixed], "ollama")
+    sonnet = paid("claude-sonnet", 2, [GOOD])
+    outcome, sent = await run([ollama, sonnet], "how do I sort a list in python", store=store)
+    assert sonnet.jobs == [] and sent == fixed and outcome.executor == "ollama"
+    # The second try saw its own answer and the exact error.
+    assert ollama.jobs[1].history[-1].content == broken and "does not parse" in ollama.jobs[1].prompt
+    complete = outcome.meta()["checks"]["items"][0]
+    assert complete["ok"] and complete["detail"].startswith("fixed by ollama on a second try")
+
+
+async def test_an_unfixable_local_answer_is_stopped_early(store):
+    seen: list[str] = []
+
+    class Chatty(FakeExecutor):
+        async def stream(self, job):
+            for chunk in ["I don't see the file you mean. ", "Please provide the code ", "and more " * 50]:
+                seen.append(chunk)
+                yield chunk
+
+    ollama = Chatty("ollama", 0)
+    ollama.tool = "ollama"
+    sonnet = paid("claude-sonnet", 2, [GOOD])
+    outcome, sent = await run([ollama, sonnet], "explain how the pager works", store=store)
+    assert sent == GOOD and len(seen) == 1
+    assert outcome.meta()["route"]["escalated_from"]["reason"] == "the model said it could not see the code it needed"
+
+
+async def test_follow_ups_resume_the_claude_session(tmp_path, store):
+
+    (tmp_path / "app.py").write_text("def charge():\n    return 1\n")
+    sonnet = Scripted("claude-sonnet", 2, [["charge returns one, from app.py.", Usage("sonnet", 10, 5, 0.01, session_id="s-1")]], "claude")
+    brain = RouterBrain([sonnet], offline=True)
+    first = await run_job(brain, store, Job("explain charge in app.py", cwd=tmp_path), Outcome(), nop)
+    assert first.content == "charge returns one, from app.py." and sonnet.jobs[0].resume == ""
+
+    (tmp_path / "app.py").write_text("def charge():\n    return 2\n")
+    os.utime(tmp_path / "app.py", (time.time() + 5, time.time() + 5))
+    history = [Turn("user", "explain charge in app.py"), Turn("assistant", first.content), Turn("user", "thanks"), Turn("assistant", "You're welcome!")]
+    second = await run_job(brain, store, Job("what does charge return now in app.py", history=history, cwd=tmp_path), Outcome(), nop)
+    job = sonnet.jobs[1]
+    # Only what the session missed: the two later turns and the changed file, no project map.
+    assert job.resume == "s-1" and [t.content for t in job.history] == ["thanks", "You're welcome!"]
+    assert "Files changed since your last answer" in job.context and "- app.py" in job.context and "## File" not in job.context
+    assert any(r.startswith("resumed the Claude session (1 file changed") for r in second.meta()["route"]["reasons"])
+
+
+async def test_a_failed_resume_starts_a_fresh_session(tmp_path, store):
+
+    class Gone(FakeExecutor):
+        async def stream(self, job):
+            self.jobs.append(job)
+            if job.resume:
+                raise ExecutorError("No conversation found with session ID")
+            yield "charge returns 2 in app.py now."
+
+    (tmp_path / "app.py").write_text("def charge():\n    return 2\n")
+    store.cli_session_put(answer_anchor("old answer"), "gone", str(tmp_path))
+    sonnet = Gone("claude-sonnet", 2)
+    sonnet.tool = "claude"
+    history = [Turn("user", "q"), Turn("assistant", "old answer")]
+    outcome = await run_job(RouterBrain([sonnet], offline=True), store, Job("what does charge return in app.py", history=history, cwd=tmp_path), Outcome(), nop)
+    assert outcome.content == "charge returns 2 in app.py now." and [j.resume for j in sonnet.jobs] == ["gone", ""]
+    assert [t.content for t in sonnet.jobs[1].history] == ["q", "old answer"]
+
+
+def test_long_transcripts_shorten_old_replies_but_keep_recent_turns():
+
+    code = "```python\n" + "x = 1\n" * 2000 + "```"
+    history = [Turn("user", "write it"), Turn("assistant", f"Here it is:\n{code}"), Turn("user", "a"), Turn("assistant", "b"),
+               Turn("user", "c"), Turn("assistant", f"Latest:\n{code}")]
+    prompt = transcript_prompt(Job("next", history=history))
+    assert "[python block, 2000 lines, omitted]" in prompt
+    # The newest reply is kept whole, however long.
+    assert prompt.count("x = 1") == 2000
+    short = [Turn("user", "q"), Turn("assistant", "```python\nx = 1\n```")]
+    assert "x = 1" in transcript_prompt(Job("next", history=short))
+
+
+def test_compute_in_a_code_question_is_not_math():
+    from doaide_code.classify import classify_task
+
+    assert classify_task("In usage.py, what does sonnet_equivalent compute? One sentence.").kind != "math"
+    assert classify_task("compute 17 * 23").kind == "math"

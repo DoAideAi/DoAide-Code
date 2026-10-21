@@ -57,7 +57,13 @@ class ClaudeStreamParser:
             usage = event.get("usage") or {}
             tokens_in = sum(int(usage.get(k, 0)) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
             # Subscription runs: total_cost_usd is the API-equivalent cost Claude Code reports.
-            return Usage(self.model, tokens_in, int(usage.get("output_tokens", 0)), float(event.get("total_cost_usd") or 0))
+            return Usage(
+                self.model,
+                tokens_in,
+                int(usage.get("output_tokens", 0)),
+                float(event.get("total_cost_usd") or 0),
+                session_id=str(event.get("session_id") or ""),
+            )
         return None
 
 
@@ -77,7 +83,7 @@ class ClaudeCliExecutor(Executor):
     async def available(self) -> bool:
         return which(self.binary) is not None
 
-    def argv(self, prompt: str, kind: str = "question") -> list[str]:
+    def argv(self, prompt: str, kind: str = "question", resume: str = "") -> list[str]:
         return [
             self.binary,
             "-p",
@@ -96,11 +102,12 @@ class ClaudeCliExecutor(Executor):
             *WRITE_TOOLS,
             "--append-system-prompt",
             system_prompt("claude", kind),
+            *(["--resume", resume] if resume else []),
         ]
 
     async def stream(self, job: Job) -> AsyncIterator[str | Usage]:
         async for chunk in stream_subprocess(
-            self.argv(with_context(job), job.kind),
+            self.argv(with_context(job), job.kind, job.resume),
             parse=ClaudeStreamParser(self.model),
             cwd=job.cwd,
             env=cli_env("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"),

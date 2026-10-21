@@ -5,11 +5,16 @@ Try, then escalate: a free Ollama model answers first, out of sight. Its answer 
 (complete, code parses, edits apply, on topic); one that fails goes to Claude Sonnet with more
 context, and the user only ever sees the answer that passed. The route meta says which model
 answered, whether it was escalated and why, and what a free answer would have cost on Sonnet.
+
+Follow-ups resume the Claude Code session that gave the previous answer: it already holds the
+project map and the files it read, so only the turns it missed and the files changed since are
+sent, and the conversation so far is read from Anthropic's prompt cache instead of re-sent.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -27,13 +32,15 @@ from .fastpath import direct_answer, math_answer
 from .prompts import PROMPT_VERSION
 from .router import RouteDecision, RouterBrain, heuristic_tier, is_local
 from .usage import Usage, sonnet_equivalent
-from .validate import check_code_blocks, edit_checks, incomplete_reason, off_topic_reason
+from .validate import check_code_blocks, early_problem, edit_checks, incomplete_reason, off_topic_reason
 
 log = logging.getLogger(__name__)
 
 NO_EXECUTOR = "No model is available on this laptop. Type /models to see what was detected and how to set one up."
 # Incomplete answers are retried this many times, each on the next executor up with more context.
 MAX_RETRIES = 1
+# Claude Code sessions are resumed for follow-ups this recent; older ones mostly hold stale reads.
+RESUME_MAX_AGE = 6 * 3600
 
 
 def build_router(settings: Settings) -> RouterBrain:
@@ -91,6 +98,33 @@ def strip_meta_turns(history) -> list[Turn]:
         elif not skip_reply:
             kept.append(turn)
     return kept
+
+
+def answer_anchor(text: str) -> str:
+    """Identifies an answer in later history (the hub stores replies verbatim)."""
+    return hashlib.sha256(" ".join(text.split()).encode()).hexdigest()
+
+
+@dataclass(frozen=True)
+class Resume:
+    session_id: str
+    created_at: float
+    # Turns after the answer the session ended on (answered by other models, or the user's).
+    missed: tuple[Turn, ...]
+
+
+def find_resume(store: Store, job: Job) -> Resume | None:
+    """The Claude Code session that gave the latest answer in this conversation, if recent."""
+    if job.cwd is None:
+        return None
+    history = list(job.history)
+    anchors = {answer_anchor(t.content): i for i, t in enumerate(history) if t.role == "assistant" and t.content.strip()}
+    found = store.cli_sessions_for(list(anchors), str(job.cwd), RESUME_MAX_AGE)
+    if not found:
+        return None
+    anchor = max(found, key=anchors.__getitem__)
+    row = found[anchor]
+    return Resume(row["session_id"], row["created_at"], tuple(history[anchors[anchor] + 1 :]))
 
 
 def cache_key(job: Job, ranking: Ranking | None, pin: dict[str, str] | None = None) -> str:
@@ -180,6 +214,8 @@ async def run_job(
         # General knowledge ("how do I reverse a list"): project files would only slow it down.
         ranking = None
 
+    resume = find_resume(store, job)
+    claude_session = ""
     errors: list[str] = []
     retries = 0
     retry_note: str | None = None
@@ -196,12 +232,24 @@ async def run_job(
         if context:
             run = replace(job, context=context)
             outcome.context_files = files
+        fresh = run
+        resumed = None
+        if resume is not None and executor.tool == "claude":
+            run, resumed = _resumed(job, resume, ranking, diff)
         started = time.monotonic()
         streamed: list[str] = []
         previous = outcome.content
         outcome.content = ""
         try:
-            used = await _drain(executor, run, outcome, store, source, streamed, _hold if trial else on_delta)
+            used, run = await _drain_resumable(
+                executor, run, fresh, outcome, store, source, streamed, _watch(outcome) if trial else on_delta
+            )
+        except _Abandoned as exc:
+            store.record_executor(executor.name, ok=True, elapsed_ms=_ms(started))
+            log.info("stopped %s early: %s", executor.name, exc.reason)
+            escalated = _escalated_from(executor, None, exc.reason)
+            outcome.content = previous
+            continue
         except ExecutorError as exc:
             store.record_executor(executor.name, ok=False, elapsed_ms=_ms(started))
             log.warning("%s failed: %s", executor.name, exc)
@@ -219,10 +267,22 @@ async def run_job(
         store.record_executor(executor.name, ok=True, elapsed_ms=_ms(started))
         outcome.executor, outcome.status = executor.name, "done"
         outcome.route = _route(executor, decision, used, escalated=escalated, skipped=skipped)
+        if run.resume and resumed:
+            outcome.route["reasons"].append(resumed)
 
         code_checks: list[dict] | None = None
         if trial:
-            problem, code_checks = await _vet(job, outcome.content, decision.kind)
+            problem, code_checks, fix = await _vet(job, outcome.content, decision.kind)
+            if problem and fix:
+                # A concrete, fixable problem (code that does not parse, an edit that does not
+                # apply): one more free try with the error spelled out, before paying for Sonnet.
+                repaired = await _local_repair(executor, run, job, outcome.content, fix, store, source)
+                if repaired is not None:
+                    outcome.add_usage(repaired.usage or Usage())
+                    again, again_checks, _ = await _vet(job, repaired.content, decision.kind)
+                    if again is None:
+                        retry_note = f"fixed by {executor.name} on a second try ({problem})"
+                        outcome.content, problem, code_checks = repaired.content, None, again_checks
             if problem:
                 log.info("escalating from %s: %s", executor.name, problem)
                 escalated = _escalated_from(executor, used, problem)
@@ -245,7 +305,9 @@ async def run_job(
         if key is not None and executor.cacheable and reason is None and outcome.content.strip():
             store.cache_put(key, outcome.content, executor.name)
         outcome.checks += code_checks if code_checks is not None else await check_code_blocks(outcome.content)
-        await _preview_changes(store, job, outcome, executor, run, on_delta, source)
+        claude_session = (used.session_id if used else "") if executor.tool == "claude" else ""
+        # A repair round starts from the full context: the resumed session predates this answer.
+        await _preview_changes(store, job, outcome, executor, fresh, on_delta, source)
         outcome.checks += edit_checks(outcome.changes)
         break
     if outcome.status != "done" and not outcome.content and held is not None:
@@ -255,11 +317,82 @@ async def run_job(
         await on_delta(outcome.content)
     if outcome.status != "done" and not outcome.content and errors:
         outcome.content = "All executors failed.\n" + "\n".join(errors)
+    if outcome.status == "done" and claude_session and job.cwd is not None and outcome.content.strip():
+        store.cli_session_put(answer_anchor(outcome.content), claude_session, str(job.cwd))
     return outcome
 
 
-async def _hold(_chunk: str) -> None:
-    """Delta sink for a buffered local attempt: nothing reaches the user until it passes."""
+def _resumed(job: Job, resume: Resume, ranking: Ranking | None, diff: str) -> tuple[Job, str]:
+    """The job as a continuation of `resume`: the missed turns, the files changed since, and the
+    diff when asked for. No project map: the session has it. Returns the job and a route note."""
+    changed = ranking.changed_since(resume.created_at) if ranking is not None else []
+    parts = []
+    if changed:
+        parts.append(
+            "Files changed since your last answer (re-read them before relying on earlier reads):\n"
+            + "\n".join(f"- {p}" for p in changed)
+        )
+    if diff:
+        parts.append(diff)
+    note = f"resumed the Claude session ({len(changed)} file{'s' if len(changed) != 1 else ''} changed since)"
+    return replace(job, resume=resume.session_id, history=resume.missed, context="\n\n".join(parts)), note
+
+
+async def _drain_resumable(
+    executor: Executor,
+    run: Job,
+    fresh: Job,
+    outcome: Outcome,
+    store: Store,
+    source: str,
+    streamed: list[str],
+    on_delta: Callable[[str], Awaitable[None]],
+) -> tuple[Usage | None, Job]:
+    """`_drain`, falling back to a new session when a resume fails before any output (the CLI
+    may have pruned the session). Returns the usage and the job that ran."""
+    try:
+        return await _drain(executor, run, outcome, store, source, streamed, on_delta), run
+    except ExecutorError as exc:
+        if not run.resume or streamed:
+            raise
+        log.info("could not resume session %s (%s); starting a new one", run.resume, exc)
+        outcome.content = ""
+        return await _drain(executor, fresh, outcome, store, source, streamed, on_delta), fresh
+
+
+class _Abandoned(Exception):
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _watch(outcome: Outcome) -> Callable[[str], Awaitable[None]]:
+    """Delta sink for a buffered local attempt: nothing reaches the user until it passes, and
+    the attempt is stopped as soon as it shows a problem no retry would fix."""
+
+    async def sink(_chunk: str) -> None:
+        if len(outcome.content) <= 700 and (reason := early_problem(outcome.content)):
+            raise _Abandoned(reason)
+
+    return sink
+
+
+async def _local_repair(
+    executor: Executor, run: Job, job: Job, first: str, fix: str, store: Store, source: str
+) -> Outcome | None:
+    """The same local model, asked once to fix its own answer (buffered, never streamed)."""
+    retry = replace(run, prompt=fix, history=[*run.history, Turn("user", job.prompt), Turn("assistant", first)])
+    repaired = Outcome()
+
+    async def hold(_chunk: str) -> None:
+        pass
+
+    try:
+        await _drain(executor, retry, repaired, store, source, [], hold)
+    except ExecutorError as exc:
+        log.warning("local repair with %s failed: %s", executor.name, exc)
+        return None
+    return repaired if repaired.content.strip() else None
 
 
 def _escalation(candidates: list[Executor]) -> Executor | None:
@@ -267,19 +400,24 @@ def _escalation(candidates: list[Executor]) -> Executor | None:
     return next((e for e in candidates[1:] if not is_local(e)), None)
 
 
-async def _vet(job: Job, answer: str, kind: str) -> tuple[str | None, list[dict]]:
+async def _vet(job: Job, answer: str, kind: str) -> tuple[str | None, list[dict], str | None]:
     """Whether a local answer is good enough to show: complete, its code parses, its edits apply
-    and it is on topic. Returns the first problem (None when it passes) and the code checks."""
+    and it is on topic. Returns the first problem (None when it passes), the code checks, and
+    for problems the model can fix itself, the prompt asking it to."""
     code_checks = await check_code_blocks(answer)
     if reason := incomplete_reason(answer, kind):
-        return reason, code_checks
+        return reason, code_checks, None
     if bad := next((c for c in code_checks if not c["ok"]), None):
-        return f"{bad['name']} does not parse ({bad['detail']})", code_checks
+        fix = (
+            f"{job.prompt}\n\nIn your previous answer, the {bad['name']} does not parse: {bad['detail']}.\n"
+            "Reply with the complete, corrected answer."
+        )
+        return f"{bad['name']} does not parse ({bad['detail']})", code_checks, fix
     if job.cwd is not None and (changeset := await propose(job.cwd, answer)) is not None and changeset.all_problems:
-        return f"its edit failed checks ({changeset.all_problems[0]})", code_checks
+        return f"its edit failed checks ({changeset.all_problems[0]})", code_checks, repair_prompt(job.prompt, changeset.all_problems)
     if reason := off_topic_reason(job.prompt, answer):
-        return reason, code_checks
-    return None, code_checks
+        return reason, code_checks, None
+    return None, code_checks, None
 
 
 def _escalated_from(executor: Executor, used: Usage | None, reason: str) -> dict:
@@ -368,15 +506,19 @@ async def _drain(
 ) -> Usage | None:
     """Stream one executor into the outcome, logging its usage; returns that executor's usage."""
     used: Usage | None = None
-    async for chunk in executor.stream(run):
-        if isinstance(chunk, Usage):
-            outcome.add_usage(chunk)
-            used = chunk if used is None else used + chunk
-            store.record_usage(source, executor.name, chunk.model, chunk.input_tokens, chunk.output_tokens, chunk.cost_usd)
-            continue
-        streamed.append(chunk)
-        outcome.content += chunk
-        await on_delta(chunk)
+    # Closed on the way out, so a run stopped early (see _watch) stops generating at once.
+    async with contextlib.aclosing(executor.stream(run)) as chunks:
+        async for chunk in chunks:
+            if isinstance(chunk, Usage):
+                outcome.add_usage(chunk)
+                used = chunk if used is None else used + chunk
+                store.record_usage(
+                    source, executor.name, chunk.model, chunk.input_tokens, chunk.output_tokens, chunk.cost_usd
+                )
+                continue
+            streamed.append(chunk)
+            outcome.content += chunk
+            await on_delta(chunk)
     return used
 
 

@@ -65,6 +65,17 @@ def incomplete_reason(answer: str, kind: str) -> str | None:
     return None
 
 
+def early_problem(partial: str) -> str | None:
+    """A problem visible while a local answer is still streaming that no retry of the same model
+    would fix (a refusal, or a request for files it was not shown): stop it and escalate now."""
+    head = partial[:600]
+    if _REFUSAL.search(head[:300]):
+        return "the model declined to answer"
+    if _NEEDS_FILES.search(head):
+        return "the model said it could not see the code it needed"
+    return None
+
+
 def off_topic_reason(prompt: str, answer: str) -> str | None:
     """Why the answer does not seem to address the request, or None when it does."""
     text = answer.lower()

@@ -70,6 +70,14 @@ CREATE TABLE IF NOT EXISTS response_cache (
     created_at REAL NOT NULL,
     hits INTEGER NOT NULL DEFAULT 0
 );
+-- Claude Code sessions by the answer they ended on (a hash of it), so a follow-up in the same
+-- conversation resumes the session instead of re-sending the project map and re-reading files.
+CREATE TABLE IF NOT EXISTS cli_sessions (
+    anchor TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    cwd TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS executor_stats (
     executor TEXT PRIMARY KEY,
     calls INTEGER NOT NULL DEFAULT 0,
@@ -459,6 +467,27 @@ class Store:
             "created_at = excluded.created_at",
             (key, answer, executor, time.time()),
         )
+
+    def cli_session_put(self, anchor: str, session_id: str, cwd: str) -> None:
+        now = time.time()
+        self._exec(
+            "INSERT INTO cli_sessions (anchor, session_id, cwd, created_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(anchor) DO UPDATE SET session_id = excluded.session_id, cwd = excluded.cwd, "
+            "created_at = excluded.created_at",
+            (anchor, session_id, cwd, now),
+        )
+        self._exec("DELETE FROM cli_sessions WHERE created_at < ?", (now - 7 * 86400,))
+
+    def cli_sessions_for(self, anchors: list[str], cwd: str, max_age: float) -> dict[str, dict[str, Any]]:
+        """The stored sessions among `anchors`, for this project and newer than `max_age`."""
+        if not anchors:
+            return {}
+        marks = ",".join("?" * len(anchors))
+        rows = self._all(
+            f"SELECT * FROM cli_sessions WHERE anchor IN ({marks}) AND cwd = ? AND created_at >= ?",
+            (*anchors, cwd, time.time() - max_age),
+        )
+        return {r["anchor"]: r for r in rows}
 
     def usage_summary(self, since: float = 0) -> list[dict[str, Any]]:
         return self._all(
