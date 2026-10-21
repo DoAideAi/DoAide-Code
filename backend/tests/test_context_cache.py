@@ -69,6 +69,20 @@ def test_render_respects_budget_and_truncates_named_files(repo):
     assert ranking.render(0) == ("", [])
 
 
+def test_a_named_file_comes_alone_unless_another_has_a_name_from_the_request(repo):
+    # Live: "In ollama.py, why is FIXED_CTX a constant?" also sent two files that only shared
+    # words like "request"; the 7b model read 6k tokens and missed the answer in the named file.
+    (repo / "app" / "notes.py").write_text("# a request is a request\ncharge_request = 1\n")
+    (repo / "app" / "api.py").write_text("from app.billing import charge\nMAX_CHARGE = 5\n")
+    (repo / "app" / "test_billing.py").write_text("from app.billing import MAX_CHARGE\n")
+    ranking = rank_files(repo, "In app/billing.py, why is MAX_CHARGE a request constant?")
+    _, files = ranking.render(24_000, max_files=3)
+    assert files == ["app/billing.py", "app/api.py"]
+    # A retry with more context takes the related files too.
+    _, files = ranking.render(48_000, max_files=5, more=True)
+    assert "app/notes.py" in files
+
+
 def test_fingerprint_changes_when_a_selected_file_changes(repo):
     before = rank_files(repo, "refresh_session").fingerprint
     assert rank_files(repo, "refresh_session").fingerprint == before

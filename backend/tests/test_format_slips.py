@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 
 from doaide_code.changes import build_changeset, parse_edits
+from doaide_code.classify import classify_task
 from doaide_code.executors import Job
 from doaide_code.executors.base import user_message
 from doaide_code.router import RouterBrain
@@ -65,3 +66,11 @@ async def test_a_cut_off_edit_block_gets_a_free_second_try(tmp_path, store):
     first, second = coder.jobs
     assert first.context and second.context == ""
     assert [t.content for t in second.history] == [user_message(first), cut]
+
+
+def test_a_why_question_is_answered_not_debugged():
+    # Live: classed as debug, the right two-sentence answer was "no code proposed" and went to Sonnet.
+    asking = classify_task("In backend/doaide_code/executors/ollama.py, why is FIXED_CTX a constant instead of computed per request? Two sentences.")
+    assert asking.kind == "question" and asking.about_project
+    assert classify_task("why does test_charge fail").kind == "debug"
+    assert classify_task("why is add in util.py wrong").kind == "debug"

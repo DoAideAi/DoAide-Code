@@ -28,8 +28,9 @@ _SIGNALS: list[tuple[float, str, re.Pattern[str]]] = [
     # Scope: work that spans many files.
     (4, "edit", re.compile(r"\b(multi-?file|across (?:the|all|every|multiple)|(?:whole|entire) (?:codebase|project|repo)|"
                            r"every (?:file|module)|all (?:the )?files|end-to-end)\b", re.I)),
+    # Not "why is/does": "why is X a constant?" asks for a reason; a failure says fail, error, wrong...
     (3, "debug", re.compile(r"\b(debug\w*|traceback|stack ?trace|exception|crash\w*|fails?|failing|failed|"
-                            r"broken|doesn'?t work|not working|bug|error|investigate|why (?:does|is|do))\b", re.I)),
+                            r"broken|doesn'?t work|not working|wrong|bug|error|investigate)\b", re.I)),
     # Verbs, not function names: "explain add()" is not an edit.
     (3, "edit", re.compile(r"\b(fix|implement|add|change|modify|update|rename|replace|remove|delete|edit|convert|"
                            r"optimi[sz]e|make (?:the|it|this))\b(?!\s*\()", re.I)),
@@ -37,8 +38,8 @@ _SIGNALS: list[tuple[float, str, re.Pattern[str]]] = [
     (3, "review", re.compile(r"\b(review|recent changes|what changed|my changes|the diff|last commit|uncommitted)\b", re.I)),
     (3, "explain", re.compile(r"\b(explain|walk me through|how does .+ work|summari[sz]e)\b", re.I)),
 ]
-# Pure questions with no project work in them.
-_QUESTION = re.compile(r"^\s*(what|how|why|when|is|are|can|does|do|which|who|define|difference between)\b", re.I)
+# Pure questions with no project work in them (also after "In app/x.py, ...").
+_QUESTION = re.compile(r"^\s*(?:in [^,?]+,\s*)?(what|how|why|when|is|are|can|does|do|which|who|define|difference between)\b", re.I)
 # "calculate"/"compute" only with a number in the request: "what does charge() compute" is code.
 _MATH = re.compile(r"^[\s\d+\-*/%^().,=?x×÷]+$|\b(?:calculate|compute)\b(?=.*\d)|\b(convert \d|how much is|what is \d)", re.I)
 _FILE_REF = re.compile(r"[\w./-]+\.(?:py|js|jsx|ts|tsx|go|rs|java|kt|swift|rb|php|c|h|cpp|cs|vue|svelte|sql|sh)\b")

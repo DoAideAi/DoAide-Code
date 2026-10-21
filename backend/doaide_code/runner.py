@@ -565,7 +565,7 @@ async def _context_for(
         return (diff[:budget], []) if diff else ("", [])
     if executor.context_mode == "files":
         max_files = executor.max_files + (2 if more else 0)
-        return await asyncio.to_thread(ranking.render, budget, max_files=max_files, extra=diff)
+        return await asyncio.to_thread(ranking.render, budget, max_files=max_files, extra=diff, more=more)
     return ranking.render_map(budget, extra=diff)
 
 

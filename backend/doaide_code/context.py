@@ -66,6 +66,10 @@ class Ranking:
     candidates: list[Candidate] = field(default_factory=list)
     # The request's search terms, used to cut large files down to their relevant parts.
     terms: set[str] = field(default_factory=set)
+    # Code identifiers in the request (FIXED_CTX, parseConfig): with a file named, the only reason
+    # to send another file.
+    idents: set[str] = field(default_factory=set)
+    wants_tests: bool = False
     # Every scanned file's modification time, for "what changed since the last turn".
     mtimes: dict[str, float] = field(default_factory=dict)
 
@@ -82,13 +86,16 @@ class Ranking:
             digest.update(f"{c.path}:{c.size}:{c.mtime_ns}".encode())
         return digest.hexdigest()
 
-    def render(self, budget: int, *, max_files: int | None = None, extra: str = "") -> tuple[str, list[str]]:
+    def render(
+        self, budget: int, *, max_files: int | None = None, extra: str = "", more: bool = False
+    ) -> tuple[str, list[str]]:
         """Context text within `budget` characters, and the files it includes: the tree, then
         whole files by rank (at most `max_files`), with `extra` (a recent diff) first.
 
         Files the request names come whole (the model edits them, and SEARCH text copied from an
         excerpt does not match) and the tree is left out (it only helps find a file); other files
-        only fill a real remainder of the budget. Less to read, and nothing to confuse."""
+        only fill a real remainder of the budget, and only if they contain a name from the request
+        (any file `more`, for a retry). Less to read, and nothing to confuse."""
         if budget <= 0 or not (self.tree or self.candidates or extra):
             return "", []
         named = any(c.explicit for c in self.candidates)
@@ -111,8 +118,15 @@ class Ranking:
                 continue
             lang = LANG.get(Path(c.path).suffix, "")
             block = f"\n## File: {c.path}\n```{lang}\n{text}\n```"
-            if named and not c.explicit and budget - used < NAMED_REMAINDER:
-                continue  # the named files took the budget; the rest would only be excerpts
+            if named and not c.explicit and (
+                budget - used < NAMED_REMAINDER
+                or not more
+                and (not any(i in text for i in self.idents) or (_is_test(c.path.lower()) and not self.wants_tests))
+            ):
+                # The named files took the budget (the rest would only be excerpts), or this file
+                # shares only common words with the request, or only tests it: noise that slows
+                # a local model.
+                continue
             # Small models: a large file is sent as its relevant parts even when it would fit,
             # since reading the prompt is most of a local model's time (not files the user named).
             if (
@@ -234,6 +248,15 @@ def _terms(text: str) -> set[str]:
     return {w for w in words if w not in STOPWORDS}
 
 
+def _idents(text: str, paths: set[str]) -> set[str]:
+    """snake_case, camelCase and backticked names in the request, outside the paths it names."""
+    for path in sorted(paths, key=len, reverse=True):
+        text = text.replace(path, " ")
+    found = set(re.findall(r"`([^`\s]+)`", text))
+    found |= set(re.findall(r"\b_*[A-Za-z]\w*_\w+\b|\b[a-z]+[A-Z]\w*\b|\b[A-Z][a-z0-9]+[A-Z]\w*\b", text))
+    return {f.strip("()") for f in found if len(f.strip("()")) > 2}
+
+
 def mentioned_paths(text: str, root: Path | None = None) -> set[str]:
     """Paths named in the request. Absolute ones under `root` (as in tracebacks) become relative."""
     found: set[str] = set()
@@ -275,6 +298,7 @@ def rank_files(root: Path, request: str) -> Ranking:
     terms = _terms(request)
     ranking.terms = terms
     mentioned = mentioned_paths(request, root)
+    ranking.idents = _idents(request, mentioned)
     present: dict[str, set[str]] = {}
     explicit: set[str] = set()
     for rel, st in files:
@@ -299,6 +323,7 @@ def rank_files(root: Path, request: str) -> Ranking:
     stats = dict(files)
     scored: list[Candidate] = []
     wants_tests = bool(terms & {"test", "tests", "testing", "pytest", "spec", "vitest"}) or "test" in request.lower()
+    ranking.wants_tests = wants_tests
     for rel, found in present.items():
         lower = rel.lower()
         score = sum(idf.get(t, 0) * (3 if t in lower else 1) for t in found)
