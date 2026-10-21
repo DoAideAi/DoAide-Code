@@ -87,7 +87,7 @@ async def test_execute_code_runs_on_local_executor_in_project(tools, executors, 
     async def on_progress(done, _total, _message):
         progress.append(done)
 
-    result = await call(tools, "execute_code", {"prompt": "explain greet()"}, progress_callback=on_progress)
+    result = await call(tools, "execute_code", {"prompt": "what does greet() return?"}, progress_callback=on_progress)
     assert not result.is_error
     assert result.structured_content["answer"] == "Hello world"
     assert result.structured_content["executor"] == "ollama"

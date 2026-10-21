@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { splitFences, usageLabel } from './components/MessageList.jsx'
+import { routeLabel, splitFences, usageLabel } from './components/MessageList.jsx'
 import { applyEvent, initialChat, statusColor, usableTools } from './store.js'
 
 const msg = (id, role, content, status = 'done') => ({ id, role, content, status, created_at: 0 })
@@ -142,5 +142,14 @@ describe('model preference', () => {
     expect(s.modelPref).toEqual({ tool: 'claude', model: 'opus' })
     s = applyEvent(s, { type: 'model_pref', pref: null })
     expect(s.modelPref).toBeNull()
+  })
+})
+
+describe('routeLabel', () => {
+  it('names the model, marks free ones, and says when no model ran', () => {
+    expect(routeLabel({ executor: 'ollama', model: 'qwen2.5-coder:7b', free: true })).toBe('qwen2.5-coder:7b (free)')
+    expect(routeLabel({ executor: 'claude-sonnet', model: 'sonnet', free: false })).toBe('claude-sonnet')
+    expect(routeLabel({ executor: 'direct', free: true })).toBe('no model')
+    expect(routeLabel(undefined)).toBeNull()
   })
 })

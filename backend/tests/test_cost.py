@@ -47,12 +47,15 @@ def test_usage_adds_up():
 def test_only_local_executors_and_clis_can_be_disabled(settings):
     names = [(e.name, e.tier, e.fallback) for e in build_executors(settings)]
     assert names == [
-        ("ollama", 0, False), ("codex", 1, False), ("claude-haiku", 1, False),
-        ("claude-sonnet", 2, False), ("claude-opus", 3, False),
+        ("ollama", 0, False), ("ollama-coder", 1, False), ("claude-haiku", 1, False),
+        ("claude-sonnet", 2, False), ("claude-opus", 3, False), ("codex", 2, False),
     ]
+    # Opus and Codex are premium: only for complex tasks.
+    assert {e.name: e.min_task_tier for e in build_executors(settings)}["claude-opus"] == 2
+    assert {e.name: e.min_task_tier for e in build_executors(settings)}["codex"] == 2
     settings.use_claude_cli = False
     settings.use_codex_cli = False
-    assert [e.name for e in build_executors(settings)] == ["ollama"]
+    assert [e.name for e in build_executors(settings)] == ["ollama", "ollama-coder"]
 
 async def test_subscription_clis_only_after_every_primary_executor():
     def fallback(name, tier):
@@ -96,7 +99,7 @@ async def test_run_job_accumulates_and_logs_usage(store):
 
     await run_job(brain, store, Job("hi"), outcome, ignore, source="mcp")
     assert outcome.content == "ok" and outcome.status == "done"
-    assert outcome.meta() == {"usage": {"tokens_in": 2000, "tokens_out": 400, "cost_usd": pytest.approx(0.0011)}}
+    assert outcome.meta()["usage"] == {"tokens_in": 2000, "tokens_out": 400, "cost_usd": pytest.approx(0.0011)}
     (row,) = store.usage_summary()
     assert row["executor"] == "gemini-lite" and row["tokens_in"] == 2000 and row["calls"] == 1
 

@@ -32,6 +32,9 @@ class Settings:
 
     ollama_url: str = field(default_factory=lambda: os.environ.get("OLLAMA_URL", "http://localhost:11434"))
     ollama_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_OLLAMA_MODEL", "qwen3-coder"))
+    # Tier 1 (explain, small edits, debugging): empty picks the largest installed coder model that
+    # fits in 40% of memory (qwen2.5-coder:32b on a 96 GB Mac).
+    ollama_coder_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_OLLAMA_CODER_MODEL", "").strip())
     ollama_bin: str = field(default_factory=lambda: os.environ.get("DOAIDE_OLLAMA_BIN", "ollama"))
 
     claude_bin: str = field(default_factory=lambda: os.environ.get("DOAIDE_CLAUDE_BIN", "claude"))

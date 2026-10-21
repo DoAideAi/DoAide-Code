@@ -68,8 +68,11 @@ async def test_job_streams_deltas_then_done(store, executors, tmp_path):
     assert out.events == [
         {"type": "delta", "id": "j1", "text": "Hello"},
         {"type": "delta", "id": "j1", "text": " world"},
-        {"type": "done", "id": "j1", "status": "done", "content": "Hello world"},
+        {"type": "done", "id": "j1", "status": "done", "content": "Hello world", "meta": out.events[2]["meta"]},
     ]
+    # Every reply says which model answered and how it checked out.
+    assert out.events[2]["meta"]["route"]["executor"] == "ollama"
+    assert out.events[2]["meta"]["checks"]["items"][0]["name"] == "complete"
     job = executors[0].jobs[0]
     assert job.cwd == tmp_path.resolve() and [t.content for t in job.history] == ["hi", "hello"]
     assert store.executor_stats()[0]["executor"] == "ollama"

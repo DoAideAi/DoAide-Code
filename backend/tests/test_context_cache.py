@@ -33,7 +33,7 @@ def repo(tmp_path) -> Path:
 
 
 class ContextExecutor(FakeExecutor):
-    needs_context = True
+    context_mode = "files"
     cacheable = True
     context_chars = 60_000
 
@@ -78,13 +78,14 @@ def test_fingerprint_changes_when_a_selected_file_changes(repo):
     assert rank_files(repo, "refresh_session").fingerprint != before
 
 
-async def test_api_executors_get_context_and_cli_agents_do_not(repo, store):
+async def test_local_models_get_files_and_cli_agents_get_a_map(repo, store):
     api, cli = ContextExecutor("gemini-lite", 0, ["ok"]), FakeExecutor("codex", 0, ["ok"])
     _, on_delta = collector()
     await run_job(RouterBrain([api], offline=True), store, Job("fix refresh_session", cwd=repo), Outcome(), on_delta)
     assert "def refresh_session" in api.jobs[0].context
     await run_job(RouterBrain([cli], offline=True), store, Job("fix refresh_session", cwd=repo), Outcome(), on_delta)
-    assert cli.jobs[0].context == ""
+    # CLI agents read files themselves: they get paths and the tree, not contents.
+    assert "- app/auth/session.py" in cli.jobs[0].context and "def refresh_session" not in cli.jobs[0].context
 
 
 # Direct answers
@@ -126,20 +127,21 @@ async def test_direct_answer_spends_nothing(repo, store):
 
 
 async def test_repeated_request_is_served_from_cache(repo, store):
-    ex = ContextExecutor("gemini-lite", 0, ["answer"])
+    ex = ContextExecutor("gemini-lite", 0, ["refresh_session returns the token unchanged; it is called when the session expires."])
     brain = RouterBrain([ex], offline=True, cache_ttl=3600)
     _, on_delta = collector()
     first = await run_job(brain, store, Job("explain refresh_session", cwd=repo), Outcome(), on_delta)
     chunks, on_delta = collector()
     second = await run_job(brain, store, Job("explain   refresh_session ", cwd=repo), Outcome(), on_delta)
     assert len(ex.jobs) == 1 and not first.cached
-    assert second.cached and second.content == "answer" and chunks == ["answer"]
-    assert second.meta() == {"usage": {"tokens_in": 0, "tokens_out": 0, "cost_usd": 0, "cached": True}}
+    assert second.cached and second.content == "refresh_session returns the token unchanged; it is called when the session expires." and chunks == ["refresh_session returns the token unchanged; it is called when the session expires."]
+    assert second.meta()["usage"] == {"tokens_in": 0, "tokens_out": 0, "cost_usd": 0, "cached": True}
+    assert second.meta()["route"]["free"] is True
     assert any(r["cached"] for r in store.usage_summary())
 
 
 async def test_cache_misses_after_edits_new_history_or_expiry(repo, store):
-    ex = ContextExecutor("gemini-lite", 0, ["answer"])
+    ex = ContextExecutor("gemini-lite", 0, ["refresh_session returns the token unchanged; it is called when the session expires."])
     brain = RouterBrain([ex], offline=True, cache_ttl=3600)
     _, on_delta = collector()
     job = Job("explain refresh_session", cwd=repo)

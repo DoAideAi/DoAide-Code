@@ -12,6 +12,7 @@ import hashlib
 import math
 import os
 import re
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -28,6 +29,8 @@ MAX_SCAN_FILES = 4000
 MAX_FILE_BYTES = 200_000
 MAX_CANDIDATES = 40
 TREE_LINES = 150
+# Small models get a short tree: it is orientation, not the content they need.
+SMALL_TREE_LINES = 60
 STOPWORDS = {
     "the", "and", "for", "with", "this", "that", "from", "into", "what", "when", "where", "which", "how",
     "why", "can", "you", "please", "make", "add", "fix", "use", "using", "file", "files", "code", "should",
@@ -59,6 +62,8 @@ class Ranking:
     root: Path
     tree: list[str] = field(default_factory=list)
     candidates: list[Candidate] = field(default_factory=list)
+    # The request's search terms, used to cut large files down to their relevant parts.
+    terms: set[str] = field(default_factory=set)
 
     @property
     def fingerprint(self) -> str:
@@ -68,31 +73,130 @@ class Ranking:
             digest.update(f"{c.path}:{c.size}:{c.mtime_ns}".encode())
         return digest.hexdigest()
 
-    def render(self, budget: int) -> tuple[str, list[str]]:
-        """Context text within `budget` characters, and the files it includes."""
-        if budget <= 0 or not (self.tree or self.candidates):
+    def render(self, budget: int, *, max_files: int | None = None, extra: str = "") -> tuple[str, list[str]]:
+        """Context text within `budget` characters, and the files it includes: the tree, then
+        whole files by rank (at most `max_files`), with `extra` (a recent diff) first."""
+        if budget <= 0 or not (self.tree or self.candidates or extra):
             return "", []
-        parts = ["# Project files (selected for this request)", "## Tree", *self.tree[:TREE_LINES]]
-        if len(self.tree) > TREE_LINES:
-            parts.append(f"... {len(self.tree) - TREE_LINES} more")
+        tree_lines = TREE_LINES if max_files is None or max_files > 3 else SMALL_TREE_LINES
+        parts = ["# Project files (selected for this request)", "## Tree", *self.tree[:tree_lines]]
+        if len(self.tree) > tree_lines:
+            parts.append(f"... {len(self.tree) - tree_lines} more")
+        if extra:
+            parts.insert(0, extra[: budget // 2])
         used = sum(len(p) + 1 for p in parts)
         included: list[str] = []
         for c in self.candidates:
+            if max_files is not None and len(included) >= max_files:
+                break
             try:
                 text = (self.root / c.path).read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            block = f"\n## File: {c.path}\n```{LANG.get(Path(c.path).suffix, '')}\n{text}\n```"
+            lang = LANG.get(Path(c.path).suffix, "")
+            block = f"\n## File: {c.path}\n```{lang}\n{text}\n```"
+            # Small models: a large file is sent as its relevant parts even when it would fit,
+            # since reading the prompt is most of a local model's time.
+            if max_files is not None and len(block) > budget // 3 and (cut := _excerpt(text, self.terms, budget // 3)):
+                block = f"\n## File: {c.path} (excerpts)\n```{lang}\n{cut}\n```"
             if used + len(block) > budget:
-                if c.explicit and budget - used > 2000:
-                    # Files the user named are worth a partial read.
-                    block = block[: budget - used - 40] + "\n... [truncated]\n```"
+                room = budget - used - 80
+                if max_files is not None:
+                    # Leave room for the files still to come.
+                    room = min(room, max(1500, room // max(1, max_files - len(included))))
+                if room < 1500:
+                    continue
+                # Too big to send whole: the parts that mention the request's terms.
+                excerpt = _excerpt(text, self.terms, room)
+                if excerpt:
+                    block = f"\n## File: {c.path} (excerpts)\n```{lang}\n{excerpt}\n```"
+                elif c.explicit:
+                    # Files the user named are worth a partial read even without a match.
+                    block = block[:room] + "\n... [truncated]\n```"
                 else:
                     continue
             parts.append(block)
             included.append(c.path)
             used += len(block)
         return "\n".join(parts), included
+
+    def render_map(self, budget: int, *, extra: str = "", files: int = 10) -> tuple[str, list[str]]:
+        """For agents that read files themselves: the tree, the likeliest files (paths only)
+        and `extra` (a recent diff), so they spend fewer tool calls searching."""
+        if budget <= 0 or not (self.tree or self.candidates or extra):
+            return "", []
+        likely = [c.path for c in self.candidates[:files]]
+        parts = ["# Project map (selected for this request; open files yourself as needed)"]
+        if likely:
+            parts += ["## Most relevant files", *(f"- {p}" for p in likely)]
+        if extra:
+            parts.append(extra[: budget // 2])
+        parts += ["## Tree", *self.tree[:SMALL_TREE_LINES]]
+        if len(self.tree) > SMALL_TREE_LINES:
+            parts.append(f"... {len(self.tree) - SMALL_TREE_LINES} more")
+        return "\n".join(parts)[:budget], []
+
+
+def git_context(root: Path, max_chars: int = 12_000) -> str:
+    """Uncommitted changes against HEAD, or the last commit when the tree is clean (blocking)."""
+    def git(*args: str) -> str:
+        try:
+            done = subprocess.run(
+                ["git", "-C", str(root), *args], capture_output=True, text=True, timeout=10, check=False
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+        return done.stdout if done.returncode == 0 else ""
+
+    diff = git("diff", "HEAD", "--stat", "--patch", "--no-color")
+    title = "## Uncommitted changes (git diff HEAD)"
+    if not diff.strip():
+        diff = git("show", "HEAD", "--stat", "--patch", "--no-color", "--format=%h %s%n")
+        title = "## Last commit (git show HEAD)"
+    if not diff.strip():
+        return ""
+    if len(diff) > max_chars:
+        diff = diff[:max_chars] + "\n... [diff truncated]"
+    return f"{title}\n```diff\n{diff}\n```"
+
+
+def _excerpt(text: str, terms: set[str], limit: int, radius: int = 12) -> str:
+    """Line windows around matches of `terms`, best-matching first, within `limit` characters;
+    "" when nothing matches. Each window starts with its line number, but lines are verbatim:
+    models copy prefixed lines into code and into SEARCH text, which then fails to match."""
+    lines = text.splitlines()
+    hits = [i for i, line in enumerate(lines) if any(t in line.lower() for t in terms)]
+    if not hits:
+        return ""
+    windows: list[list[int]] = []
+    for i in hits:
+        if windows and i - radius <= windows[-1][1]:
+            windows[-1][1] = min(len(lines), i + radius + 1)
+        else:
+            windows.append([max(0, i - radius), min(len(lines), i + radius + 1)])
+    # Windows with the most distinct terms first.
+    def weight(w: list[int]) -> int:
+        chunk = "\n".join(lines[w[0] : w[1]]).lower()
+        return sum(t in chunk for t in terms)
+
+    chosen: list[list[int]] = []
+    used = 0
+    for w in sorted(windows, key=weight, reverse=True):
+        size = sum(len(lines[i]) + 1 for i in range(w[0], w[1])) + 20
+        if used + size > limit:
+            continue
+        chosen.append(w)
+        used += size
+    out: list[str] = []
+    for start, end in sorted(chosen):
+        out.append(f"# ... (from line {start + 1})")
+        out += lines[start:end]
+    return "\n".join(out)
+
+
+def _is_test(lower_path: str) -> bool:
+    name = lower_path.rsplit("/", 1)[-1]
+    return "/tests/" in f"/{lower_path}" or name.startswith("test_") or ".test." in name or ".spec." in name
 
 
 def _is_text(name: str) -> bool:
@@ -107,8 +211,18 @@ def _terms(text: str) -> set[str]:
     return {w for w in words if w not in STOPWORDS}
 
 
-def _mentioned_paths(text: str) -> set[str]:
-    return {m.strip("`'\"").lstrip("./") for m in re.findall(r"[`'\"]?[\w./-]+\.[A-Za-z0-9]{1,6}[`'\"]?", text)}
+def _mentioned_paths(text: str, root: Path | None = None) -> set[str]:
+    """Paths named in the request. Absolute ones under `root` (as in tracebacks) become relative."""
+    found: set[str] = set()
+    for m in re.findall(r"[`'\"]?[\w./-]+\.[A-Za-z0-9]{1,6}[`'\"]?", text):
+        m = m.strip("`'\"")
+        if root is not None and m.startswith("/"):
+            try:
+                m = Path(m).resolve().relative_to(root).as_posix()
+            except (ValueError, OSError):
+                pass
+        found.add(m.lstrip("./"))
+    return found
 
 
 def rank_files(root: Path, request: str) -> Ranking:
@@ -117,7 +231,7 @@ def rank_files(root: Path, request: str) -> Ranking:
     ranking = Ranking(root)
     files: list[tuple[str, os.stat_result]] = []
     for current, dirs, names in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in IGNORED and not d.startswith("."))
+        dirs[:] = sorted(d for d in dirs if d not in IGNORED and not d.startswith(".") and not d.endswith(".egg-info"))
         base = Path(current)
         rel_dir = base.relative_to(root).as_posix()
         if rel_dir != ".":
@@ -135,7 +249,8 @@ def rank_files(root: Path, request: str) -> Ranking:
             break
 
     terms = _terms(request)
-    mentioned = _mentioned_paths(request)
+    ranking.terms = terms
+    mentioned = _mentioned_paths(request, root)
     present: dict[str, set[str]] = {}
     explicit: set[str] = set()
     for rel, st in files:
@@ -159,9 +274,14 @@ def rank_files(root: Path, request: str) -> Ranking:
     idf = {t: math.log(1 + total / df[t]) for t in terms if df[t]}
     stats = dict(files)
     scored: list[Candidate] = []
+    wants_tests = bool(terms & {"test", "tests", "testing", "pytest", "spec", "vitest"}) or "test" in request.lower()
     for rel, found in present.items():
         lower = rel.lower()
         score = sum(idf.get(t, 0) * (3 if t in lower else 1) for t in found)
+        if _is_test(lower):
+            # Tests repeat the names they test; the source is what explains them, unless the
+            # request is about the tests.
+            score *= 1.5 if wants_tests else 0.5
         if rel in explicit or score > 0:
             st = stats[rel]
             scored.append(Candidate(rel, score + (1000 if rel in explicit else 0), st.st_size, st.st_mtime_ns, rel in explicit))

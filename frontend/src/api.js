@@ -104,3 +104,8 @@ export function socketUrl(path, token) {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${proto}//${location.host}${path}?token=${encodeURIComponent(token)}`
 }
+
+// Usage dashboard: tokens and cost by day and model, and which model handled each task.
+export function fetchUsage(token, days = 7) {
+  return get(`/api/usage?days=${days}&tz=${new Date().getTimezoneOffset()}`, token)
+}

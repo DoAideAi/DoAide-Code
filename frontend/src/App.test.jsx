@@ -106,6 +106,10 @@ function mockFetch() {
             })
       case '/api/file':
         return reply({ path: decodeURIComponent(query.slice(5)), content: 'line one\nline two\n', binary: false })
+      case '/api/usage': {
+        const days = Number(new URLSearchParams(query).get('days'))
+        return reply({ ...USAGE, days, daily: USAGE.daily.slice(0, days) })
+      }
       default:
         return reply({})
     }
@@ -528,5 +532,87 @@ describe('model picker', () => {
     const picker = screen.getByTestId('model-picker')
     expect(picker.value).toBe('codex/o3')
     expect(picker.querySelector('option[value="codex/o3"]').textContent).toBe('codex: o3 (unavailable)')
+  })
+})
+
+const USAGE = {
+  days: 7,
+  totals: { tasks: 5, free_tasks: 4, tokens_in: 9000, tokens_out: 1200, cost_usd: 0.031, saved_usd: 0.04, free_share: 0.8 },
+  headline: 'Free local models and direct answers handled 80% of 5 tasks at no cost.',
+  daily: Array.from({ length: 30 }, (_, i) => ({
+    date: `2026-10-${String(i + 1).padStart(2, '0')}`,
+    tasks: i === 6 ? 5 : 0,
+    free_tasks: i === 6 ? 4 : 0,
+    tokens: i === 6 ? 10200 : 0,
+    cost_usd: i === 6 ? 0.031 : 0,
+  })),
+  by_model: [
+    { model: 'ollama-coder · qwen2.5-coder:32b', tasks: 3, tokens_in: 6000, tokens_out: 900, cost_usd: 0, free: true },
+    { model: 'No model (direct)', tasks: 1, tokens_in: 0, tokens_out: 0, cost_usd: 0, free: true },
+    { model: 'claude-sonnet', tasks: 1, tokens_in: 3000, tokens_out: 300, cost_usd: 0.031, free: false },
+  ],
+  recent: [
+    { id: 'a', prompt: 'refactor auth across all files', model: 'claude-sonnet', cost_usd: 0.031, free: false, checks_ok: true, source: 'chat' },
+    { id: 'b', prompt: 'explain runner.py', model: 'ollama-coder · qwen2.5-coder:32b', cost_usd: 0, free: true, checks_ok: false, source: 'mcp' },
+  ],
+}
+
+describe('usage dashboard', () => {
+  it('shows savings, totals, a daily chart, cost by model and the model behind each task', async () => {
+    await boot(true)
+    await act(async () => fireEvent.click(screen.getByTestId('usage-toggle')))
+    await flush()
+    expect(screen.getByTestId('usage-headline').textContent).toContain('handled 80% of 5 tasks')
+    expect(screen.getByTestId('usage-headline').textContent).toContain('$0.04 saved')
+    expect(screen.getAllByTestId('day-bar')).toHaveLength(7)
+    const rows = [...screen.getByTestId('by-model').querySelectorAll('tbody tr')].map((r) => r.textContent)
+    expect(rows[0]).toContain('ollama-coder · qwen2.5-coder:32b')
+    expect(rows[0]).toContain('free')
+    expect(rows[2]).toContain('$0.03')
+    const recent = screen.getByTestId('recent-tasks').textContent
+    expect(recent).toContain('refactor auth across all files')
+    expect(recent).toContain('Claude Code ·explain runner.py')
+
+    await act(async () => fireEvent.mouseEnter(screen.getAllByTestId('day-bar')[6]))
+    expect(screen.getByTestId('chart-tooltip').textContent).toContain('5 tasks · 4 free')
+
+    await act(async () => fireEvent.click(screen.getByText('30 days')))
+    await flush()
+    expect(screen.getAllByTestId('day-bar')).toHaveLength(30)
+    expect(globalThis.fetch.mock.calls.some(([url]) => url.startsWith('/api/usage?days=30&tz='))).toBe(true)
+
+    await act(async () => fireEvent.click(screen.getByText('Close')))
+    expect(screen.queryByTestId('usage-page')).toBeNull()
+    expect(screen.getByLabelText('Message')).toBeTruthy()
+  })
+})
+
+describe('reply footer', () => {
+  it('names the model that answered and shows failed checks', async () => {
+    await boot(true, {
+      messages: [
+        {
+          id: 'r',
+          role: 'assistant',
+          content: 'done',
+          status: 'done',
+          meta: {
+            usage: { tokens_in: 1200, tokens_out: 80, cost_usd: 0 },
+            route: { executor: 'ollama-coder', model: 'qwen2.5-coder:32b', free: true, reasons: ['fix (+3)'] },
+            checks: {
+              items: [
+                { name: 'complete', ok: true, detail: 'retried on claude-sonnet with more context (empty answer from ollama)' },
+                { name: 'python block', ok: false, detail: 'line 1: invalid syntax' },
+              ],
+            },
+          },
+        },
+      ],
+    })
+    expect(screen.getByTestId('usage').textContent).toBe('qwen2.5-coder:32b (free) · 1.2k in · 80 out · $0')
+    expect(screen.getByTestId('route').title).toBe('fix (+3)')
+    const checks = [...screen.getByTestId('checks').querySelectorAll('li')]
+    expect(checks.map((c) => c.dataset.ok)).toEqual(['true', 'false'])
+    expect(checks[1].textContent).toBe('✗ python block: line 1: invalid syntax')
   })
 })

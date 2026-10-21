@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from ..usage import Usage
-from .base import CODER_SYSTEM_PROMPT, Executor, ExecutorError, Job, cli_env, stream_subprocess, transcript_prompt, which
+from ..prompts import system_prompt
+from .base import Executor, ExecutorError, Job, cli_env, stream_subprocess, which, with_context
 
 # Read-only: the agent may look around the project, but changes come back as edit blocks that
 # DoAide shows as a diff and applies only on request.
@@ -48,18 +49,21 @@ class ClaudeStreamParser:
 
 class ClaudeCliExecutor(Executor):
     tool = "claude"
+    # A map of the project (tree, likely files, recent diff) so Claude spends fewer tool calls looking.
+    context_chars = 16_000
 
-    def __init__(self, binary: str, model: str, *, name: str, tier: int, timeout: float = 600):
+    def __init__(self, binary: str, model: str, *, name: str, tier: int, timeout: float = 600, min_task_tier: int = 0):
         self.binary = binary
         self.model = model
         self.name = name
         self.tier = tier
         self.timeout = timeout
+        self.min_task_tier = min_task_tier
 
     async def available(self) -> bool:
         return which(self.binary) is not None
 
-    def argv(self, prompt: str) -> list[str]:
+    def argv(self, prompt: str, kind: str = "question") -> list[str]:
         return [
             self.binary,
             "-p",
@@ -73,12 +77,12 @@ class ClaudeCliExecutor(Executor):
             "--allowedTools",
             *READ_ONLY_TOOLS,
             "--append-system-prompt",
-            CODER_SYSTEM_PROMPT,
+            system_prompt("claude", kind),
         ]
 
     async def stream(self, job: Job) -> AsyncIterator[str | Usage]:
         async for chunk in stream_subprocess(
-            self.argv(transcript_prompt(job)),
+            self.argv(with_context(job), job.kind),
             parse=ClaudeStreamParser(self.model),
             cwd=job.cwd,
             env=cli_env("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"),

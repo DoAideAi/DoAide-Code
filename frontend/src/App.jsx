@@ -5,6 +5,7 @@ import {
   createAgentToken,
   downloadInstaller,
   fetchConfig,
+  fetchUsage,
   googleLogin,
   loadSession,
   localLogin,
@@ -20,6 +21,7 @@ import MessageList from './components/MessageList.jsx'
 import SetupPage from './components/SetupPage.jsx'
 import SignIn from './components/SignIn.jsx'
 import TopBar from './components/TopBar.jsx'
+import UsagePage from './components/UsagePage.jsx'
 import { connect } from './socket.js'
 import { statusColor, useChat } from './store.js'
 
@@ -170,6 +172,8 @@ export default function App() {
   const [filesOpen, toggleFiles] = useStoredFlag(FILES_KEY)
   const [openFile, setOpenFile] = useState(null)
   const [setupOpen, setSetupOpen] = useState(false)
+  const [usageOpen, setUsageOpen] = useState(false)
+  const loadUsage = useCallback((days) => fetchUsage(token, days), [token])
 
   // Every device can read and send; on the hub, prompts are queued and run by the laptop.
   useEffect(() => {
@@ -220,6 +224,7 @@ export default function App() {
         laptop={mode === 'hub' && connection === 'open' ? agentOnline : null}
         onLaptop={() => setSetupOpen(true)}
         models={connection === 'open' ? models : null}
+        onUsage={token ? () => setUsageOpen((v) => !v) : null}
         sessions={
           token && {
             token,
@@ -231,7 +236,9 @@ export default function App() {
           }
         }
       />
-      {setupOpen && token ? (
+      {usageOpen && token ? (
+        <UsagePage load={loadUsage} onClose={() => setUsageOpen(false)} />
+      ) : setupOpen && token ? (
         <SetupPage
           agentOnline={agentOnline}
           onDownload={(platform) => downloadInstaller(token, platform)}

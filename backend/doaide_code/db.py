@@ -468,6 +468,18 @@ class Store:
             (since,),
         )
 
+    def replies_since(self, user_email: str, since: float) -> list[dict[str, Any]]:
+        """This user's replies with meta since `since`, each with the request that prompted it."""
+        return self._all(
+            "SELECT m.id, m.created_at, m.meta, m.status, s.source, "
+            "(SELECT u.content FROM messages u WHERE u.session_id = m.session_id AND u.role = 'user' "
+            " AND u.created_at <= m.created_at ORDER BY u.created_at DESC LIMIT 1) AS prompt "
+            "FROM messages m JOIN sessions s ON s.id = m.session_id "
+            "WHERE s.user_email = ? AND m.created_at >= ? AND m.role != 'user' AND m.meta IS NOT NULL "
+            "ORDER BY m.created_at",
+            (user_email, since),
+        )
+
     # Executor stats
 
     def record_executor(self, executor: str, *, ok: bool, elapsed_ms: int) -> None:

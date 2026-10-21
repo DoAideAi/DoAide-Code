@@ -162,6 +162,8 @@ class LaptopTools:
             "answer": outcome.content,
             "usage": outcome.meta().get("usage"),
         }
+        meta = outcome.meta()
+        result.update({k: meta[k] for k in ("route", "checks") if k in meta})
         if outcome.changes:
             result["changes"] = outcome.changes
             result["note"] = f"Proposed changes are not written yet; call apply_changes('{outcome.changes['id']}')."

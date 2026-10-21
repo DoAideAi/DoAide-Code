@@ -17,25 +17,7 @@ from ..usage import Usage
 log = logging.getLogger(__name__)
 
 
-CODER_SYSTEM_PROMPT = """You are DoAide Code, a concise senior software engineer working in the user's project.
-You are DoAide Code. You run locally using Ollama, Claude CLI, and Codex CLI. You are NOT GPT-4. You do
-NOT have access to OpenAI models. Never claim to be made by OpenAI or have access to GPT/DALL-E models.
-Answer questions directly and show code in fenced blocks. Say so when you are unsure.
-
-When the user asks for a code change, propose it as edit blocks; never claim you applied or ran
-anything. Each edit block is the file path on its own line, then:
-<<<<<<< SEARCH
-exact lines currently in the file (enough to be unique; empty to create a new file)
-=======
-the replacement lines
->>>>>>> REPLACE
-Keep SEARCH sections short and copied exactly from the file shown in the context. Use one block
-per change, and explain the change in a sentence or two before the blocks.
-
-You are one of several local models DoAide routes requests to. You cannot see which models, CLIs or
-tools are installed on this laptop, so never list, guess or describe them, and never present general
-knowledge (for example about OpenAI or other providers' models) as facts about this system. If asked
-which models are available, reply only that the user can type /models to see what was detected."""
+from ..prompts import CODER_SYSTEM_PROMPT  # noqa: E402,F401  (re-exported)
 
 
 class ExecutorError(RuntimeError):
@@ -55,6 +37,8 @@ class Job:
     cwd: Path | None = None
     # Relevant project files, selected for executors that cannot read the disk themselves.
     context: str = ""
+    # Task kind from the classifier (question, explain, edit, debug, ...): picks the prompt.
+    kind: str = "question"
 
 
 class Executor(ABC):
@@ -64,8 +48,14 @@ class Executor(ABC):
     tool: str = ""
     # Last-resort executors (subscription CLIs) are tried only after every primary one.
     fallback: bool = False
-    # API executors cannot open files, so they get selected context; CLI agents read for themselves.
-    needs_context: bool = False
+    # Executors that cannot open files get file contents ("files"); CLI agents read for themselves
+    # and get a project map instead ("map": tree, likely files, recent diff), which saves them tool calls.
+    context_mode: str = "map"
+    context_chars: int = 12_000
+    # At most this many whole files in "files" mode (small models do best with 2-3 relevant files).
+    max_files: int = 8
+    # Executors only worth using from this task tier up (Opus, Codex: never for what Ollama can do).
+    min_task_tier: int = 0
     # Answers that depend only on the prompt and context, so they are safe to cache.
     cacheable: bool = False
 
@@ -86,6 +76,12 @@ def transcript_prompt(job: Job, max_turns: int = 12) -> str:
     lines += [f"{t.role.upper()}: {t.content}" for t in turns]
     lines += ["", "Current request:", job.prompt]
     return "\n".join(lines)
+
+
+def with_context(job: Job) -> str:
+    """The transcript prompt, preceded by the project map when there is one."""
+    prompt = transcript_prompt(job)
+    return f"{job.context}\n\n# Request\n{prompt}" if job.context else prompt
 
 
 def cli_env(*remove: str) -> dict[str, str]:

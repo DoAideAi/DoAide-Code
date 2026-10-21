@@ -9,7 +9,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from ..usage import Usage, usage_for
-from .base import CODER_SYSTEM_PROMPT, Executor, ExecutorError, Job, cli_env, stream_subprocess, transcript_prompt, which
+from ..prompts import system_prompt
+from .base import Executor, ExecutorError, Job, cli_env, stream_subprocess, which, with_context
 
 
 def parse_codex_event(event: dict, model: str = "") -> str | Usage | None:
@@ -35,8 +36,11 @@ def parse_codex_event(event: dict, model: str = "") -> str | Usage | None:
 
 class CodexCliExecutor(Executor):
     name = "codex"
-    tier = 1
+    # An alternative to Claude Sonnet for complex work; never used for what Ollama can do.
+    tier = 2
+    min_task_tier = 2
     tool = "codex"
+    context_chars = 16_000
 
     def __init__(self, binary: str, model: str, *, timeout: float = 600):
         self.binary = binary
@@ -63,7 +67,7 @@ class CodexCliExecutor(Executor):
         return [*argv, prompt]
 
     async def stream(self, job: Job) -> AsyncIterator[str | Usage]:
-        prompt = f"{CODER_SYSTEM_PROMPT}\n\n{transcript_prompt(job)}"
+        prompt = f"{system_prompt('codex', job.kind)}\n\n{with_context(job)}"
         async for chunk in stream_subprocess(
             self.argv(prompt, str(job.cwd) if job.cwd else None),
             parse=lambda event: parse_codex_event(event, self.model),

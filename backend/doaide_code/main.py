@@ -33,6 +33,7 @@ from .files import FileAccessError, list_dir, read_file
 from .installer import PLATFORMS, agent_package, build_installer, package_filename
 from .relay import LaptopOffline, RelayService
 from .config import Settings
+from .dashboard import usage_report
 from .db import Store
 from .executors import Executor
 from .router import RouterBrain
@@ -196,6 +197,11 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
     async def post_message(body: SendMessage, user: User = Depends(current_user)) -> dict:
         task = await chat.submit(user.email, body.text)
         return {"accepted": task is not None}
+
+    @app.get("/api/usage")
+    async def usage(days: int = 7, tz: int = 0, user: User = Depends(current_user)) -> dict:
+        """Usage dashboard: tokens and cost by day and model, and which model handled each task."""
+        return usage_report(store, user.email, days=days, tz_offset_min=tz)
 
     @app.get("/api/stats")
     async def stats(user: User = Depends(current_user)) -> dict:

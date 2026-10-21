@@ -1,8 +1,8 @@
 """Router Brain: pick the cheapest executor that can handle each message.
 
-Tiers: 0 = Ollama (free), 1 = Codex / Claude Haiku, 2 = Claude Sonnet, 3 = Claude Opus. All
-run on the laptop; the CLIs use the user's subscription logins. Classification uses Jev
-(TypeSafe Choice + Score) only when one is passed in, else local keyword heuristics.
+Tiers: 0 = Ollama fast model, 1 = Ollama coder model (Claude Haiku if Ollama is down), 2 = Claude
+Sonnet / Codex, 3 = Claude Opus. All run on the laptop; the CLIs use the user's subscription logins.
+Classification is the local task classifier (classify.py), or Jev only when one is passed in.
 """
 
 from __future__ import annotations
@@ -10,9 +10,10 @@ from __future__ import annotations
 import copy
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
+from .classify import classify_task
 from .detect import ModelDetector, executor_report
 from .executors import Executor, JevExecutor
 from .usage import Usage
@@ -22,34 +23,6 @@ log = logging.getLogger(__name__)
 MAX_TIER = 3
 JEV_MIN_CONFIDENCE = 0.55
 
-_TIER_PATTERNS: list[tuple[int, re.Pattern[str]]] = [
-    (
-        3,
-        re.compile(
-            r"\b(architect\w*|system design|design (a|the) system|security|vulnerab\w*|threat model|audit|"
-            r"race condition|deadlock|concurrency|scalab\w*|migrat\w+ (the|our|from)|rewrite (the|our) entire)\b",
-            re.I,
-        ),
-    ),
-    (
-        2,
-        re.compile(
-            r"\b(refactor\w*|multi-?file|across (the|all)|debug\w*|stack ?trace|traceback|failing tests?|"
-            r"integrat\w+|new feature|add (an? )?endpoint|build (a|an|the)|end-to-end|investigate)\b",
-            re.I,
-        ),
-    ),
-    (
-        1,
-        re.compile(
-            r"\b(write (a |some )?tests?|unit tests?|fix (the|this|a)|bug|implement|add (a|an) (function|method|class)|"
-            r"edit|update the|change the|rename)\b",
-            re.I,
-        ),
-    ),
-]
-
-
 @dataclass(frozen=True)
 class RouteDecision:
     tier: int
@@ -58,13 +31,28 @@ class RouteDecision:
     confidence: float = 1.0
     # Tokens spent deciding; None when no paid call was made.
     usage: Usage | None = None
+    # From the task classifier: what kind of task, why this tier, and what extra context it needs.
+    kind: str = "question"
+    reasons: tuple[str, ...] = ()
+    wants_diff: bool = False
+    has_error: bool = False
+    about_project: bool = True
 
 
 def heuristic_tier(message: str) -> RouteDecision:
-    tier = next((t for t, pattern in _TIER_PATTERNS if pattern.search(message)), 0)
-    if len(message) > 2000:
-        tier = max(tier, 2)
-    return RouteDecision(tier=tier, complexity=float(tier), source="heuristic", confidence=0.5)
+    """Local classification (no model call): see classify.py."""
+    p = classify_task(message)
+    return RouteDecision(
+        tier=p.tier,
+        complexity=p.score,
+        source="classifier",
+        confidence=0.5,
+        kind=p.kind,
+        reasons=p.reasons,
+        wants_diff=p.wants_diff,
+        has_error=p.has_error,
+        about_project=p.about_project,
+    )
 
 
 
@@ -95,7 +83,10 @@ class RouterBrain:
             try:
                 d = await self.jev.decide(message, project=project)
                 tier = d.tier if d.confidence >= JEV_MIN_CONFIDENCE else _clamp_tier(d.complexity)
-                return RouteDecision(tier=_clamp_tier(tier), complexity=d.complexity, source="jev", confidence=d.confidence)
+                local = heuristic_tier(message)
+                return replace(
+                    local, tier=_clamp_tier(tier), complexity=d.complexity, source="jev", confidence=d.confidence
+                )
             except Exception as exc:  # any SDK, network, or schema failure falls through
                 log.warning("Jev routing failed: %s", exc)
         return heuristic_tier(message)
@@ -143,4 +134,7 @@ class RouterBrain:
         order = ordered([e for e in self.executors if not e.fallback]) + ordered(
             [e for e in self.executors if e.fallback]
         )
-        return [e for e in order if await self._usable(e)]
+        usable = [e for e in order if await self._usable(e)]
+        # Premium executors (Opus, Codex) only for tasks of their tier; for simpler ones they are a
+        # last resort when nothing cheaper is available at all.
+        return [e for e in usable if e.min_task_tier <= tier] or usable

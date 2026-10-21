@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 
 FINAL_STATUSES = {"done", "error", "stopped"}
 # Reply extras the laptop may attach (token usage, proposed changes), and a size cap for them.
-META_KEYS = {"usage", "changes"}
+META_KEYS = {"usage", "changes", "route", "checks"}
 MAX_META_BYTES = 512_000
 
 

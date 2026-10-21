@@ -88,7 +88,7 @@ def test_fallback_when_executor_fails_before_output(client, token, executors):
     executors[0].fail = "ollama down"
     with client.websocket_connect(f"/ws?token={token}") as ws:
         ws.receive_json()
-        ws.send_json({"type": "send", "text": "explain decorators"})
+        ws.send_json({"type": "send", "text": "what are decorators?"})
         events = drain_until(ws, "done")
     assert events[-1]["content"] == "codex says hi" and events[-1]["status"] == "done"
     failures = {s["executor"]: s["failures"] for s in client.get("/api/stats", headers=auth(token)).json()["executors"]}
@@ -170,7 +170,7 @@ def test_stop_cancels_generation(client, token, executors):
     executors[0].__class__ = Slow
     with client.websocket_connect(f"/ws?token={token}") as ws:
         ws.receive_json()
-        ws.send_json({"type": "send", "text": "explain generators"})
+        ws.send_json({"type": "send", "text": "what is a generator?"})
         drain_until(ws, "delta")
         ws.send_json({"type": "stop"})
         done = drain_until(ws, "done")[-1]

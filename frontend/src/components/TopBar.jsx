@@ -18,6 +18,7 @@ export default function TopBar({
   laptop = null,
   onLaptop,
   models = null,
+  onUsage = null,
 }) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4">
@@ -41,6 +42,16 @@ export default function TopBar({
         {sessions && <Sessions {...sessions} />}
       </div>
       <div className="flex items-center gap-3">
+        {onUsage && (
+          <button
+            type="button"
+            data-testid="usage-toggle"
+            onClick={onUsage}
+            className="shrink-0 text-xs text-zinc-400 hover:text-zinc-200"
+          >
+            Usage
+          </button>
+        )}
         <ModelsMenu models={models} />
         {laptop !== null && (
           <button

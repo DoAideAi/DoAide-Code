@@ -3,15 +3,16 @@
 A multi-model coding harness. You chat in one panel; a router picks the cheapest
 executor that can handle each message and streams the answer back.
 
-| Tier | Cost | Executor |
-| --- | --- | --- |
-| 0 | free | Ollama (`qwen3-coder`, falls back to the smallest installed coder model) |
-| 1 | low | Codex CLI (`o4-mini`), Claude Haiku |
-| 2 | medium | Claude Sonnet (Claude Code CLI) |
-| 3 | high | Claude Opus (Claude Code CLI) |
+| Tier | Tasks | Cost | Executor |
+| --- | --- | --- | --- |
+| – | arithmetic, file reads, listings, "which models / who are you" | free | no model (direct answer) |
+| 0 | simple questions | free | Ollama, smallest coder model (`qwen2.5-coder:7b`) |
+| 1 | explain code, small edits, debugging, tests | free | Ollama, largest coder model that fits in 40% of RAM (`qwen2.5-coder:32b`); Claude Haiku if Ollama is down |
+| 2 | multi-file changes, refactors, architecture | subscription | Claude Sonnet, then Codex CLI |
+| 3 | the hardest (score ≥ 12) | subscription | Claude Opus |
 
-If the chosen executor is unavailable or fails before it says anything, the
-harness escalates to the next tier, then falls back to cheaper ones.
+Opus and Codex are never used for tier 0-1 work unless nothing else is installed. If the
+chosen executor fails before it says anything, the harness escalates, then falls back.
 
 ## Layout
 
@@ -80,10 +81,28 @@ uses the model from `~/.codex/config.toml` by default, because a ChatGPT login r
 
 ## Routing
 
-Everything runs on the laptop: tier 0 is Ollama (free), tier 1 Codex CLI / Claude
-Haiku, tier 2 Claude Sonnet, tier 3 Claude Opus, all on your own subscription logins.
-Local keyword heuristics pick the tier; the router tries that tier, escalates, then
-falls back down. No API keys are used.
+Everything runs on the laptop, on your own subscription logins; no API keys are used.
+`classify.py` scores each request (weighted signals such as "refactor", "architecture",
+"traceback", files named, length) into a tier and a task kind, and keeps the reasons, which
+the UI shows on hover.
+
+**Context per executor.** Ollama gets the 2-3 most relevant files (large ones as excerpts
+around the matching lines) and an explicit `num_ctx`, since Ollama's default window silently
+truncates; general-knowledge questions get no files at all. Claude and Codex read files
+themselves, so they get a project map (tree, likeliest files) instead. Requests about recent
+changes include `git diff HEAD` (or the last commit); traceback paths become named files.
+
+**Prompts per executor.** Short prompts for Ollama, with a worked edit-block example for edit
+tasks; the full instructions for Claude; code-first wording for Codex. Each kind of task
+(explain, edit, debug, test, review, design) adds its own guidance.
+
+**Checks.** Every answer is checked before it is final: incomplete answers (empty, cut off,
+"please provide the code", an edit request without code) are retried once on the next tier up
+with twice the context; fenced Python/JSON/JS must parse; proposed edits must target existing
+text and pass syntax and ruff. Results show under each reply with the model that answered.
+
+**Usage dashboard.** *Usage* in the top bar: tasks, tokens and API-equivalent cost per day and
+per model, which model handled each task, and how much the free models saved versus Sonnet.
 
 ## Code changes: preview, then apply
 

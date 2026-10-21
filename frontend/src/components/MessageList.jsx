@@ -51,6 +51,31 @@ export function usageLabel(usage) {
   return `${formatTokens(usage.tokens_in)} in · ${formatTokens(usage.tokens_out)} out · ${formatCost(usage.cost_usd)}`
 }
 
+// Which model answered: "qwen2.5-coder:32b (free)", "claude-sonnet", "no model".
+export function routeLabel(route) {
+  if (!route) return null
+  if (route.executor === 'direct') return 'no model'
+  const name = route.model && !route.executor.includes(route.model) ? route.model : route.executor
+  return route.free ? `${name} (free)` : name
+}
+
+// Validation results under a reply: completeness, code syntax, proposed edits.
+function Checks({ checks }) {
+  const items = checks?.items ?? []
+  if (!items.length) return null
+  const shown = items.filter((c) => !(c.name === 'complete' && c.ok && c.detail === 'looks complete'))
+  return (
+    <ul data-testid="checks" className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+      {shown.length === 0 && <li className="text-zinc-600">✓ checks passed</li>}
+      {shown.map((c, i) => (
+        <li key={i} data-ok={c.ok ? 'true' : 'false'} className={c.ok ? 'text-zinc-500' : 'text-red-300/90'}>
+          {c.ok ? '✓' : '✗'} {c.name}: {c.detail}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 const TOOL_LABELS = {
   execute_code: 'task',
   run_command: 'command',
@@ -227,6 +252,7 @@ function Message({ message, onSend }) {
     return <div className="text-sm text-zinc-500">Queued for your laptop…</div>
   }
   const usage = usageLabel(message.meta?.usage)
+  const model = routeLabel(message.meta?.route)
   const changes = message.meta?.changes
   return (
     <div className={`leading-relaxed ${message.status === 'error' ? 'text-red-300' : 'text-zinc-200'}`}>
@@ -242,11 +268,18 @@ function Message({ message, onSend }) {
       )}
       {changes?.files?.length > 0 && <ChangeSet changes={changes} onSend={onSend} />}
       {message.status === 'stopped' && <div className="mt-1 text-xs text-zinc-500">stopped</div>}
-      {usage && !streaming && (
+      {(usage || model) && !streaming && (
         <div data-testid="usage" className="mt-1.5 font-mono text-[11px] text-zinc-600">
+          {model && (
+            <span data-testid="route" title={message.meta.route.reasons?.join(', ') || undefined}>
+              {model}
+              {usage ? ' · ' : ''}
+            </span>
+          )}
           {usage}
         </div>
       )}
+      {!streaming && <Checks checks={message.meta?.checks} />}
     </div>
   )
 }
