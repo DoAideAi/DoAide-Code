@@ -80,8 +80,9 @@ class ClaudeStreamParser:
 
 class ClaudeCliExecutor(Executor):
     tool = "claude"
-    # A map of the project (tree, likely files, recent diff) so Claude spends fewer tool calls looking.
-    context_chars = 16_000
+    # A map of the project (tree, likely files, recent diff) so Claude spends fewer tool calls looking,
+    # with the files the request names in full (room for ~10k tokens: cheaper than a Read round).
+    context_chars = 40_000
 
     def __init__(self, binary: str, model: str, *, name: str, tier: int, timeout: float = 600, min_task_tier: int = 0):
         self.binary = binary
@@ -117,6 +118,11 @@ class ClaudeCliExecutor(Executor):
             # prompt, so the prompt cache survives a changed git status or another folder. Measured
             # on a follow-up in another folder: $0.05 instead of $0.35 (2026-10-21).
             "--exclude-dynamic-system-prompt-sections",
+            # No MCP servers or skills from the user's own setup: their tool definitions joined every
+            # round after the first (measured: a one-Grep answer read 9.4k + 50k tokens, $0.041;
+            # without them 9.4k + 9.7k, $0.009), and DoAide's Claude only reads files.
+            "--strict-mcp-config",
+            "--disable-slash-commands",
             *(["--resume", resume] if resume else []),
         ]
 

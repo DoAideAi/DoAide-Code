@@ -132,7 +132,11 @@ def test_cli_agents_get_a_map_and_git_diff(repo):
     diff = git_context(repo)
     assert diff.startswith("## Uncommitted changes") and "+    return a + b" in diff
     text, files = rank_files(repo, "review util.py").render_map(4_000, extra=diff)
-    assert files == [] and "- app/util.py" in text and "+    return a + b" in text and "def charge" not in text
+    assert "- app/util.py" in text and "+    return a + b" in text and "def charge" not in text
+    # The file the request names comes whole (a Read round re-sends everything); then no tree.
+    assert files == ["app/util.py"] and "## File: app/util.py (complete" in text and "## Tree" not in text
+    text, files = rank_files(repo, "review the adding code").render_map(4_000)
+    assert files == [] and "## Tree" in text
 
 
 async def test_review_requests_include_the_diff(repo, store):

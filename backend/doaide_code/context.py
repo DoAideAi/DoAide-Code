@@ -168,10 +168,32 @@ class Ranking:
             parts += ["## Most relevant files", *(f"- {p}" for p in likely)]
         if extra:
             parts.append(extra[: budget // 2])
-        parts += ["## Tree", *self.tree[:SMALL_TREE_LINES]]
-        if len(self.tree) > SMALL_TREE_LINES:
-            parts.append(f"... {len(self.tree) - SMALL_TREE_LINES} more")
-        return "\n".join(parts)[:budget], []
+        # Files the request names come whole when they fit: every tool round re-sends the whole
+        # conversation, and reading a named file was a round (live: 113k tokens for a 7-line edit).
+        included: list[str] = []
+        room = budget - sum(len(p) + 1 for p in parts) - 2000
+        for c in (c for c in self.candidates if c.explicit):
+            try:
+                text = (self.root / c.path).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            block = f"## File: {c.path} (complete; no need to read it again)\n```{LANG.get(Path(c.path).suffix, '')}\n{text}\n```"
+            if len(block) <= room:
+                parts.append(block)
+                included.append(c.path)
+                room -= len(block) + 1
+        if included:
+            # Live: told to "open files yourself", Claude grepped a file it had been shown (a
+            # second round: 52k more tokens).
+            parts[0] = (
+                "# Project map (selected for this request). The files shown below are complete and current: "
+                "work from them without reading or searching them again; open other files only if needed."
+            )
+        else:
+            parts += ["## Tree", *self.tree[:SMALL_TREE_LINES]]
+            if len(self.tree) > SMALL_TREE_LINES:
+                parts.append(f"... {len(self.tree) - SMALL_TREE_LINES} more")
+        return "\n".join(parts)[:budget], included
 
 
 def git_context(root: Path, max_chars: int = 12_000) -> str:

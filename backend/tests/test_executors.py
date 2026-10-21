@@ -77,6 +77,8 @@ def test_claude_argv_matches_spec():
     assert "Edit" not in " ".join(allowed) and "Write" not in " ".join(allowed)
     assert argv[argv.index("--allowedTools") + 1 : argv.index("--allowedTools") + 4] == ["Read", "Grep", "Glob"]
     assert "SEARCH" in argv[argv.index("--append-system-prompt") + 1]
+    # None of the user's MCP servers or skills: ~40k tokens on every round after the first.
+    assert "--strict-mcp-config" in argv and "--mcp-config" not in argv and "--disable-slash-commands" in argv
 
 
 def test_claude_parser_prefers_deltas_and_reports_errors():
