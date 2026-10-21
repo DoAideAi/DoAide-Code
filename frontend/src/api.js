@@ -96,6 +96,21 @@ export const localLogin = () => post('/api/auth/local')
 export const googleLogin = (credential) => post('/api/auth/google', { credential })
 export const refreshSession = (refresh) => post('/api/auth/refresh', { refresh_token: refresh })
 
+// The laptop agent serves this same app locally; prompts typed there run at once, with no round
+// trip through the server (which only keeps the phone in sync).
+export const LOCAL_URL = 'http://127.0.0.1:3097'
+
+// Is DoAide's local server running on this machine? Its URL, or null.
+export async function probeLocal(url = LOCAL_URL) {
+  try {
+    const resp = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout?.(1500) })
+    const body = resp.ok ? await resp.json() : null
+    return body?.mode === 'local' ? url : null
+  } catch {
+    return null
+  }
+}
+
 export function socketUrl(path, token) {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${proto}//${location.host}${path}?token=${encodeURIComponent(token)}`

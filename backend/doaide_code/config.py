@@ -21,6 +21,8 @@ class Settings:
     hub_token: str = field(default_factory=lambda: os.environ.get("DOAIDE_HUB_TOKEN", "").strip())
     host: str = field(default_factory=lambda: os.environ.get("DOAIDE_HOST", "127.0.0.1"))
     port: int = field(default_factory=lambda: int(os.environ.get("DOAIDE_PORT", "3097")))
+    # The laptop agent also serves the app locally on host:port (see agent.py); 0 turns that off.
+    local_ui: bool = field(default_factory=lambda: os.environ.get("DOAIDE_LOCAL_UI", "1").strip() != "0")
     db_path: Path = field(
         default_factory=lambda: Path(os.environ.get("DOAIDE_DB", str(Path.home() / ".doaide-code" / "doaide.db")))
     )

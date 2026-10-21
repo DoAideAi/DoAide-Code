@@ -18,13 +18,15 @@ import contextlib
 import hashlib
 import json
 import logging
+import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 
 from .changes import apply_record, propose, repair_prompt, strip_edits
 from .config import Settings
-from .context import Ranking, git_context, rank_files
+from .context import Ranking, git_context, mentioned_paths, rank_files
 from .db import Store
 from .detect import ModelDetector, answer_access, answer_meta, meta_question
 from .executors import Executor, ExecutorError, Job, Turn, build_executors
@@ -36,6 +38,7 @@ from .usage import Usage, sonnet_equivalent
 from .validate import (
     capability_claim,
     check_code_blocks,
+    trim_reply,
     early_problem,
     edit_checks,
     incomplete_reason,
@@ -113,6 +116,21 @@ def strip_meta_turns(history) -> list[Turn]:
         elif not skip_reply:
             kept.append(turn)
     return kept
+
+
+_CREATE = re.compile(r"\b(?:create|write|new (?:file|module|script|package|test)|scaffold|generate)\b", re.I)
+
+
+def missing_paths(prompt: str, root: Path) -> list[str]:
+    """Relative file paths the request names (with a directory, like backend/app.py) that are not
+    in `root`, unless the request is to create them."""
+    if _CREATE.search(prompt):
+        return []
+    missing = []
+    for path in sorted(mentioned_paths(prompt)):
+        if "/" in path and not path.startswith(("http", "/")) and ".." not in path and not (root / path).exists():
+            missing.append(path)
+    return missing
 
 
 def answer_anchor(text: str) -> str:
@@ -215,6 +233,21 @@ async def _run_job(
             ranking = await asyncio.to_thread(rank_files, job.cwd, f"{job.prompt}\n{recent}")
         except OSError as exc:
             log.warning("context selection failed: %s", exc)
+    # A file the request names that is not in the project: say so at once (free) instead of having
+    # models search for it, which once took two minutes and $0.61 of Sonnet in the wrong folder.
+    if job.cwd is not None and (missing := missing_paths(job.prompt, job.cwd)):
+        where = f"project {project}" if project else "the workspace (no project selected)"
+        answer = (
+            f"`{missing[0]}` is not in {where} at `{job.cwd}`. Switch with `/switch-project <name>` "
+            "(`/projects` lists them), or ask me to create it."
+        )
+        outcome.route = {"executor": "direct", "model": None, "free": True, "reasons": [f"{missing[0]} not found"]}
+        outcome.content, outcome.status, outcome.executor = answer, "done", "direct"
+        outcome.add_usage(Usage("none"))
+        store.record_usage(source, "direct", None, 0, 0, 0.0)
+        await on_delta(answer)
+        return outcome
+
     key = cache_key(job, ranking) if router.cache_ttl > 0 else None
     if key is not None and (hit := store.cache_get(key, router.cache_ttl)) is not None:
         outcome.content, outcome.status, outcome.executor, outcome.cached = hit["answer"], "done", hit["executor"], True
@@ -344,6 +377,7 @@ async def _run_job(
         # A repair round starts from the full context: the resumed session predates this answer.
         await _preview_changes(store, job, outcome, executor, fresh, on_delta, source)
         outcome.checks += edit_checks(outcome.changes)
+        outcome.content = trim_reply(outcome.content)
         break
     if outcome.status != "done" and not outcome.content and held is not None:
         outcome.content, outcome.executor, outcome.route, code_checks = held
@@ -449,7 +483,10 @@ async def _vet(job: Job, answer: str, kind: str) -> tuple[str | None, list[dict]
         )
         return f"{bad['name']} does not parse ({bad['detail']})", code_checks, fix
     if job.cwd is not None and (changeset := await propose(job.cwd, answer)) is not None and changeset.all_problems:
-        return f"its edit failed checks ({changeset.all_problems[0]})", code_checks, repair_prompt(job.prompt, changeset.all_problems)
+        # Asking again cannot conjure a file that is not there: no repair round for that.
+        fixable = not all("does not exist" in p for p in changeset.all_problems)
+        fix = repair_prompt(job.prompt, changeset.all_problems) if fixable else None
+        return f"its edit failed checks ({changeset.all_problems[0]})", code_checks, fix
     if reason := capability_claim(answer) or off_topic_reason(job.prompt, answer):
         return reason, code_checks, None
     return None, code_checks, None
@@ -602,6 +639,9 @@ async def _preview_changes(
             outcome.checks.append(
                 {"name": "edits", "ok": False, "detail": f"no edit could be applied: {changeset.all_problems[0]}"}
             )
+            # The edit blocks are never shown, applied or not; say in one line why nothing changed.
+            note = f"Nothing written: {changeset.all_problems[0]}."
+            outcome.content = f"{strip_edits(outcome.content)}\n\n{note}".strip()
         return
     record = changeset.record()
     store.add_changeset(changeset.id, record, changeset.summary())

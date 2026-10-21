@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import re
 import logging
 import uuid
 from typing import Any, Protocol
@@ -26,6 +27,10 @@ from .sync import SyncHub
 log = logging.getLogger(__name__)
 
 FINAL_STATUSES = {"done", "error", "stopped"}
+# The laptop's local chat, mirrored here for the phone: message ids are hex uuids (or a hub job
+# id echoed back) and content is capped.
+MIRROR_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+MAX_MIRROR_CHARS = 200_000
 # Reply extras the laptop may attach (token usage, proposed changes), and a size cap for them.
 META_KEYS = {"usage", "changes", "route", "checks"}
 MAX_META_BYTES = 512_000
@@ -298,6 +303,9 @@ class RelayService:
             if self._mcp_replies.get(reply_id) == user_email and isinstance(event.get("text"), str):
                 await self.hub.publish(user_email, {"type": "delta", "id": reply_id, "text": event["text"]})
             return
+        if kind == "mirror":
+            await self._mirror(user_email, event.get("event"))
+            return
         if kind == "rpc_result":
             entry = self._rpc.get(str(event.get("id")))
             if entry is not None and entry[0] == user_email and not entry[1].done():
@@ -320,6 +328,56 @@ class RelayService:
             await self._publish_status(user_email)
 
     # Internals
+
+    def _owned(self, user_email: str, message_id: str) -> dict[str, Any] | None:
+        message = self.store.get_message(message_id) if MIRROR_ID.match(message_id) else None
+        session = self.store.get_session(message["session_id"]) if message else None
+        return message if session and session["user_email"] == user_email else None
+
+    async def _mirror(self, user_email: str, event: Any) -> None:
+        """Store and fan out an event from the laptop's local UI. The laptop already ran the prompt;
+        the hub only keeps the conversation in sync for the user's other devices."""
+        if not isinstance(event, dict):
+            return
+        kind = event.get("type")
+        if kind == "cleared":
+            self.store.create_session(user_email)
+            await self.hub.publish(user_email, self.snapshot(user_email))
+        elif kind == "project":
+            project = event.get("project")
+            await self._set_project(user_email, project if isinstance(project, str) else None)
+        elif kind == "status" and event.get("state") in {"idle", "busy", "error"}:
+            await self.hub.publish(user_email, {"type": "status", "state": event["state"]})
+        elif kind == "changes":
+            await self._update_changes(user_email, event)
+        elif kind == "delta" and isinstance(event.get("text"), str) and self._owned(user_email, str(event.get("id"))):
+            await self.hub.publish(user_email, {"type": "delta", "id": event["id"], "text": event["text"]})
+        elif kind == "message" and isinstance(message := event.get("message"), dict):
+            message_id, content = str(message.get("id")), message.get("content")
+            role = message.get("role") if message.get("role") in {"user", "assistant", "system"} else None
+            if not MIRROR_ID.match(message_id) or not isinstance(content, str) or role is None:
+                return
+            status = message.get("status") if message.get("status") in FINAL_STATUSES | {"streaming"} else "done"
+            meta = clean_meta(message.get("meta")) or None
+            if self.store.get_message(message_id) is None:
+                session = self.current_session(user_email)
+                self.store.add_message(
+                    session["id"], role, content[:MAX_MIRROR_CHARS], status=status, message_id=message_id, meta=meta
+                )
+            elif self._owned(user_email, message_id):
+                self.store.finish_message(message_id, content[:MAX_MIRROR_CHARS], status, meta=meta)
+            else:
+                return
+            await self.hub.publish(user_email, {"type": "message", "message": public_message(self.store.get_message(message_id))})
+        elif kind == "done" and (message := self._owned(user_email, str(event.get("id")))):
+            content = event["content"][:MAX_MIRROR_CHARS] if isinstance(event.get("content"), str) else message["content"]
+            status = str(event["status"]) if event.get("status") in FINAL_STATUSES else "error"
+            meta = clean_meta(event.get("meta"))
+            self.store.finish_message(message["id"], content, status, meta=meta or None)
+            if event.get("role") == "system":
+                self.store.set_message_role(message["id"], "system")
+            done = {"type": "done", "id": message["id"], "status": status, "content": content}
+            await self.hub.publish(user_email, {**done, "meta": meta} if meta else done)
 
     async def _update_changes(self, user_email: str, event: dict[str, Any]) -> None:
         """The laptop applied or discarded a changeset: update that reply on every device."""

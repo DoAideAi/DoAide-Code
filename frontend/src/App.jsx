@@ -10,6 +10,7 @@ import {
   googleLogin,
   loadSession,
   localLogin,
+  probeLocal,
   refreshSession,
   saveSession,
   setupStatus,
@@ -148,6 +149,17 @@ export default function App() {
     return () => socket.current?.close()
   }, [token, apply, setConnection, renew])
 
+  // Hub only: on the laptop itself, offer the local server (no server round trip).
+  const [localUrl, setLocalUrl] = useState(null)
+  useEffect(() => {
+    if (mode !== 'hub' || connection !== 'open') return
+    let active = true
+    probeLocal().then((url) => active && setLocalUrl(url))
+    return () => {
+      active = false
+    }
+  }, [mode, connection])
+
   // Hub only: a user whose laptop has never connected lands on the setup page first.
   useEffect(() => {
     if (!token || mode !== 'hub') return
@@ -171,6 +183,7 @@ export default function App() {
         color={statusColor(connection, serverStatus, mode, agentOnline)}
         busy={busy}
         models={connection === 'open' ? models : null}
+        localUrl={mode === 'hub' ? localUrl : null}
         onUsage={
           token
             ? () => {

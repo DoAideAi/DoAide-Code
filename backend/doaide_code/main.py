@@ -67,27 +67,38 @@ class SettingsUpdate(BaseModel):
     workspace: str | None = None
 
 
-def create_app(settings: Settings | None = None, *, executors: list[Executor] | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    executors: list[Executor] | None = None,
+    store: Store | None = None,
+    router: RouterBrain | None = None,
+    hub: SyncHub | None = None,
+) -> FastAPI:
+    """The app. The laptop agent passes its own store, router and (mirroring) sync hub to serve
+    the local UI from the same process: see agent.py."""
     settings = settings or Settings()
-    store = Store(settings.db_path)
+    owns_store = store is None
+    store = store or Store(settings.db_path)
     # Answers cached by an earlier build may predate today's prompt and checks; start clean.
-    if cleared := store.cache_clear():
+    if owns_store and (cleared := store.cache_clear()):
         log.info("cleared %d cached answers", cleared)
-    hub = SyncHub()
-    router: RouterBrain | None = None
+    hub = hub or SyncHub()
     chat: ChatService | RelayService
     if settings.is_hub:
         # No model, router or LLM key is used on the hub; the laptop agent does all of that.
         chat = RelayService(store, hub)
     else:
         # Local executors only (Ollama, Codex CLI, Claude CLI); routing is local heuristics.
-        router = RouterBrain(executors, offline=True) if executors is not None else build_router(settings)
+        if router is None:
+            router = RouterBrain(executors, offline=True) if executors is not None else build_router(settings)
         chat = ChatService(store, router, hub, workspace=settings.workspace)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         yield
-        store.close()
+        if owns_store:
+            store.close()
 
     app = FastAPI(title="Doaide Code", version="0.1.0", lifespan=lifespan)
     app.state.settings, app.state.store, app.state.hub, app.state.chat, app.state.router = (
@@ -452,15 +463,71 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
                 "ever_connected": store.agent_ever_connected(user.email),
             }
 
-    mount_frontend(app, settings.frontend_dist)
+    if not settings.is_hub:
+        allow_hub_probe(app, hub_origin(settings.hub_url))
+    if not mount_frontend(app, settings.frontend_dist) and not settings.is_hub:
+        # Laptops installed without the repo have no frontend build: use the hub's.
+        mount_remote_frontend(app, hub_origin(settings.hub_url))
     return app
 
 
-def mount_frontend(app: FastAPI, dist: Path) -> None:
+def hub_origin(hub_url: str) -> str:
+    """https://code.doaide.com from wss://code.doaide.com/agent."""
+    scheme, _, rest = hub_url.partition("://")
+    return f"{'https' if scheme == 'wss' else 'http'}://{rest.split('/', 1)[0]}"
+
+
+def allow_hub_probe(app: FastAPI, origin: str) -> None:
+    """Let the hosted UI (on this laptop's browser) detect this local server, so it can offer to
+    switch to it: CORS plus Chrome's private-network preflight, for /api/health only."""
+    headers = {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "GET",
+        "Access-Control-Allow-Private-Network": "true",
+        "Vary": "Origin",
+    }
+
+    @app.middleware("http")
+    async def probe(request: Request, call_next):
+        if request.url.path != "/api/health" or request.headers.get("origin") != origin:
+            return await call_next(request)
+        if request.method == "OPTIONS":
+            return Response(status_code=204, headers=headers)
+        response = await call_next(request)
+        response.headers.update(headers)
+        return response
+
+
+def mount_remote_frontend(app: FastAPI, origin: str) -> None:
+    """Serve the hub's frontend build, fetched once per file and kept in memory."""
+    import httpx
+
+    cache: dict[str, tuple[bytes, str]] = {}
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def remote_spa(path: str) -> Response:
+        if path.startswith(("api/", "ws", "sync", "agent")):
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
+        key = path if path.startswith("assets/") else ""
+        if key not in cache:
+            try:
+                async with httpx.AsyncClient(base_url=origin, timeout=15) as client:
+                    resp = await client.get(f"/{key}")
+            except httpx.HTTPError as exc:
+                raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"cannot load the app from {origin}") from exc
+            if resp.status_code != 200:
+                raise HTTPException(resp.status_code)
+            cache[key] = (resp.content, resp.headers.get("content-type", "text/html"))
+        content, media = cache[key]
+        return Response(content, media_type=media)
+
+
+def mount_frontend(app: FastAPI, dist: Path) -> bool:
+    """Serve the frontend build; False when there is none."""
     index = dist / "index.html"
     if not index.is_file():
         log.warning("Frontend build not found at %s; run `npm run build` in frontend/", dist)
-        return
+        return False
     if (dist / "assets").is_dir():
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
 
@@ -472,6 +539,8 @@ def mount_frontend(app: FastAPI, dist: Path) -> None:
         if path and candidate.is_file() and candidate.is_relative_to(dist.resolve()):
             return FileResponse(candidate)
         return FileResponse(index)
+
+    return True
 
 
 def run() -> None:

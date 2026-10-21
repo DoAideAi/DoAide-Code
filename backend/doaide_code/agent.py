@@ -1,10 +1,14 @@
-"""Laptop agent: connects out to the hub and runs relayed prompts on this machine.
+"""Laptop agent: the local UI, plus a connection out to the hub for the phone.
 
-The hub (code.doaide.com) never runs a model. This process keeps one WebSocket open to
-the hub's `/agent` endpoint, receives one job at a time, runs it through the local
-executors (Ollama, Claude CLI, Codex CLI) against the laptop's project registry, and
-streams the answer back. Run it with `doaide-code agent` after copying the token from
-"Connect laptop" on the hosted UI into DOAIDE_HUB_TOKEN.
+Local first. The executors (Ollama, Claude CLI, Codex CLI) and this process live on the same
+laptop, so the laptop's own UI talks to it directly: the agent serves the app at
+http://127.0.0.1:3097 (DOAIDE_PORT; DOAIDE_LOCAL_UI=0 turns it off) and runs prompts typed there
+at once, with no server round trip. The hub (code.doaide.com) never runs a model; it only keeps
+the phone in sync. Every local event is mirrored up this agent's WebSocket (sync.MirrorHub), and
+prompts sent from the phone arrive as jobs, run here, and show in the local chat as well.
+
+Run it with `doaide-code agent` after copying the token from "Connect laptop" on the hosted UI
+into DOAIDE_HUB_TOKEN.
 """
 
 from __future__ import annotations
@@ -14,8 +18,10 @@ import contextlib
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from typing import Any
 
+from .chat import public_message
 from .commands import is_command, is_models_command, run_command
 from .detect import format_report, same_report
 from .config import Settings
@@ -25,6 +31,7 @@ from .files import FileAccessError, list_dir, read_file
 from .mcp_server import LaptopTools, handle_relayed
 from .router import RouterBrain
 from .runner import Outcome, build_router, run_job
+from .sync import MirrorHub
 from .workspace import DEFAULT_WORKSPACE, working_root
 
 log = logging.getLogger(__name__)
@@ -33,8 +40,18 @@ Send = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 class LaptopAgent:
-    def __init__(self, store: Store, router: RouterBrain, owner_email: str, *, workspace: str = DEFAULT_WORKSPACE):
+    def __init__(
+        self,
+        store: Store,
+        router: RouterBrain,
+        owner_email: str,
+        *,
+        workspace: str = DEFAULT_WORKSPACE,
+        local: MirrorHub | None = None,
+    ):
         self.store = store
+        # The local UI's sync hub: jobs from the phone are shown there too (see _show_locally).
+        self.local = local
         self.router = router
         self.workspace = workspace
         # Projects and the active project are kept per laptop owner in the local database.
@@ -156,9 +173,12 @@ class LaptopAgent:
             if isinstance(t, dict)
         ]
         outcome = Outcome()
+        await self._show_locally(job_id, text)
 
         async def on_delta(chunk: str) -> None:
             await send({"type": "delta", "id": job_id, "text": chunk})
+            if self.local is not None:
+                await self.local.publish_local(self.owner, {"type": "delta", "id": job_id, "text": chunk})
 
         try:
             await run_job(
@@ -184,10 +204,25 @@ class LaptopAgent:
         done = {"type": "done", "id": job_id, "status": outcome.status, "content": outcome.content}
         meta = outcome.meta()
         await send({**done, "meta": meta} if meta else done)
+        if self.local is not None:
+            self.store.finish_message(job_id, outcome.content, outcome.status, meta=meta or None)
+            await self.local.publish_local(self.owner, {**done, "meta": meta} if meta else done)
+
+    async def _show_locally(self, job_id: str, text: str) -> None:
+        """A prompt from the phone joins the local chat too (under the hub's reply id), so the
+        laptop and the phone show one conversation."""
+        if self.local is None or self.store.get_message(job_id) is not None:
+            return  # no local UI, or a job the hub re-sent after a reconnect
+        session = self.store.latest_session(self.owner) or self.store.create_session(self.owner)
+        prompt = self.store.add_message(session["id"], "user", text)
+        reply = self.store.add_message(session["id"], "assistant", "", status="streaming", message_id=job_id)
+        for message in (prompt, reply):
+            await self.local.publish_local(self.owner, {"type": "message", "message": public_message(message)})
 
 
 async def serve(agent: LaptopAgent, url: str, token: str, *, max_backoff: float = 30.0) -> None:
-    """Stay connected to the hub, reconnecting with backoff; jobs stop if the link drops."""
+    """Stay connected to the hub, reconnecting with backoff; jobs stop if the link drops. While
+    connected, the local UI's conversation is mirrored up this socket."""
     from websockets.asyncio.client import connect
     from websockets.exceptions import ConnectionClosed, InvalidStatus
 
@@ -202,6 +237,8 @@ async def serve(agent: LaptopAgent, url: str, token: str, *, max_backoff: float 
                     await ws.send(json.dumps(data))
 
                 await send(await agent.hello())
+                if agent.local is not None:
+                    agent.local.uplink = send
                 watcher = asyncio.create_task(agent.watch_models(send))
                 try:
                     async for raw in ws:
@@ -222,6 +259,8 @@ async def serve(agent: LaptopAgent, url: str, token: str, *, max_backoff: float 
         except OSError as exc:
             log.warning("cannot reach hub: %s", exc)
         finally:
+            if agent.local is not None:
+                agent.local.uplink = None
             await agent.disconnect()
         await asyncio.sleep(backoff)
         backoff = min(backoff * 2, max_backoff)
@@ -237,10 +276,35 @@ def run_agent(settings: Settings) -> None:
     if cleared := store.cache_clear():
         log.info("cleared %d cached answers", cleared)
     router = build_router(settings)
-    agent = LaptopAgent(store, router, settings.owner_email, workspace=settings.workspace)
+    local = MirrorHub() if settings.local_ui else None
+    agent = LaptopAgent(store, router, settings.owner_email, workspace=settings.workspace, local=local)
+
+    async def main() -> None:
+        jobs = [serve(agent, settings.hub_url, settings.hub_token)]
+        if local is not None:
+            jobs.append(serve_local_ui(settings, store, router, local))
+        await asyncio.gather(*jobs)
+
     try:
-        asyncio.run(serve(agent, settings.hub_url, settings.hub_token))
+        asyncio.run(main())
     except KeyboardInterrupt:
         pass
     finally:
         store.close()
+
+
+async def serve_local_ui(settings: Settings, store: Store, router: RouterBrain, hub: MirrorHub) -> None:
+    """The laptop's own UI at http://127.0.0.1:<port>, sharing this process's store and models.
+    If the port is taken (say, by a separately started `doaide-code`), the agent runs without it."""
+    import uvicorn
+
+    from .main import create_app
+
+    local_settings = replace(settings, mode="local")
+    app = create_app(local_settings, store=store, router=router, hub=hub)
+    server = uvicorn.Server(uvicorn.Config(app, host=settings.host, port=settings.port, log_level="warning"))
+    log.info("local UI at http://%s:%d", settings.host, settings.port)
+    try:
+        await server.serve()
+    except (OSError, SystemExit) as exc:
+        log.warning("local UI not started on port %d: %s", settings.port, exc)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { footer, splitFences } from './components/MessageList.jsx'
+import { footer, hideEdits, splitFences } from './components/MessageList.jsx'
 import { applyEvent, initialChat, statusColor, usableTools } from './store.js'
 
 const msg = (id, role, content, status = 'done') => ({ id, role, content, status, created_at: 0 })
@@ -159,5 +159,15 @@ describe('reply footer: model · cost · time', () => {
       'gpt-6-astra · cost not reported',
     )
     expect(footer(undefined)).toBeNull()
+  })
+})
+
+describe('edit blocks in replies', () => {
+  it('become one line each, also while still streaming in', () => {
+    const done = 'Fix add.\n\ncalc.py\n```python\n<<<<<<< SEARCH\n    return a - b\n=======\n    return a + b\n>>>>>>> REPLACE\n```\nDone.'
+    expect(hideEdits(done)).toBe('Fix add.\n\n✎ Editing calc.py…\nDone.')
+    const partial = 'Fix add.\n\ncalc.py\n<<<<<<< SEARCH\n    return a - b\n====='
+    expect(hideEdits(partial)).toBe('Fix add.\n\n✎ Editing calc.py…')
+    expect(hideEdits('No edits here.')).toBe('No edits here.')
   })
 })

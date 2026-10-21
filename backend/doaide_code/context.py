@@ -218,7 +218,7 @@ def _terms(text: str) -> set[str]:
     return {w for w in words if w not in STOPWORDS}
 
 
-def _mentioned_paths(text: str, root: Path | None = None) -> set[str]:
+def mentioned_paths(text: str, root: Path | None = None) -> set[str]:
     """Paths named in the request. Absolute ones under `root` (as in tracebacks) become relative."""
     found: set[str] = set()
     for m in re.findall(r"[`'\"]?[\w./-]+\.[A-Za-z0-9]{1,6}[`'\"]?", text):
@@ -258,7 +258,7 @@ def rank_files(root: Path, request: str) -> Ranking:
     ranking.mtimes = {rel: st.st_mtime for rel, st in files}
     terms = _terms(request)
     ranking.terms = terms
-    mentioned = _mentioned_paths(request, root)
+    mentioned = mentioned_paths(request, root)
     present: dict[str, set[str]] = {}
     explicit: set[str] = set()
     for rel, st in files:

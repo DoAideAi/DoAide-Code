@@ -32,8 +32,16 @@ function Code({ value }) {
   )
 }
 
+// SEARCH/REPLACE edit blocks (complete, or still streaming in) shown as one line each: DoAide
+// writes them to the files, and the finished reply carries only the summary.
+const EDIT_BLOCK = /(^|\n)(?:([^\n`]+?\.\w{1,6})[ \t]*\n)?(?:```[\w+-]*\n)?<<<<<<< SEARCH\n[\s\S]*?(?:\n>>>>>>> REPLACE(?:\n```)?|$)/g
+
+export function hideEdits(text) {
+  return text.replace(EDIT_BLOCK, (_, start, path) => `${start}✎ Editing ${path ? path.trim() : 'a file'}…`)
+}
+
 function Body({ content }) {
-  return splitFences(content).map((part, i) =>
+  return splitFences(hideEdits(content)).map((part, i) =>
     part.kind === 'code' ? (
       codeLines(part.value) <= SHOWN_CODE_LINES ? (
         <Code key={i} value={part.value} />

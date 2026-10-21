@@ -211,10 +211,14 @@ class Store:
         )
 
     def active_project(self, user_email: str) -> dict[str, Any] | None:
-        return self._one(
-            "SELECT p.* FROM user_state u JOIN projects p ON p.id = u.active_project_id WHERE u.user_email = ?",
-            (user_email,),
-        )
+        """The project this user switched to; if they never picked one, the newest project, so a
+        registered project is used instead of the empty workspace."""
+        state = self._one("SELECT active_project_id FROM user_state WHERE user_email = ?", (user_email,))
+        if state is None:
+            return self._one("SELECT * FROM projects ORDER BY id DESC LIMIT 1")
+        if state["active_project_id"] is None:
+            return None
+        return self._one("SELECT * FROM projects WHERE id = ?", (state["active_project_id"],))
 
     # Sessions
 

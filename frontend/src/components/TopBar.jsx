@@ -16,7 +16,7 @@ function Link({ testid, onClick, children }) {
 
 // One line: name and project on the left; Models, Usage and one status dot on the right (gray
 // while the laptop is offline, which the banner below explains).
-export default function TopBar({ project, color, busy, models = null, onModels = null, onUsage = null }) {
+export default function TopBar({ project, color, busy, models = null, onModels = null, onUsage = null, localUrl = null }) {
   const ready = usableTools(models).length
   return (
     <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-zinc-800/80 px-4">
@@ -27,6 +27,16 @@ export default function TopBar({ project, color, busy, models = null, onModels =
         </span>
       </div>
       <div className="flex items-center gap-4">
+        {localUrl && (
+          <a
+            data-testid="open-local"
+            href={localUrl}
+            title="This laptop runs DoAide: prompts there skip the server"
+            className="shrink-0 text-xs text-emerald-300/90 hover:text-emerald-200"
+          >
+            Open on this laptop (faster)
+          </a>
+        )}
         {onModels && (
           <Link testid="models-toggle" onClick={onModels}>
             {models && <span className={`h-1.5 w-1.5 rounded-full ${ready ? DOT.green : DOT.red}`} />}

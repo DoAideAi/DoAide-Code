@@ -62,6 +62,8 @@ function setViewport(desktop) {
 let validTokens
 let config
 let setup
+// What the local server probe (http://127.0.0.1:3097/api/health) finds: null for nothing running.
+let localServer
 function mockFetch() {
   globalThis.fetch = vi.fn(async (url, init = {}) => {
     const [path, query = ''] = url.split('?')
@@ -106,6 +108,9 @@ function mockFetch() {
             })
       case '/api/file':
         return reply({ path: decodeURIComponent(query.slice(5)), content: 'line one\nline two\n', binary: false })
+      case 'http://127.0.0.1:3097/api/health':
+        if (!localServer) throw new TypeError('Failed to fetch')
+        return reply(localServer)
       case '/api/models/compare':
         return reply(COMPARE)
       case '/api/usage': {
@@ -156,6 +161,7 @@ beforeEach(() => {
   validTokens = new Set(['tok'])
   config = { google_client_id: '', local_login: true }
   setup = { agent_online: false, ever_connected: true }
+  localServer = null
   mockFetch()
 })
 
@@ -226,6 +232,24 @@ describe('App', () => {
     await act(async () => ws.emit({ type: 'agent', online: true }))
     expect(screen.queryByTestId('laptop-banner')).toBeNull()
     expect(screen.getByTestId('status-dot').dataset.color).toBe('green')
+  })
+
+  it('on the laptop itself, the hosted UI offers the local server (no server round trip)', async () => {
+    localServer = { ok: true, mode: 'local' }
+    await boot(true, { mode: 'hub', agent_online: true })
+    await flush()
+    expect(screen.getByTestId('open-local').getAttribute('href')).toBe('http://127.0.0.1:3097')
+  })
+
+  it('a phone (no local server) and the local UI itself show no such link', async () => {
+    await boot(false, { mode: 'hub', agent_online: true })
+    await flush()
+    expect(screen.queryByTestId('open-local')).toBeNull()
+    cleanup()
+    localServer = { ok: true, mode: 'local' }
+    await boot(true, { mode: 'local' })
+    await flush()
+    expect(screen.queryByTestId('open-local')).toBeNull()
   })
 
   it('phone prompts are sent to the hub for the laptop to run', async () => {

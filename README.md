@@ -21,7 +21,7 @@ backend/            FastAPI harness server (Python 3.11+)
   doaide_code/
     main.py         REST API, /ws chat socket, /sync relay, /agent (hub), serves frontend/dist
     relay.py        hub mode: stores + queues prompts, relays them to the laptop agent
-    agent.py        laptop agent: `doaide-code agent`, runs relayed prompts locally
+    agent.py        laptop agent: `doaide-code agent`; local UI on :3097, mirrors to the hub
     runner.py       one prompt through the executors with fallback (laptop only)
     mcp_server.py   `doaide-code mcp`: MCP server (stdio) exposing laptop tools to Claude
     router.py       Router Brain (local keyword heuristics)
@@ -191,14 +191,22 @@ token, scoped to `/agent` only.
 
 ## Cross-device sync (hub + laptop agent)
 
-The hosted server at code.doaide.com runs in **hub mode** (`DOAIDE_MODE=hub`). It
-stores conversations and syncs them between devices, and it runs no models or LLM
-calls. All code execution happens on your laptop:
+**Local first.** The models and the CLIs run on the laptop, so the laptop's own UI talks to
+the laptop directly: the agent serves the app at **http://127.0.0.1:3097** (`DOAIDE_PORT`;
+`DOAIDE_LOCAL_UI=0` turns it off) and a prompt typed there runs at once, with no server in
+between. The hosted server at code.doaide.com runs in **hub mode** (`DOAIDE_MODE=hub`); it runs
+no models and only keeps the phone in sync:
 
 ```
-phone / laptop browser ──/ws──▶ hub (code.doaide.com) ◀──/agent── laptop agent
-                                 stores + queues                  Ollama / Claude / Codex
+laptop browser ──▶ 127.0.0.1:3097 (laptop agent) ──▶ Ollama / Claude / Codex
+                         │ mirrors the conversation up its /agent socket
+phone browser ──/ws──▶ hub (code.doaide.com): stores, syncs, queues phone prompts for the laptop
 ```
+
+Prompts sent from the phone are queued on the hub, run by the laptop, and show in the local
+chat too: one conversation on every device. Opening code.doaide.com on the laptop itself
+offers **Open on this laptop (faster)** when the local server answers. Laptops installed
+without a frontend build serve the hub's, fetched once.
 
 1. Sign in at code.doaide.com from any device. Every device can read and send.
 2. Prompts are saved and queued on the hub. While the laptop is offline the status
