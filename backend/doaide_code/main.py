@@ -575,6 +575,20 @@ def mount_remote_frontend(app: FastAPI, origin: str) -> None:
         return Response(content, media_type=media)
 
 
+# The page must be checked on every load: it names the current bundle, and a browser that reused
+# an old copy (heuristic caching from Last-Modified) kept running an old UI after a rebuild.
+# The bundles under /assets are content-hashed, so they may be cached for good.
+NO_CACHE = {"Cache-Control": "no-cache"}
+
+
+class _HashedAssets(StaticFiles):
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
 def mount_frontend(app: FastAPI, dist: Path) -> bool:
     """Serve the frontend build; False when there is none."""
     index = dist / "index.html"
@@ -582,7 +596,7 @@ def mount_frontend(app: FastAPI, dist: Path) -> bool:
         log.warning("Frontend build not found at %s; run `npm run build` in frontend/", dist)
         return False
     if (dist / "assets").is_dir():
-        app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+        app.mount("/assets", _HashedAssets(directory=dist / "assets"), name="assets")
 
     @app.get("/{path:path}", include_in_schema=False)
     async def spa(path: str) -> FileResponse:
@@ -590,8 +604,8 @@ def mount_frontend(app: FastAPI, dist: Path) -> bool:
             raise HTTPException(status.HTTP_404_NOT_FOUND)
         candidate = (dist / path).resolve()
         if path and candidate.is_file() and candidate.is_relative_to(dist.resolve()):
-            return FileResponse(candidate)
-        return FileResponse(index)
+            return FileResponse(candidate, headers=NO_CACHE if candidate.suffix == ".html" else None)
+        return FileResponse(index, headers=NO_CACHE)
 
     return True
 

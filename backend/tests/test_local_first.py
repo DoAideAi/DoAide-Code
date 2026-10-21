@@ -3,16 +3,20 @@ Plus the fixes from watching a slow task: no project, raw edit blocks, filler in
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 
-from doaide_code.agent import LaptopAgent
+from doaide_code.agent import LaptopAgent, serve
+from doaide_code.chat import public_message
 from doaide_code.classify import classify_task
 from doaide_code.executors import Job
 from doaide_code.main import create_app, hub_origin
 from doaide_code.relay import RelayService
 from doaide_code.router import RouterBrain
 from doaide_code.context import mentioned_paths
+from doaide_code.db import Store
 from doaide_code.runner import Outcome, missing_paths, run_job
 from doaide_code.sync import MirrorHub, SyncHub
 from doaide_code.validate import trim_reply
@@ -127,6 +131,76 @@ async def test_the_hub_stores_and_fans_out_mirrored_events(store):
 
     await mirror({"type": "cleared"})
     assert phone.events[-1]["type"] == "snapshot" and phone.events[-1]["messages"] == []
+
+
+async def test_a_reconnecting_agent_replays_what_the_hub_missed(store, tmp_path):
+    # Live: the hub link dropped every few minutes (DNS failures, keepalive timeouts) and the
+    # mirror drops events while it is down, so Tasks API answers never reached the phone.
+    hub_store = Store(tmp_path / "hub.db")
+    phone = Sink()
+    hub = SyncHub()
+    await hub.join(OWNER, phone)
+    relay = RelayService(hub_store, hub)
+
+    async def to_hub(event):
+        await relay.on_agent_event(OWNER, event)
+
+    local = MirrorHub()
+    session = store.create_session(OWNER)
+    seen = store.add_message(session["id"], "user", "what is 2+2", status="done")
+    await local.publish(OWNER, {"type": "message", "message": public_message(seen)})  # uplink down: dropped
+    reply = store.add_message(session["id"], "assistant", "", status="streaming")
+    store.finish_message(reply["id"], "4", "done")
+    assert hub_store.get_message(seen["id"]) is None
+
+    agent = LaptopAgent(store, RouterBrain([FakeExecutor("ollama", 0)], offline=True), OWNER, workspace=str(tmp_path / "ws"), local=local)
+    await agent.resync(to_hub)
+    assert [(m["role"], m["content"], m["status"]) for m in relay.snapshot(OWNER)["messages"]] == [
+        ("user", "what is 2+2", "done"),
+        ("assistant", "4", "done"),
+    ]
+    assert [e["type"] for e in phone.events] == ["message", "message"]
+    # Replaying again (the next reconnect) adds nothing twice.
+    await agent.resync(to_hub)
+    assert len(relay.snapshot(OWNER)["messages"]) == 2
+    hub_store.close()
+
+
+async def test_resync_reaches_the_hub_before_live_mirroring_resumes(store, tmp_path, monkeypatch):
+    order: list[str] = []
+    local = MirrorHub()
+    agent = LaptopAgent(store, RouterBrain([FakeExecutor("ollama", 0)], offline=True), OWNER, workspace=str(tmp_path / "ws"), local=local)
+    store.add_message(store.create_session(OWNER)["id"], "user", "hi", status="done")
+
+    async def resync(send):
+        order.append(f"resync, uplink set: {local.uplink is not None}")
+
+    monkeypatch.setattr(agent, "resync", resync)
+    monkeypatch.setattr(agent, "watch_models", lambda send: asyncio.sleep(3600))
+
+    class FakeWs:
+        async def send(self, data):
+            pass
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            order.append(f"listening, uplink set: {local.uplink is not None}")
+            raise asyncio.CancelledError
+
+    class FakeConnect:
+        async def __aenter__(self):
+            return FakeWs()
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr("websockets.asyncio.client.connect", lambda *a, **k: FakeConnect())
+    with pytest.raises(asyncio.CancelledError):
+        await serve(agent, "wss://hub.example/agent", "token")
+    assert order == ["resync, uplink set: False", "listening, uplink set: True"]
+    assert local.uplink is None  # cleared once the link is gone
 
 
 # The hosted page finds the local server

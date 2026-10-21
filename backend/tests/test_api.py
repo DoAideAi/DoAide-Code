@@ -193,3 +193,17 @@ def test_serves_built_frontend_with_spa_fallback(settings, executors, tmp_path):
         assert c.get("/assets/app.js").text == "console.log(1)"
         assert c.get("/api/nope").status_code == 404
         assert c.get("/api/health").json()["ok"]
+
+
+def test_the_page_is_revalidated_on_every_load_and_hashed_bundles_are_cached(settings, executors, tmp_path):
+    # Live: after a rebuild the browser kept loading the previous bundle from a cached index.html.
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>app</html>")
+    (dist / "assets" / "index-abc123.js").write_text("console.log(1)")
+    settings.frontend_dist = dist
+    with TestClient(create_app(settings, executors=executors)) as c:
+        for page in ("/", "/some/route", "/index.html"):
+            assert c.get(page).headers["cache-control"] == "no-cache"
+        assert "immutable" in c.get("/assets/index-abc123.js").headers["cache-control"]
+        assert "cache-control" not in c.get("/assets/missing.js").headers

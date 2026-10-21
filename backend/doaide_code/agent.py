@@ -41,6 +41,10 @@ log = logging.getLogger(__name__)
 Send = Callable[[dict[str, Any]], Awaitable[None]]
 
 
+# Recent local messages replayed to the hub on every (re)connect.
+RESYNC_MESSAGES = 50
+
+
 class LaptopAgent:
     def __init__(
         self,
@@ -83,6 +87,19 @@ class LaptopAgent:
 
     def connected(self, send: Send | None) -> None:
         self._send = send
+
+    async def resync(self, send: Send) -> None:
+        """Replay the local conversation's recent messages to the hub after a (re)connect. The
+        mirror drops events while the link is down (live: DNS failures and keepalive timeouts
+        every few minutes), so anything said in a gap never reached the phone. The hub adds the
+        messages it lacks and brings the others up to date."""
+        if self.local is None:
+            return
+        session = self.store.latest_session(self.owner)
+        if session is None:
+            return
+        for message in self.store.list_messages(session["id"], limit=RESYNC_MESSAGES):
+            await send({"type": "mirror", "event": {"type": "message", "message": public_message(message)}})
 
     async def emit(self, event: dict[str, Any], fallback: Send | None = None) -> None:
         """Send to the hub over the current connection (else `fallback`, the one the job came on);
@@ -264,6 +281,8 @@ async def serve(agent: LaptopAgent, url: str, token: str, *, max_backoff: float 
 
                 agent.connected(send)
                 await send(await agent.hello())
+                # Catch up on what the mirror missed while disconnected, then mirror live.
+                await agent.resync(send)
                 if agent.local is not None:
                     agent.local.uplink = send
                 watcher = asyncio.create_task(agent.watch_models(send))
