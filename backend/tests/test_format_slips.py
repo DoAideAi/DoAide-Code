@@ -11,7 +11,7 @@ from doaide_code.executors import Job
 from doaide_code.executors.base import user_message
 from doaide_code.router import RouterBrain
 from doaide_code.runner import Outcome, run_job
-from doaide_code.validate import incomplete_reason
+from doaide_code.validate import incomplete_reason, trim_reply
 
 from .conftest import FakeExecutor
 
@@ -84,6 +84,9 @@ def test_a_short_instruction_naming_code_is_an_edit_and_a_claimed_edit_must_exis
     # questions." and changed nothing.
     task = classify_task("In backend/doaide_code/fastpath.py, make USAGE_RE also accept 'what calls X' questions.")
     assert task.kind == "edit" and task.tier == 1
+    # Benchmark regression: a question naming code is still a question.
+    assert classify_task("In one sentence: what does merge() in lists.py return?").kind == "question"
+    assert classify_task("merge() in lists.py returns what?").kind == "question"
     assert incomplete_reason("Usage RE updated to accept 'what calls X' questions.", "question")
     assert incomplete_reason("Updated the handler.", "explain")
     assert incomplete_reason("It returns the updated list.", "question") is None
@@ -98,3 +101,37 @@ def test_a_replace_marker_used_as_the_divider_is_read(tmp_path):
     change = build_changeset(tmp_path, parse_edits(answer)).files["usage.py"]
     assert change.new == USAGE + "\n\n" + NEW and change.problems == []
     assert strip_edits(answer) == "Add `format_usd`."
+
+
+def test_narration_of_next_steps_is_trimmed_from_replies():
+    # Live (claude-sonnet): the plan, then the summary of the same change.
+    live = (
+        "Now I'll modify `failing_tests` to first try running only test files that mention the edited module.\n\n"
+        "`failing_tests` now filters test files by module name before falling back to the full suite."
+    )
+    assert trim_reply(live) == "`failing_tests` now filters test files by module name before falling back to the full suite."
+    live = (
+        "The `ws:` case maps to `http:`. Line 141 already covers `wss:`. I'll add a dedicated test right after it.\n\n"
+        "Add a test for `hub_origin` with a plain `ws:` URL."
+    )
+    assert trim_reply(live) == "Add a test for `hub_origin` with a plain `ws:` URL."
+    # A reply that is only a plan, or a real answer mentioning "let me" mid-sentence, stays.
+    assert trim_reply("I'll add the test.") == "I'll add the test."
+    assert trim_reply("It caches answers.\n\nThe cache key includes the files.") == "It caches answers.\n\nThe cache key includes the files."
+
+
+async def test_an_edit_described_but_not_written_by_the_top_model_is_asked_for_once(tmp_path, store):
+    (tmp_path / "calc.py").write_text("def add(a, b):\n    return a - b\n")
+    described = "Fix `add` to return the sum.\n\n`calc.py`, line 2: change `a - b` to `a + b`."
+    written = "Fix `add`.\n\ncalc.py\n<<<<<<< SEARCH\n    return a - b\n=======\n    return a + b\n>>>>>>> REPLACE"
+    sonnet = Scripted("claude-sonnet", 2, [described, written])
+    sonnet.tool, sonnet.context_mode = "claude", "map"
+
+    async def nop(_chunk: str) -> None:
+        pass
+
+    outcome = await run_job(RouterBrain([sonnet], offline=True), store, Job("fix add in calc.py", cwd=tmp_path), Outcome(), nop)
+    assert (tmp_path / "calc.py").read_text() == "def add(a, b):\n    return a + b\n"
+    assert len(sonnet.jobs) == 2 and "write the change as edit blocks" in sonnet.jobs[1].prompt
+    complete = outcome.meta()["checks"]["items"][0]
+    assert complete["ok"] and complete["detail"].startswith("edit blocks asked for again")

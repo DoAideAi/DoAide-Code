@@ -177,8 +177,8 @@ export function changeHeadline(changes) {
   return `${files} discarded`
 }
 
-// Edits under a reply: written at once when every check passed (Undo restores the files), else
-// held back with Apply / Discard. Diffs are one click away, collapsed by default.
+// Edits under a reply: chat edits are written at once, with Undo to restore the files (no
+// confirmation step). Diffs are one click away, collapsed by default.
 export function ChangeSet({ changes, onSend }) {
   // Diffs start collapsed: the reply is the summary, the code is in the files.
   const [open, setOpen] = useState(() => new Set())
@@ -188,7 +188,6 @@ export function ChangeSet({ changes, onSend }) {
       next.has(path) ? next.delete(path) : next.add(path)
       return next
     })
-  const pending = changes.status === 'pending'
   return (
     <div data-testid="changeset" className="mt-3 overflow-hidden rounded-md border border-zinc-800">
       <div className="flex items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/60 px-3 py-1.5 text-xs">
@@ -203,24 +202,6 @@ export function ChangeSet({ changes, onSend }) {
           >
             Undo
           </button>
-        )}
-        {pending && onSend && (
-          <span className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => onSend(`/discard ${changes.id}`)}
-              className="rounded border border-zinc-700 px-2 py-0.5 text-zinc-300 hover:bg-zinc-800"
-            >
-              Discard
-            </button>
-            <button
-              type="button"
-              onClick={() => onSend(`/apply ${changes.id}`)}
-              className="rounded bg-emerald-500/90 px-2 py-0.5 font-medium text-zinc-950 hover:bg-emerald-400"
-            >
-              Apply
-            </button>
-          </span>
         )}
       </div>
       {changes.files.map((file) => (

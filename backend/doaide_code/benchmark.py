@@ -148,7 +148,7 @@ async def run_task(name: str, router: RouterBrain, task: Task, store: Store, *, 
         if not passed and verbose:
             print(f"--- {name} {task.name} answer:\n{outcome.content}\n---", file=sys.stderr)
         free = bool((outcome.route or {}).get("free"))
-        return Result(name, task.name, passed, cost, seconds, outcome.executor or "none", note, escalated, free)
+        return Result(name, task.name, passed, cost, seconds, outcome.executor or "none", note, free=free, escalated=escalated)
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

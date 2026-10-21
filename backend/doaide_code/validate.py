@@ -61,6 +61,7 @@ _CLAIMS_CHANGE = re.compile(
     re.I,
 )
 CUT_OFF_EDIT = "an edit block was cut off"
+NO_EDIT = "no code or edit was proposed"
 # Incomplete answers a model fixes when told what was wrong (not missing context or a refusal).
 FORMAT_SLIPS = {CUT_OFF_EDIT}
 _EDIT_KINDS = {"edit", "test", "debug"}
@@ -88,7 +89,7 @@ def incomplete_reason(answer: str, kind: str, *, reads_files: bool = False) -> s
     if not reads_files and _NEEDS_FILES.search(text[:600]):
         return NEEDS_FILES_REASON
     if kind in _EDIT_KINDS and "```" not in text and not parse_edits(text) and len(text) < 400:
-        return "no code or edit was proposed"
+        return NO_EDIT
     if _CLAIMS_CHANGE.match(text) and "```" not in text and not parse_edits(text) and len(text) < 400:
         # Live: "Usage RE updated to accept 'what calls X' questions." with no edit at all.
         return "it says it changed code but shows no edit"
@@ -135,8 +136,23 @@ def trim_reply(text: str) -> str:
             skipping = False
         if not skipping:
             out.append(line)
-    trimmed = "\n".join(out).strip()
-    return re.sub(r"\n{3,}", "\n\n", trimmed) or text.strip()
+    trimmed = re.sub(r"\n{3,}", "\n\n", "\n".join(out).strip())
+    return _without_plans(trimmed) or text.strip()
+
+
+# A model narrating its next step ("Now I'll modify failing_tests to...", "I'll add a dedicated test
+# right after the existing one."): live Sonnet replies opened with it, then said the change again.
+_PLAN = re.compile(r"(?:^|[.!:]\s+)(?:(?:now|first|next|so|then),?\s+)?(?:i'll|i will|i'm going to|let me|let's)\s", re.I)
+
+
+def _without_plans(text: str) -> str:
+    """The reply without short paragraphs narrating what the model is about to do, when another
+    paragraph (the summary of what changed) remains; code blocks are left alone."""
+    paragraphs = re.split(r"\n\s*\n", text)
+    if len(paragraphs) < 2 or "```" in text:
+        return text
+    kept = [p for p in paragraphs if not (len(p) < 500 and _PLAN.search(p))]
+    return "\n\n".join(kept) if kept else text
 
 
 def off_topic_reason(prompt: str, answer: str) -> str | None:

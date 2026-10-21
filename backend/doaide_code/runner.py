@@ -44,6 +44,7 @@ from .validate import (
     early_problem,
     edit_checks,
     FORMAT_SLIPS,
+    NO_EDIT,
     incomplete_reason,
     off_topic_reason,
 )
@@ -353,7 +354,7 @@ async def _run_job(
             if problem and fix:
                 # A concrete, fixable problem (code that does not parse, an edit that does not
                 # apply): one more free try with the error spelled out, before paying for Sonnet.
-                repaired = await _local_repair(executor, run, job, outcome.content, fix, store, source)
+                repaired = await _second_try(executor, run, job, outcome.content, fix, store, source)
                 if repaired is not None:
                     outcome.add_usage(repaired.usage or Usage())
                     again, again_checks, _ = await _vet(job, repaired.content, decision.kind)
@@ -382,6 +383,16 @@ async def _run_job(
             await on_delta(f"\n\n---\n_The answer looked incomplete ({reason}); retrying on {nxt.name} with more context…_\n\n")
             outcome.status = "error"
             continue
+        if reason == NO_EDIT and nxt is None:
+            # Live (Sonnet, the top model here): "calc.py, line 2: change a - b to a + b", described
+            # but not written. Asked once for the edit blocks, it writes them.
+            fix = repair_prompt(job.prompt, [f"{NO_EDIT}: write the change as edit blocks"])
+            repaired = await _second_try(executor, run, job, outcome.content, fix, store, source)
+            if repaired is not None:
+                outcome.add_usage(repaired.usage or Usage())
+                if incomplete_reason(repaired.content, decision.kind, reads_files=executor.context_mode == "map") is None:
+                    outcome.content, reason = repaired.content, None
+                    retry_note = f"edit blocks asked for again ({NO_EDIT})"
         detail = reason or retry_note or (f"escalated from {escalated['executor']}: {escalated['reason']}" if escalated else None)
         outcome.checks.append({"name": "complete", "ok": reason is None, "detail": detail or "looks complete"})
         if claim := capability_claim(outcome.content):
@@ -492,10 +503,10 @@ def _watch(outcome: Outcome) -> Callable[[str], Awaitable[None]]:
     return sink
 
 
-async def _local_repair(
+async def _second_try(
     executor: Executor, run: Job, job: Job, first: str, fix: str, store: Store, source: str
 ) -> Outcome | None:
-    """The same local model, asked once to fix its own answer (buffered, never streamed)."""
+    """The same model, asked once to fix its own answer (buffered, never streamed)."""
     retry = _repair_job(run, fix, first)
     repaired = Outcome()
 
@@ -663,9 +674,9 @@ async def _preview_changes(
     verified: bool = False,
 ) -> None:
     """Turn edit blocks in the answer into a validated changeset, repairing it once (silently) if
-    it fails. A changeset that passes every check is written to the files at once for chat jobs
-    (/undo restores them); one that does not, or one asked for over MCP, waits for /apply. The
-    reply keeps only the summary: the code itself is in the files and in the collapsed diff."""
+    it fails. Chat edits are written at once (/undo restores them), minus files that fail their
+    checks; one asked for over MCP waits for /apply. The reply keeps only the summary: the code
+    itself is in the files and in the collapsed diff."""
     if job.cwd is None:
         return
     changeset = await propose(job.cwd, outcome.content)
@@ -689,37 +700,37 @@ async def _preview_changes(
         better = await propose(job.cwd, repaired.content) if repaired.content else None
         if better is not None and len(better.all_problems) < len(changeset.all_problems):
             changeset, outcome.content = better, repaired.content
+    auto = source in AUTO_APPLY_SOURCES
+    # Chat edits are written without asking (Undo reverts them): files whose edit did not apply
+    # or does not parse are left out and named; the rest is written.
+    skipped = changeset.drop_failing() + changeset.problems if auto else []
     if not changeset.changed:
-        if changeset.all_problems:
-            outcome.checks.append(
-                {"name": "edits", "ok": False, "detail": f"no edit could be applied: {changeset.all_problems[0]}"}
-            )
+        if changeset.all_problems or skipped:
+            problem = (skipped or changeset.all_problems)[0]
+            outcome.checks.append({"name": "edits", "ok": False, "detail": f"no edit could be applied: {problem}"})
             # The edit blocks are never shown, applied or not; say in one line why nothing changed.
-            note = f"Nothing written: {changeset.all_problems[0]}."
-            outcome.content = f"{strip_edits(outcome.content)}\n\n{note}".strip()
+            outcome.content = f"{strip_edits(outcome.content)}\n\nNothing written: {problem}.".strip()
         return
     record = changeset.record()
     store.add_changeset(changeset.id, record, changeset.summary())
     outcome.changes = changeset.summary()
     files = ", ".join(f.path for f in changeset.changed)
     summary = strip_edits(outcome.content)
-    if source in AUTO_APPLY_SOURCES and not changeset.all_problems:
+    if auto:
         try:
             await asyncio.to_thread(apply_record, record)
         except (ValueError, OSError) as exc:
             log.warning("could not write changes %s: %s", changeset.id, exc)
             outcome.content = f"{summary}\n\nNot written: {exc}".strip()
             return
-        # The project's tests decide whether the edit stays (unless they already ran on it).
-        failure = None if verified else await failing_tests(job.cwd, [f.path for f in changeset.changed])
-        if failure:
-            with contextlib.suppress(ValueError, OSError):
-                await asyncio.to_thread(undo_record, record)
-            outcome.checks.append({"name": "tests", "ok": False, "detail": f"{failure}; the edit was undone"})
-            outcome.content = f"{summary or f'Proposed changes to {files}.'}\n\nNot kept: {failure} (type /apply to write it anyway)."
-            return
         outcome.changes = store.set_changeset_status(changeset.id, "applied")
-        outcome.content = summary or f"Updated {files}."
+        notes = [f"Not written: {skipped[0]}." if skipped else ""]
+        # The project's tests run on it (unless they already did): a failure is reported, and the
+        # edit stays for the user to keep or undo.
+        if failure := None if verified else await failing_tests(job.cwd, [f.path for f in changeset.changed]):
+            outcome.checks.append({"name": "tests", "ok": False, "detail": failure})
+            notes.append(f"Warning: {failure} after this edit; Undo reverts it.")
+        outcome.content = "\n\n".join(p for p in [summary or f"Updated {files}.", *notes] if p)
         return
     if changeset.all_problems:
         note = f"Not written: {changeset.all_problems[0]} (type /apply to write it anyway)."

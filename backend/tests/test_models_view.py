@@ -89,8 +89,24 @@ async def test_an_edit_that_fails_its_checks_is_not_written(repo, store):
     outcome = Outcome()
     await run_job(RouterBrain([FakeExecutor("claude-sonnet", 2, [bad])]), store, Job("fix add in util.py", cwd=repo), outcome, nop)
     assert (repo / "util.py").read_text() == "def add(a, b):\n    return a - b\n"
-    assert outcome.meta()["changes"]["status"] == "pending"
-    assert outcome.content.startswith("Fix add.\n\nNot written:") and "/apply" in outcome.content
+    # Nothing to apply or discard: the broken file is left out and the reply says why.
+    assert outcome.meta().get("changes") is None
+    assert outcome.content.startswith("Fix add.\n\nNothing written: util.py") and "/apply" not in outcome.content
+
+
+async def test_chat_edits_are_written_without_asking_minus_the_files_that_fail(repo, store):
+    (repo / "other.py").write_text("X = 1\n")
+    answer = (
+        "Fix add and X.\n\nutil.py\n<<<<<<< SEARCH\n    return a - b\n=======\n    return a + b\n>>>>>>> REPLACE\n\n"
+        "other.py\n<<<<<<< SEARCH\nX = 1\n=======\nX = (\n>>>>>>> REPLACE"
+    )
+    outcome = Outcome()
+    await run_job(RouterBrain([FakeExecutor("claude-sonnet", 2, [answer])]), store, Job("fix add and X", cwd=repo), outcome, nop)
+    assert (repo / "util.py").read_text() == "def add(a, b):\n    return a + b\n"
+    assert (repo / "other.py").read_text() == "X = 1\n"
+    changes = outcome.meta()["changes"]
+    assert changes["status"] == "applied" and [f["path"] for f in changes["files"]] == ["util.py"]
+    assert outcome.content.startswith("Fix add and X.\n\nNot written: other.py")
 
 
 @pytest.mark.parametrize("style", ["local", "claude", "codex"])

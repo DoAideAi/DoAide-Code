@@ -86,6 +86,13 @@ class Changeset:
     def changed(self) -> list[FileChange]:
         return [f for f in self.files.values() if f.new != (f.original or "") or f.original is None]
 
+    def drop_failing(self) -> list[str]:
+        """Remove the files whose edits did not apply cleanly or fail their checks (so the rest
+        can be written as is); returns their problems."""
+        dropped = [p for f in self.files.values() for p in f.problems + f.checks]
+        self.files = {k: f for k, f in self.files.items() if not (f.problems or f.checks)}
+        return dropped
+
     def summary(self, status: str = "pending") -> dict[str, Any]:
         return {
             "id": self.id,

@@ -25,8 +25,6 @@ HELP = """Commands:
 /projects                    list registered projects
 /workspace [<path>|reset]    show or change the default workspace folder
 /undo [<id>]                 restore files DoAide changed (latest change if no id)
-/apply [<id>]                write changes that were held back (latest if no id)
-/discard [<id>]              drop proposed changes
 /models                      which models and CLIs this laptop can use (detected, not guessed)
 /usage                       tokens and cost today, this week, and this month
 /new                         clear the chat and start over

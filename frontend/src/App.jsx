@@ -173,6 +173,9 @@ export default function App() {
   }, [token, mode])
 
   if (needsSignIn) return <SignIn clientId={clientId} onCredential={onCredential} error={error} />
+  // Until the saved session is checked: not the chat (it flashed with a dead "Connecting..." box
+  // before the sign-in page).
+  if (!token) return <div className="flex h-[100dvh] items-center justify-center text-sm text-zinc-500">Signing in…</div>
 
   // Busy only while a reply is actually streaming or queued, so a stale status can never leave
   // Stop showing after the answer finished.

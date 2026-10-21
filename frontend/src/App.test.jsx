@@ -292,6 +292,17 @@ describe('sign-in never expires', () => {
     expect(FakeSocket.instances.at(-1).url).toContain('token=renewed')
   })
 
+  it('shows no chat (and no dead composer) while the saved session is being checked', async () => {
+    config = { google_client_id: 'gid', local_login: false }
+    setViewport(false)
+    render(<App />)
+    expect(screen.getByText('Signing in…')).toBeTruthy()
+    expect(screen.queryByPlaceholderText(/Message/)).toBeNull()
+    await flush()
+    await flush()
+    expect(screen.getByText('Doaide Code', { selector: 'h1' })).toBeTruthy()
+  })
+
   it('asks for Google sign-in only when the refresh token is revoked', async () => {
     config = { google_client_id: 'gid', local_login: false }
     localStorage.setItem('doaide-code-refresh', 'revoked')
@@ -312,7 +323,7 @@ describe('Claude Code activity and diff previews', () => {
     files: [{ path: 'app.py', new_file: false, additions: 1, deletions: 1, diff: '@@ -1 +1 @@\n-a\n+b\n', problems: [] }],
   }
 
-  it('shows the instruction, a collapsed diff, usage, and applies via /apply', async () => {
+  it('shows the instruction, a collapsed diff and usage, with no Apply / Discard step', async () => {
     const ws = await boot(true, {
       messages: [
         { id: 'u', role: 'user', content: 'rename it', status: 'done', meta: { via: 'mcp', tool: 'execute_code' } },
@@ -333,11 +344,12 @@ describe('Claude Code activity and diff previews', () => {
     fireEvent.click(screen.getByText('app.py'))
     expect(screen.getByTestId('changeset').textContent).toContain('+b')
     expect(screen.getByTestId('usage').textContent).toBe('cost not reported')
-    fireEvent.click(screen.getByText('Apply'))
-    expect(ws.sent.at(-1)).toEqual({ type: 'send', text: '/apply c1' })
-    await act(async () => ws.emit({ type: 'changes', id: 'r', changes: { ...changes, status: 'applied' } }))
     expect(screen.queryByText('Apply')).toBeNull()
+    expect(screen.queryByText('Discard')).toBeNull()
+    // Applied by the caller (or another device): it shows as written, with Undo.
+    await act(async () => ws.emit({ type: 'changes', id: 'r', changes: { ...changes, status: 'applied' } }))
     expect(screen.getByTestId('changeset-status').textContent).toBe('Wrote 1 file')
+    expect(screen.getByText('Undo')).toBeTruthy()
   })
 
   it('written changes show a summary and an Undo button, not the code', async () => {
