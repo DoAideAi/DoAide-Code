@@ -54,7 +54,8 @@ log = logging.getLogger(__name__)
 NO_EXECUTOR = "No model is available on this laptop. Type /models to see what was detected and how to set one up."
 # Jobs whose passing edits are written to the files right away. MCP callers (Claude Code) are
 # agents with their own edit tools: they get proposals to apply, never writes underneath them.
-AUTO_APPLY_SOURCES = {"chat"}
+# Dispatch (tasks.py) hands over the whole task, as the chat does.
+AUTO_APPLY_SOURCES = {"chat", "dispatch"}
 # Incomplete answers are retried this many times, each on the next executor up with more context.
 MAX_RETRIES = 1
 # Claude Code sessions are resumed for follow-ups this recent: past the prompt cache's lifetime

@@ -329,6 +329,29 @@ Every relayed `tools/call` shows up in the DoAide Code UI (web and phone), in th
 conversation, labelled as from Claude Code: the instruction the client sent, then the laptop's
 reply, with `execute_code` output streaming in live and its diff, cost and time when it finishes.
 
+## Tasks API (Dispatch → DoAide Code's routing)
+
+`POST /api/v1/tasks` on the laptop's local server (`http://127.0.0.1:3097`) runs one task
+through the same pipeline as the chat: a free local model first, Claude Sonnet when that answer
+fails its checks, Opus or Codex for complex work. Edits are written like chat edits
+(`/undo <changes.id>` reverts them). Get a token on the laptop with `POST /api/auth/local`.
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:3097/api/auth/local | jq -r .token)
+curl -s http://127.0.0.1:3097/api/v1/tasks -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt": "add a docstring to router.py", "project_path": "/Users/me/projects/app"}'
+```
+
+Body: `prompt`, then `project_path` (a registered project or a folder inside one; other paths
+get 400) or `project` (its name); with neither, the active project. The reply has `status`,
+`answer`, `executor`, `model`, `free`, `escalated_from` (why the local answer was not used),
+`cost_usd`, `seconds`, `checks` and `changes`; a failed task is a 502 with the same body. With
+`"stream": true` it is server-sent events: `delta` (`{"text"}`) as the answer is shown, then
+`done` with that body (or `error`). The free local attempt is held back until it passes its
+checks, so an escalated task's deltas start with Sonnet's answer. Usage is recorded under source
+`dispatch`; tasks do not appear in the chat.
+
 ## Configuration
 
 | Variable | Default |

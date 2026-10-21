@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -39,6 +39,7 @@ from .executors import Executor
 from .router import RouterBrain
 from .runner import build_router
 from .sync import SyncHub
+from .tasks import TaskError, TaskRequest, resolve_root, run_task, stream_task
 from .workspace import set_workspace, working_root, workspace_path
 
 log = logging.getLogger("doaide_code")
@@ -235,6 +236,26 @@ def create_app(
         raw, digest = new_refresh_token()
         store.add_refresh_token(digest, user.email, "mcp", name="mcp")
         return {"token": raw, "endpoint": "/api/v1/mcp/relay"}
+
+    @app.post("/api/v1/tasks")
+    async def tasks(body: TaskRequest, user: User = Depends(current_user)) -> Response:
+        """Run one coding task through the routing pipeline for another agent (Dispatch); see tasks.py."""
+        if router is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Tasks run on the laptop; use its local server")
+        if not body.prompt.strip():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "prompt is empty")
+        try:
+            root, label = resolve_root(store, user.email, settings.workspace, body)
+        except TaskError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        if body.stream:
+            return StreamingResponse(
+                stream_task(router, store, root, label, body.prompt),
+                media_type="text/event-stream",
+                headers={"cache-control": "no-cache"},
+            )
+        answer = await run_task(router, store, root, label, body.prompt)
+        return JSONResponse(answer, status_code=200 if answer["status"] == "done" else status.HTTP_502_BAD_GATEWAY)
 
     # Files (read-only) and laptop settings
 
