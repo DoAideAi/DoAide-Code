@@ -8,7 +8,7 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
-from doaide_code.agent import LaptopAgent, serve
+from doaide_code.agent import LaptopAgent, serve, warm_models
 from doaide_code.chat import public_message
 from doaide_code.classify import classify_task
 from doaide_code.executors import Job
@@ -321,3 +321,17 @@ def test_filler_sections_are_trimmed_from_replies():
     )
     assert trim_reply(reply) == "The implementation of `calculate_token_cost`.\n\n```python\ndef calculate_token_cost(): ...\n```"
     assert trim_reply("`add` subtracts; fixed.") == "`add` subtracts; fixed."
+
+
+async def test_only_the_free_tier_model_is_preloaded_at_startup():
+    # Live: the agent preloaded qwen2.5-coder:7b and :32b at startup, heating the laptop.
+    warmed: list[str] = []
+
+    class Local(FakeExecutor):
+        async def warm(self) -> bool:
+            warmed.append(self.name)
+            return True
+
+    small, coder, sonnet = Local("ollama", 0), Local("ollama-coder", 1), FakeExecutor("claude-sonnet", 2)
+    await warm_models(RouterBrain([small, coder, sonnet], offline=True))
+    assert warmed == ["ollama"]

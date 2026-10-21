@@ -342,9 +342,11 @@ def run_agent(settings: Settings) -> None:
 
 
 async def warm_models(router: RouterBrain) -> None:
-    """Load the local models now, so the first task does not wait for them (see OllamaExecutor)."""
+    """Load the free tier's local model now, so the first task does not wait for it (see
+    OllamaExecutor). Larger local models (the 32b coder tier) load on demand: keeping one
+    resident from startup held ~24 GB and kept the laptop's GPU and fans busy all day."""
     for executor in router.executors:
-        if hasattr(executor, "warm"):
+        if executor.tier == 0 and hasattr(executor, "warm"):
             await executor.warm()
 
 
