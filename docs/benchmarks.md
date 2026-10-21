@@ -27,6 +27,12 @@ passes for the free ones (the paid rows are the single pass).
 | deepseek-coder-v2:16b alone | 72% (18 runs) | free | ~1.2s |
 | qwen2.5-coder:7b alone | 67% (18 runs) | free | ~0.9s |
 
+**Update (same day, later):** Claude now runs without the user's MCP servers and skills
+(`--strict-mcp-config --disable-slash-commands`) and gets the named files inline. Re-measured,
+two passes: claude-sonnet alone **92%, $0.011 / task, 5.6s** (was $0.082). auto: Ollama answered
+10 of 12 free; the two escalations were a one-sentence question misread as an instruction (fixed
+since).
+
 What it says:
 
 - **Quality**: DoAide's routing beats every local model alone and matches the paid ones on these
