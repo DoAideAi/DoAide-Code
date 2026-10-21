@@ -103,8 +103,12 @@ def test_ollama_gets_the_top_files_only_and_excerpts_of_big_ones(repo):
     ranking = rank_files(repo, "where is charge_total used for billing charge")
     assert not any("egg-info" in p for p in ranking.tree)
     text, included = ranking.render(6_000, max_files=3)
-    # The mod*.py files share only the common word "charge": below the relevance cutoff.
-    assert included == ["app/billing.py", "app/ledger.py"] and len(text) <= 6_100
+    # ledger.py defines charge_total: as good as named, so files sharing only the word "charge"
+    # (billing.py, the mod*.py files) stay out.
+    assert included == ["app/ledger.py"] and len(text) <= 6_100
+    _, included = rank_files(repo, "where is the billing charge total computed").render(6_000, max_files=3)
+    # Without a name, the mod*.py files share only the common word "charge": below the cutoff.
+    assert included == ["app/billing.py", "app/ledger.py"]
     assert len(ranking.render(500_000, max_files=1)[1]) == 1
     assert "app/ledger.py (excerpts)" in text and "def charge_total" in text and "x5 = 5" not in text
 

@@ -98,8 +98,11 @@ async def test_local_models_get_files_and_cli_agents_get_a_map(repo, store):
     await run_job(RouterBrain([api], offline=True), store, Job("fix refresh_session", cwd=repo), Outcome(), on_delta)
     assert "def refresh_session" in api.jobs[0].context
     await run_job(RouterBrain([cli], offline=True), store, Job("fix refresh_session", cwd=repo), Outcome(), on_delta)
-    # CLI agents read files themselves: they get paths and the tree, not contents.
-    assert "- app/auth/session.py" in cli.jobs[0].context and "def refresh_session" not in cli.jobs[0].context
+    # CLI agents read files themselves: they get paths, and only the file defining the name the
+    # request mentions whole (a Read round re-sends everything).
+    assert "- app/auth/session.py" in cli.jobs[0].context and "## File: app/auth/session.py (complete" in cli.jobs[0].context
+    await run_job(RouterBrain([cli], offline=True), store, Job("fix the session refresh", cwd=repo), Outcome(), on_delta)
+    assert "- app/auth/session.py" in cli.jobs[1].context and "def refresh_session" not in cli.jobs[1].context
 
 
 # Direct answers

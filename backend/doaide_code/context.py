@@ -270,6 +270,15 @@ def _terms(text: str) -> set[str]:
     return {w for w in words if w not in STOPWORDS}
 
 
+def definition_re(name: str) -> re.Pattern[str]:
+    """A line defining `name`: def/class/function, a JS const/let/var, or a top-level assignment."""
+    n = re.escape(name)
+    return re.compile(
+        rf"^\s*(?:async\s+)?(?:def|class|function|func|fn)\s+{n}\b|^\s*(?:export\s+)?(?:const|let|var)\s+{n}\s*=|^{n}\s*(?::[^=]+)?=(?!=)",
+        re.M,
+    )
+
+
 def _idents(text: str, paths: set[str]) -> set[str]:
     """snake_case, camelCase and backticked names in the request, outside the paths it names."""
     for path in sorted(paths, key=len, reverse=True):
@@ -323,6 +332,7 @@ def rank_files(root: Path, request: str) -> Ranking:
     ranking.idents = _idents(request, mentioned)
     present: dict[str, set[str]] = {}
     explicit: set[str] = set()
+    defines: list[str] = []
     for rel, st in files:
         if st.st_size > MAX_FILE_BYTES:
             continue
@@ -332,11 +342,19 @@ def rank_files(root: Path, request: str) -> Ranking:
         found = {t for t in terms if t in lower}
         if terms:
             try:
-                content = (root / rel).read_text(encoding="utf-8", errors="ignore").lower()
+                raw = (root / rel).read_text(encoding="utf-8", errors="ignore")
             except OSError:
                 continue
+            content = raw.lower()
             found |= {t for t in terms if t in content}
+            if named := [i for i in ranking.idents if i in raw]:
+                if any(definition_re(i).search(raw) for i in named):
+                    defines.append(rel)
         present[rel] = found
+    # No path named, but a name defined in one or two files ("estimate_tokens returns a float"):
+    # those files are as good as named.
+    if not explicit and 0 < len(defines) <= 2:
+        explicit.update(defines)
 
     # Rare terms say more than common ones: weight each by inverse document frequency.
     total = max(len(present), 1)

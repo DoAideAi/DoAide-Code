@@ -11,7 +11,7 @@ import re
 from collections.abc import Iterator
 from pathlib import Path
 
-from .context import LANG, MAX_FILE_BYTES, MAX_SCAN_FILES, SKIP_NAMES, _is_test, _is_text
+from .context import LANG, MAX_FILE_BYTES, MAX_SCAN_FILES, SKIP_NAMES, _is_test, _is_text, definition_re
 from .files import IGNORED, FileAccessError, list_dir, read_file, resolve_in_root
 
 _QUOTE = r"[`'\"]?"
@@ -65,11 +65,6 @@ def _files_with(root: Path, needle: str) -> Iterator[tuple[str, str]]:
             return
 
 
-def _definition(name: str) -> re.Pattern[str]:
-    n = re.escape(name)
-    return re.compile(rf"^\s*(?:async\s+)?(?:def|class|function|func|fn)\s+{n}\b|^\s*(?:export\s+)?(?:const|let|var)\s+{n}\s*=|^{n}\s*(?::[^=]+)?=(?!=)")
-
-
 def usage_answer(root: Path, prompt: str) -> str | None:
     """Where a name is defined and used, searched across the project's text files."""
     match = USAGE_RE.match(prompt)
@@ -78,7 +73,7 @@ def usage_answer(root: Path, prompt: str) -> str | None:
     name = next(g for g in match.groups() if g).split(".")[-1]
     if len(name) < 3:
         return None
-    word, definition = re.compile(rf"(?<![\w.]){re.escape(name)}\b|(?<=\.){re.escape(name)}\b"), _definition(name)
+    word, definition = re.compile(rf"(?<![\w.]){re.escape(name)}\b|(?<=\.){re.escape(name)}\b"), definition_re(name)
     defined: list[str] = []
     used: list[str] = []
     for rel, text in _files_with(root, name):
@@ -133,7 +128,7 @@ def rename_answer(root: Path, prompt: str) -> str | None:
         return None
     word = re.compile(rf"\b{re.escape(old)}\b")
     files = {rel: text for rel, text in _files_with(root, old) if word.search(text)}
-    definition = _definition(old)
+    definition = definition_re(old)
     homes = [rel for rel, text in files.items() if any(definition.match(line) for line in text.splitlines())]
     if named:
         homes = [rel for rel in homes if rel == named or rel.endswith("/" + named)]
