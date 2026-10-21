@@ -101,6 +101,9 @@ def test_claude_parser_prefers_deltas_and_reports_errors():
 def test_codex_argv_and_parser():
     argv = CodexCliExecutor("codex", "o4-mini").argv("fix it", "/repo")
     assert argv[:4] == ["codex", "exec", "--model", "o4-mini"]
+    # No model (or "default"): Codex's own config.toml decides.
+    assert CodexCliExecutor("codex", "").argv("x", None)[:3] == ["codex", "exec", "--sandbox"]
+    assert "--model" not in CodexCliExecutor("codex", "default").argv("x", None)
     assert argv[argv.index("--sandbox") + 1] == "read-only"
     assert argv[argv.index("--cd") + 1] == "/repo" and argv[-1] == "fix it"
 

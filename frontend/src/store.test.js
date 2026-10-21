@@ -135,3 +135,12 @@ describe('models report', () => {
     expect(usableTools(null)).toEqual([])
   })
 })
+
+describe('model preference', () => {
+  it('comes from snapshots and model_pref events', () => {
+    let s = applyEvent(initialChat, { type: 'snapshot', messages: [], model_pref: { tool: 'claude', model: 'opus' } })
+    expect(s.modelPref).toEqual({ tool: 'claude', model: 'opus' })
+    s = applyEvent(s, { type: 'model_pref', pref: null })
+    expect(s.modelPref).toBeNull()
+  })
+})

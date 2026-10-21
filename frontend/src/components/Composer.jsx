@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
-export default function Composer({ busy, disabled, onSend, onStop }) {
+// `toolbar` sits above the input (the model picker).
+export default function Composer({ busy, disabled, onSend, onStop, toolbar = null }) {
   const [text, setText] = useState('')
 
   const submit = () => {
@@ -10,6 +11,7 @@ export default function Composer({ busy, disabled, onSend, onStop }) {
 
   return (
     <footer data-testid="composer" className="shrink-0 border-t border-zinc-800/80 pb-[env(safe-area-inset-bottom)]">
+      {toolbar && <div className="mx-auto max-w-3xl px-4 pt-2">{toolbar}</div>}
       <div className="mx-auto flex max-w-3xl items-end gap-2 px-4 py-3">
         <textarea
           aria-label="Message"

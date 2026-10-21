@@ -17,7 +17,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .commands import is_command, is_models_command, run_command
-from .detect import format_report, same_report
+from .detect import clean_pin, format_report, same_report
 from .config import Settings
 from .db import Store
 from .executors import Job, Turn
@@ -168,6 +168,7 @@ class LaptopAgent:
                 outcome,
                 on_delta,
                 project=project["name"] if project else None,
+                pin=clean_pin(message.get("model")),
             )
         except asyncio.CancelledError:
             outcome.status = "stopped"
@@ -233,6 +234,9 @@ def run_agent(settings: Settings) -> None:
             "Set DOAIDE_HUB_TOKEN to the token from 'Connect laptop' on the hosted UI, then run `doaide-code agent`."
         )
     store = Store(settings.db_path)
+    # Answers cached by an earlier build may predate today's prompt and checks; start clean.
+    if cleared := store.cache_clear():
+        log.info("cleared %d cached answers", cleared)
     router = build_router(settings)
     agent = LaptopAgent(store, router, settings.owner_email, workspace=settings.workspace)
     try:

@@ -69,6 +69,9 @@ class SettingsUpdate(BaseModel):
 def create_app(settings: Settings | None = None, *, executors: list[Executor] | None = None) -> FastAPI:
     settings = settings or Settings()
     store = Store(settings.db_path)
+    # Answers cached by an earlier build may predate today's prompt and checks; start clean.
+    if cleared := store.cache_clear():
+        log.info("cleared %d cached answers", cleared)
     hub = SyncHub()
     router: RouterBrain | None = None
     chat: ChatService | RelayService
@@ -288,6 +291,8 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
                     await chat.stop(user.email)
                 elif kind == "open" and isinstance(data.get("session_id"), str):
                     await chat.open_session(user.email, data["session_id"])
+                elif kind == "set_model":
+                    await chat.set_model(user.email, data.get("model"))
                 elif kind == "ping":
                     await ws.send_json({"type": "pong"})
         except (WebSocketDisconnect, RuntimeError, ValueError):

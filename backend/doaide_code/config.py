@@ -42,7 +42,18 @@ class Settings:
     claude_opus_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_CLAUDE_OPUS_MODEL", "opus"))
 
     codex_bin: str = field(default_factory=lambda: os.environ.get("DOAIDE_CODEX_BIN", "codex"))
-    codex_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_CODEX_MODEL", "o4-mini"))
+    # Empty: Codex uses the model in its own config.toml. With a ChatGPT login Codex rejects most
+    # `--model` names (o4-mini, o3 and gpt-4o all fail), so the user's own setting is the safe default.
+    codex_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_CODEX_MODEL", "").strip())
+    # Extra Codex models offered in the UI's model picker, e.g. "o3,gpt-4o" on an API-key login.
+    codex_models: tuple[str, ...] = field(
+        default_factory=lambda: tuple(
+            m.strip() for m in os.environ.get("DOAIDE_CODEX_MODELS", "").split(",") if m.strip()
+        )
+    )
+    codex_home: Path = field(
+        default_factory=lambda: Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
+    )
 
     # Default workspace on the laptop; `/workspace <path>` overrides it in the local database.
     workspace: str = field(default_factory=lambda: os.environ.get("DOAIDE_WORKSPACE", "~/doaide-code-workspace"))

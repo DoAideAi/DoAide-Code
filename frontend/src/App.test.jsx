@@ -144,6 +144,7 @@ beforeEach(() => {
     mode: 'local',
     agentOnline: false,
     models: null,
+    modelPref: null,
     connection: 'closed',
   })
   localStorage.clear()
@@ -424,8 +425,24 @@ const REPORT = {
   checked_at: 1,
   any_usable: true,
   tools: [
-    { id: 'ollama', label: 'Ollama', state: 'ready', usable: true, detail: '', models: ['llama3:latest', 'codellama:7b'] },
-    { id: 'claude', label: 'Claude CLI', state: 'signed_in', usable: true, detail: 'signed in', version: '2.1.0' },
+    {
+      id: 'ollama',
+      label: 'Ollama',
+      state: 'ready',
+      usable: true,
+      detail: '',
+      models: ['llama3:latest', 'codellama:7b'],
+      choices: ['llama3:latest', 'codellama:7b'],
+    },
+    {
+      id: 'claude',
+      label: 'Claude CLI',
+      state: 'signed_in',
+      usable: true,
+      detail: 'signed in',
+      version: '2.1.0',
+      choices: ['haiku', 'sonnet', 'opus'],
+    },
     {
       id: 'codex',
       label: 'Codex CLI',
@@ -477,5 +494,39 @@ describe('detected models', () => {
     await act(async () => ws.emit({ type: 'agent', online: false }))
     expect(screen.queryByTestId('models-toggle')).toBeNull()
     expect(screen.getByTestId('laptop-banner')).toBeTruthy()
+  })
+})
+
+describe('model picker', () => {
+  it('offers Auto plus every detected model, and sends the choice to the server', async () => {
+    const ws = await boot(true, { models: REPORT })
+    const picker = screen.getByTestId('model-picker')
+    expect(picker.value).toBe('auto')
+    const options = [...picker.querySelectorAll('option')].map((o) => o.textContent)
+    expect(options).toEqual([
+      'Auto (cheapest that can do it)',
+      'Ollama: llama3:latest',
+      'Ollama: codellama:7b',
+      'Claude CLI: haiku',
+      'Claude CLI: sonnet',
+      'Claude CLI: opus',
+    ])
+    // Codex was not found, so none of its models are offered.
+    expect(options.some((o) => o.startsWith('Codex'))).toBe(false)
+
+    await act(async () => fireEvent.change(picker, { target: { value: 'claude/opus' } }))
+    expect(ws.sent.at(-1)).toEqual({ type: 'set_model', model: { tool: 'claude', model: 'opus' } })
+    await act(async () => ws.emit({ type: 'model_pref', pref: { tool: 'claude', model: 'opus' } }))
+    expect(screen.getByTestId('model-picker').value).toBe('claude/opus')
+
+    await act(async () => fireEvent.change(picker, { target: { value: 'auto' } }))
+    expect(ws.sent.at(-1)).toEqual({ type: 'set_model', model: null })
+  })
+
+  it('shows a saved choice from the snapshot, even when it is not installed now', async () => {
+    await boot(true, { models: REPORT, model_pref: { tool: 'codex', model: 'o3' } })
+    const picker = screen.getByTestId('model-picker')
+    expect(picker.value).toBe('codex/o3')
+    expect(picker.querySelector('option[value="codex/o3"]').textContent).toBe('codex: o3 (unavailable)')
   })
 })

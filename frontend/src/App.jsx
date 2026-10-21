@@ -15,7 +15,7 @@ import {
 import Composer from './components/Composer.jsx'
 import { CodeViewer, FileTree } from './components/Files.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
-import { NoModelsBanner } from './components/Models.jsx'
+import { ModelPicker, NoModelsBanner } from './components/Models.jsx'
 import MessageList from './components/MessageList.jsx'
 import SetupPage from './components/SetupPage.jsx'
 import SignIn from './components/SignIn.jsx'
@@ -158,6 +158,7 @@ export default function App() {
     mode,
     agentOnline,
     models,
+    modelPref,
     connection,
     apply,
     setConnection,
@@ -255,6 +256,16 @@ export default function App() {
                 disabled={connection !== 'open'}
                 onSend={send}
                 onStop={() => socket.current?.send({ type: 'stop' })}
+                toolbar={
+                  connection === 'open' && (models || modelPref) ? (
+                    <ModelPicker
+                      models={models}
+                      pref={modelPref}
+                      disabled={busy}
+                      onChange={(model) => socket.current?.send({ type: 'set_model', model })}
+                    />
+                  ) : null
+                }
               />
             </section>
           </div>

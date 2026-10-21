@@ -435,6 +435,23 @@ class Store:
             self._exec("UPDATE response_cache SET hits = hits + 1 WHERE key = ?", (key,))
         return row
 
+    def cache_clear(self) -> int:
+        """Drop every cached answer; returns how many were removed."""
+        return self._exec("DELETE FROM response_cache").rowcount
+
+    # Per-user model choice: {"tool": "claude", "model": "opus"}, or None for automatic routing.
+
+    def model_pref(self, user_email: str) -> dict[str, str] | None:
+        raw = self.get_setting(f"model_pref:{user_email}")
+        try:
+            pref = json.loads(raw) if raw else None
+        except ValueError:
+            return None
+        return pref if isinstance(pref, dict) else None
+
+    def set_model_pref(self, user_email: str, pref: dict[str, str] | None) -> None:
+        self.set_setting(f"model_pref:{user_email}", json.dumps(pref) if pref else None)
+
     def cache_put(self, key: str, answer: str, executor: str | None) -> None:
         self._exec(
             "INSERT INTO response_cache (key, answer, executor, created_at) VALUES (?, ?, ?, ?) "

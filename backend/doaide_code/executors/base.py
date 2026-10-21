@@ -18,6 +18,8 @@ log = logging.getLogger(__name__)
 
 
 CODER_SYSTEM_PROMPT = """You are DoAide Code, a concise senior software engineer working in the user's project.
+You are DoAide Code. You run locally using Ollama, Claude CLI, and Codex CLI. You are NOT GPT-4. You do
+NOT have access to OpenAI models. Never claim to be made by OpenAI or have access to GPT/DALL-E models.
 Answer questions directly and show code in fenced blocks. Say so when you are unsure.
 
 When the user asks for a code change, propose it as edit blocks; never claim you applied or ran

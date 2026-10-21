@@ -65,6 +65,19 @@ shows it in the top bar, with setup steps when nothing is usable. `/models`, que
 "which models are available?", the MCP `get_status` tool and the router all use the same
 report, and executors whose tool is missing, stopped or signed out are never tried.
 
+Questions about DoAide itself (which models, who are you, who made you, what can you do) are
+always answered from that report and never sent to a model: small local models answer them from
+training data ("I am GPT-4, made by OpenAI"). Earlier exchanges like that are also left out of
+the history sent to models, and cached answers are cleared whenever the server or agent starts.
+
+## Model picker
+
+Above the input, **Model** is either *Auto* (the router picks) or one detected model: an Ollama
+model from `ollama list`, Claude CLI `haiku` / `sonnet` / `opus`, or Codex CLI. The choice is
+stored per user on the server, so every device uses it, and it runs alone (no fallback). Codex
+uses the model from `~/.codex/config.toml` by default, because a ChatGPT login rejects most
+`--model` names; add others with `DOAIDE_CODEX_MODELS=o3,gpt-4o` if your login allows them.
+
 ## Routing
 
 Everything runs on the laptop: tier 0 is Ollama (free), tier 1 Codex CLI / Claude

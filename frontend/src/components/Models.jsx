@@ -97,3 +97,44 @@ export function NoModelsBanner({ models }) {
     </div>
   )
 }
+
+const AUTO = 'auto'
+const pinValue = (pin) => (pin ? `${pin.tool}/${pin.model}` : AUTO)
+
+// Which model runs the next prompts: Auto (the router picks) or one detected model. The choice
+// is stored on the server, so every device shows and uses the same one.
+export function ModelPicker({ models, pref, onChange, disabled }) {
+  const groups = (models?.tools ?? []).filter((t) => t.usable && t.choices?.length)
+  const current = pinValue(pref)
+  const listed = groups.some((t) => t.choices.some((m) => pinValue({ tool: t.id, model: m }) === current))
+  return (
+    <label className="flex items-center gap-2 text-xs text-zinc-500">
+      <span>Model</span>
+      <select
+        data-testid="model-picker"
+        aria-label="Model"
+        value={current}
+        disabled={disabled}
+        onChange={(e) => {
+          const value = e.target.value
+          if (value === AUTO) return onChange(null)
+          const [tool, ...rest] = value.split('/')
+          onChange({ tool, model: rest.join('/') })
+        }}
+        className="max-w-[60vw] rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 focus:border-zinc-600 focus:outline-none"
+      >
+        <option value={AUTO}>Auto (cheapest that can do it)</option>
+        {pref && !listed && <option value={current}>{`${pref.tool}: ${pref.model} (unavailable)`}</option>}
+        {groups.map((t) => (
+          <optgroup key={t.id} label={t.label}>
+            {t.choices.map((m) => (
+              <option key={m} value={pinValue({ tool: t.id, model: m })}>
+                {`${t.label}: ${m}`}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  )
+}

@@ -47,11 +47,12 @@ class CodexCliExecutor(Executor):
         return which(self.binary) is not None
 
     def argv(self, prompt: str, cwd: str | None) -> list[str]:
+        # No model (or "default"): whatever the user's Codex config.toml selects.
+        model = ["--model", self.model] if self.model and self.model != "default" else []
         argv = [
             self.binary,
             "exec",
-            "--model",
-            self.model,
+            *model,
             "--sandbox",
             "read-only",
             "--skip-git-repo-check",

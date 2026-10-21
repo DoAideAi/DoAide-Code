@@ -7,6 +7,7 @@ run on the laptop; the CLIs use the user's subscription logins. Classification u
 
 from __future__ import annotations
 
+import copy
 import logging
 import re
 from dataclasses import dataclass
@@ -104,6 +105,20 @@ class RouterBrain:
         if self.detector is not None:
             return await self.detector.detect(force=force)
         return executor_report({e.name: await e.available() for e in self.executors})
+
+    def pinned(self, tool: str, model: str) -> Executor | None:
+        """An executor for one model the user chose, built from this router's executor for that
+        tool (same binary and settings, different `--model`)."""
+        template = next((e for e in self.executors if e.tool == tool and hasattr(e, "model")), None)
+        if template is None:
+            return None
+        executor = copy.copy(template)
+        executor.model = model  # type: ignore[attr-defined]
+        executor.name = f"{tool}:{model}"
+        if hasattr(executor, "_resolved"):
+            # Ollama re-resolves; choose_model keeps an exact installed name as is.
+            executor._resolved = None  # type: ignore[attr-defined]
+        return executor
 
     async def _usable(self, executor: Executor) -> bool:
         if self.detector is not None and executor.tool:

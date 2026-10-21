@@ -14,6 +14,7 @@ import asyncio
 import json
 import re
 import time
+import tomllib
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
@@ -96,6 +97,37 @@ def _tool(tool_id: str, label: str, state: str, detail: str = "", **extra: Any) 
     return {**entry, **extra}
 
 
+def _unique(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(i for i in items if i))
+
+
+TOOLS = ("ollama", "claude", "codex")
+_MODEL_NAME = re.compile(r"^[\w.:/@+-]{1,100}$")
+
+
+def clean_pin(value: Any) -> dict[str, str] | None:
+    """A well-formed {"tool", "model"} choice, or None (automatic routing)."""
+    if not isinstance(value, dict):
+        return None
+    tool, model = value.get("tool"), value.get("model")
+    if tool not in TOOLS or not isinstance(model, str) or not _MODEL_NAME.match(model):
+        return None
+    return {"tool": tool, "model": model}
+
+
+def pin_problem(pin: dict[str, str], report: dict[str, Any]) -> str | None:
+    """Why a chosen model cannot run now (None when it can)."""
+    tool = next((t for t in report["tools"] if t["id"] == pin.get("tool")), None)
+    if tool is None:
+        return f"Unknown tool {pin.get('tool')!r}."
+    if not tool["usable"]:
+        hint = f" {tool['setup']}" if tool.get("setup") else ""
+        return f"{tool['label']} is {STATE_TEXT.get(tool['state'], tool['state'])}.{hint}"
+    if pin.get("model") not in tool.get("choices", []):
+        return f"{tool['label']} has no model {pin.get('model')!r}. Type /models to see what is installed."
+    return None
+
+
 def _tail(text: str, limit: int = 200) -> str:
     return " ".join(text.split())[-limit:]
 
@@ -137,9 +169,33 @@ class ModelDetector:
         smallest_first = [name for name, _ in sorted(rows, key=lambda r: r[1])]
         default = choose_model(self.settings.ollama_model, smallest_first)
         count = f"{len(names)} model{'s' if len(names) != 1 else ''} installed"
-        return _tool("ollama", "Ollama", "ready", count, models=names, default=default)
+        return _tool("ollama", "Ollama", "ready", count, models=names, default=default, choices=names)
+
+    def claude_choices(self) -> list[str]:
+        s = self.settings
+        return _unique([s.claude_haiku_model, s.claude_sonnet_model, s.claude_opus_model])
+
+    def codex_choices(self) -> list[str]:
+        return _unique([self.settings.codex_model or self.codex_configured_model(), *self.settings.codex_models])
+
+    def codex_configured_model(self) -> str:
+        """The model in Codex's own config.toml, which is what runs without `--model`."""
+        try:
+            config = tomllib.loads((self.settings.codex_home / "config.toml").read_text())
+        except (OSError, ValueError):
+            return "default"
+        model = config.get("model")
+        return model if isinstance(model, str) and model else "default"
 
     async def claude(self) -> dict[str, Any]:
+        tool = await self._claude()
+        return {**tool, "choices": self.claude_choices()} if tool["usable"] else tool
+
+    async def codex(self) -> dict[str, Any]:
+        tool = await self._codex()
+        return {**tool, "choices": self.codex_choices()} if tool["usable"] else tool
+
+    async def _claude(self) -> dict[str, Any]:
         binary = self.settings.claude_bin
         if not self.settings.use_claude_cli:
             return _tool("claude", "Claude CLI", "disabled", "turned off with DOAIDE_DISABLE_CLAUDE_CLI")
@@ -161,7 +217,7 @@ class ModelDetector:
         # Older CLIs have no `auth status`; the executor will find out on first use.
         return _tool("claude", "Claude CLI", "unknown", _tail(err or out) or f"exit {code}", version=ver)
 
-    async def codex(self) -> dict[str, Any]:
+    async def _codex(self) -> dict[str, Any]:
         binary = self.settings.codex_bin
         if not self.settings.use_codex_cli:
             return _tool("codex", "Codex CLI", "disabled", "turned off with DOAIDE_DISABLE_CODEX_CLI")
@@ -228,15 +284,72 @@ def format_report(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-_MODELS_WORD = r"\b(models?|llms?|executors?|backends?|ai engines?)\b"
-_ASKS = re.compile(
-    rf"^\s*(?:(?:what|which)\b.*{_MODELS_WORD}.*\b(?:available|installed|have|has|got|use|using|running|support\w*|there|detected|access)\b"
-    rf"|(?:list|show)(?:\s+me)?(?:\s+(?:the|all|my|available|installed|local))*\s+{_MODELS_WORD}"
-    rf"|(?:what|which)\s+(?:local\s+)?{_MODELS_WORD}(?:\s+(?:do|can|are|is)\b.*)?)\s*[.?!]*\s*$",
+# Questions about DoAide itself (who it is, what it can do, which models it has) are answered
+# here from detection. Small local models answer them from training data ("I am GPT-4, made by
+# OpenAI"), so they never reach a model. Matching is by keywords, not exact phrasing.
+_IDENTITY = re.compile(
+    r"\bwho\s+(?:are|r)\s+(?:you|u)\b|\bwho\s+(?:made|created|built|trained|developed|owns|wrote)\s+(?:you|u)\b"
+    r"|\bwhat\s+(?:are|r)\s+(?:you|u)\b(?!\s+(?:doing|working|thinking|saying|talking))"
+    r"|\bare\s+(?:you|u)\s+(?:an?\s+)?(?:gpt|chat\s?gpt|openai|claude|gemini|llama|bard|copilot|human|real|bot|ai|llm|robot)\b"
+    r"|\b(?:what|which)\s+(?:company|model|llm|ai|version)\s+(?:are|r|is)\s+(?:you|u|this)\b"
+    r"|\b(?:what(?:'s|\s+is)\s+your\s+name|your\s+name\s*\?|introduce\s+yourself|tell\s+me\s+about\s+yourself)\b"
+    r"|\b(?:who|what)\s+(?:is|are)\s+(?:behind|powering)\s+(?:you|this)\b|\bwhat\s+powers\s+(?:you|this)\b",
+    re.I,
+)
+_CAPABILITIES = re.compile(
+    r"\bwhat\s+(?:can|could)\s+(?:you|u)\s+do\b|\b(?:your|ur)\s+(?:capabilit\w*|abilit\w*|features|limitations)\b"
+    r"|\bwhat\s+are\s+(?:you|u)\s+capable\s+of\b|\bhow\s+can\s+(?:you|u)\s+help\b"
+    r"|\bwhat\s+(?:do|can)\s+(?:you|u)\s+(?:help|support|offer)\b|\bwhat\s+tools\s+do\s+(?:you|u)\s+have\b",
+    re.I,
+)
+_MODEL_WORD = re.compile(r"\b(?:models?|llms?|executors?|backends?|engines?|ai\s+providers?|gpts?)\b", re.I)
+# The question is about this assistant / this laptop, not about code.
+_ABOUT_US = re.compile(
+    r"\b(?:you|u|your|ur|yours|available|installed|access|accessible|support(?:ed|s)?|offer|use|using|run|running"
+    r"|this\s+(?:laptop|machine|computer|system|app|tool)|doaide|locally|local|list|which|switch|choose|pick)\b",
+    re.I,
+)
+# ...unless it is clearly about the user's own code (ORM models, model files, ML training).
+_ABOUT_CODE = re.compile(
+    r"\.\w{1,5}\b|`|\b(?:class|table|schema|database|db|orm|django|rails|sequelize|prisma|pydantic|sqlalchemy|field|column"
+    r"|migration|data\s+models?|user\s+model|repo|codebase|file|function|method|train\w*|fine-?tun\w*|dataset|weights"
+    r"|accuracy|predict\w*|inference|pytorch|tensorflow|keras|sklearn|regression)\b",
     re.I,
 )
 
 
+def meta_question(prompt: str) -> str | None:
+    """"identity", "capabilities" or "models" for questions about DoAide itself, else None."""
+    text = prompt.strip()
+    if not text or len(text) > 200 or "\n" in text.strip():
+        return None
+    if _IDENTITY.search(text):
+        return "identity"
+    if _MODEL_WORD.search(text) and _ABOUT_US.search(text) and not _ABOUT_CODE.search(text):
+        return "models"
+    if _CAPABILITIES.search(text):
+        return "capabilities"
+    return None
+
+
 def asks_about_models(prompt: str) -> bool:
-    """True for questions about which models this system has; those are answered by detection."""
-    return len(prompt) <= 160 and bool(_ASKS.match(prompt))
+    return meta_question(prompt) is not None
+
+
+IDENTITY = (
+    "I'm **DoAide Code**, a coding assistant that runs on your own laptop. I'm not ChatGPT or GPT-4, "
+    "and I'm not made by OpenAI. Each request is handled by one of the tools installed on this laptop "
+    "(local Ollama models, the Claude CLI, or the Codex CLI), picked automatically or by you in the "
+    "model picker."
+)
+CAPABILITIES = (
+    "I'm **DoAide Code**. I can answer coding questions about your project, read and list its files, "
+    "and propose code changes as diffs that are only written when you press **Apply** (or type `/apply`). "
+    "Commands: `/models`, `/projects`, `/add-project`, `/switch-project`, `/workspace`, `/usage`, `/new`, `/help`."
+)
+
+
+def answer_meta(kind: str, report: dict[str, Any]) -> str:
+    """The zero-token answer to a meta question: fixed text plus what detection found."""
+    intro = {"identity": IDENTITY, "capabilities": CAPABILITIES}.get(kind)
+    return f"{intro}\n\n{format_report(report)}" if intro else format_report(report)

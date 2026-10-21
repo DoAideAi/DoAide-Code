@@ -15,7 +15,7 @@ from .changes import propose, repair_prompt, strip_edits
 from .config import Settings
 from .context import Ranking, rank_files
 from .db import Store
-from .detect import ModelDetector, asks_about_models, format_report
+from .detect import ModelDetector, answer_meta, meta_question, pin_problem
 from .executors import Executor, ExecutorError, Job, Turn, build_executors
 from .executors.base import CODER_SYSTEM_PROMPT
 from .fastpath import direct_answer
@@ -66,10 +66,25 @@ class Outcome:
         return meta
 
 
-def cache_key(job: Job, ranking: Ranking | None) -> str:
+def strip_meta_turns(history) -> list[Turn]:
+    """History without meta questions (see detect.meta_question) and the replies to them."""
+    kept: list[Turn] = []
+    skip_reply = False
+    for turn in history:
+        if turn.role == "user":
+            skip_reply = meta_question(turn.content) is not None
+            if not skip_reply:
+                kept.append(turn)
+        elif not skip_reply:
+            kept.append(turn)
+    return kept
+
+
+def cache_key(job: Job, ranking: Ranking | None, pin: dict[str, str] | None = None) -> str:
     history = [(t.role, t.content) for t in list(job.history)[-6:]]
     prompt = " ".join(job.prompt.split())
-    payload = json.dumps([PROMPT_VERSION, prompt, history, ranking.fingerprint if ranking else str(job.cwd)])
+    fingerprint = ranking.fingerprint if ranking else str(job.cwd)
+    payload = json.dumps([PROMPT_VERSION, prompt, history, fingerprint, pin or None], sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -82,12 +97,15 @@ async def run_job(
     *,
     project: str | None = None,
     source: str = "chat",
+    pin: dict[str, str] | None = None,
 ) -> Outcome:
-    # 1. Reading a file or listing a folder needs no model at all, and questions about which
-    # models exist are answered by detection: a model asked that only guesses.
+    """`pin` ({"tool", "model"}) runs one model the user chose instead of routing."""
+    # 1. Reading a file or listing a folder needs no model at all, and questions about DoAide
+    # itself (who it is, what it can do, which models it has) are answered from detection: small
+    # local models answer those from training data ("I am GPT-4, made by OpenAI").
     answer = None
-    if asks_about_models(job.prompt):
-        answer = format_report(await router.models(force=True))
+    if kind := meta_question(job.prompt):
+        answer = answer_meta(kind, await router.models(force=True))
     elif job.cwd is not None:
         answer = await asyncio.to_thread(direct_answer, job.cwd, job.prompt)
     if answer is not None:
@@ -97,6 +115,10 @@ async def run_job(
         await on_delta(answer)
         return outcome
 
+    # Earlier meta questions were answered (or, before detection, made up) outside the models'
+    # knowledge; keeping them in history only invites the model to repeat them.
+    job = replace(job, history=strip_meta_turns(job.history))
+
     # 2. Rank project files once: it feeds both the cache key and every executor's context.
     ranking: Ranking | None = None
     if job.cwd is not None:
@@ -105,7 +127,7 @@ async def run_job(
             ranking = await asyncio.to_thread(rank_files, job.cwd, f"{job.prompt}\n{recent}")
         except OSError as exc:
             log.warning("context selection failed: %s", exc)
-    key = cache_key(job, ranking) if router.cache_ttl > 0 else None
+    key = cache_key(job, ranking, pin) if router.cache_ttl > 0 else None
     if key is not None and (hit := store.cache_get(key, router.cache_ttl)) is not None:
         outcome.content, outcome.status, outcome.executor, outcome.cached = hit["answer"], "done", hit["executor"], True
         store.record_usage(source, hit["executor"], None, 0, 0, 0.0, cached=True)
@@ -113,18 +135,19 @@ async def run_job(
         await _preview_changes(store, job, outcome, None, None, on_delta, source)
         return outcome
 
-    # 3. Route, then try executors cheapest-first with fallback.
-    decision = await router.classify(job.prompt, project=project)
-    outcome.tier = decision.tier
-    if decision.usage is not None:
-        outcome.add_usage(decision.usage)
-        store.record_usage(
-            "router", None, decision.usage.model, decision.usage.input_tokens, decision.usage.output_tokens,
-            decision.usage.cost_usd,
-        )
-    candidates = await router.candidates(decision.tier)
-    if not candidates:
-        outcome.content = NO_EXECUTOR
+    # 3a. A model the user picked runs alone: no routing, no fallback to other models.
+    if pin:
+        if problem := pin_problem(pin, await router.models()):
+            outcome.content = f"Cannot use the selected model: {problem} Pick another model or Auto."
+            return outcome
+        executor = router.pinned(pin["tool"], pin["model"])
+        if executor is None:
+            outcome.content = f"Cannot use the selected model: {pin['tool']} is not set up on this laptop."
+            return outcome
+        candidates: list[Executor] = [executor]
+    else:
+        # 3b. Route, then try executors cheapest-first with fallback.
+        candidates = await _routed(router, store, job, outcome, project)
     errors: list[str] = []
     rendered: dict[int, tuple[str, list[str]]] = {}
     for executor in candidates:
@@ -157,6 +180,21 @@ async def run_job(
     if outcome.status != "done" and not outcome.content and errors:
         outcome.content = "All executors failed.\n" + "\n".join(errors)
     return outcome
+
+
+async def _routed(router: RouterBrain, store: Store, job: Job, outcome: Outcome, project: str | None) -> list[Executor]:
+    decision = await router.classify(job.prompt, project=project)
+    outcome.tier = decision.tier
+    if decision.usage is not None:
+        outcome.add_usage(decision.usage)
+        store.record_usage(
+            "router", None, decision.usage.model, decision.usage.input_tokens, decision.usage.output_tokens,
+            decision.usage.cost_usd,
+        )
+    candidates = await router.candidates(decision.tier)
+    if not candidates:
+        outcome.content = NO_EXECUTOR
+    return candidates
 
 
 async def _drain(

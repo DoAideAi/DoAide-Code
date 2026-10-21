@@ -10,7 +10,19 @@ import pytest
 
 from doaide_code.agent import LaptopAgent
 from doaide_code.commands import is_models_command
-from doaide_code.detect import ModelDetector, asks_about_models, format_report, parse_ollama_list, same_report
+from doaide_code.detect import (
+    ModelDetector,
+    asks_about_models,
+    clean_pin,
+    format_report,
+    meta_question,
+    parse_ollama_list,
+    pin_problem,
+    same_report,
+)
+from doaide_code.executors import Turn
+from doaide_code.executors.base import CODER_SYSTEM_PROMPT
+from doaide_code.runner import cache_key, strip_meta_turns
 from doaide_code.executors import Job
 from doaide_code.router import RouterBrain
 from doaide_code.runner import Outcome, run_job
@@ -68,6 +80,9 @@ def test_parse_ollama_list():
 
 
 async def test_detects_everything_ready(settings):
+    settings.codex_home.mkdir()
+    (settings.codex_home / "config.toml").write_text('model = "gpt-6-astra"\nmodel_reasoning_effort = "high"\n')
+    settings.codex_models = ("o3",)
     report = await ModelDetector(settings, run=fake_run(ALL_READY)).detect()
     found = tools(report)
     assert report["any_usable"] is True
@@ -77,8 +92,11 @@ async def test_detects_everything_ready(settings):
     assert found["ollama"]["default"] == "qwen2.5-coder:7b"
     assert found["claude"] == {
         "id": "claude", "label": "Claude CLI", "state": "signed_in", "usable": True,
-        "detail": "signed in (max)", "version": "2.1.185",
+        "detail": "signed in (max)", "version": "2.1.185", "choices": ["haiku", "sonnet", "opus"],
     }
+    # Codex offers the model from its own config.toml (the only kind a ChatGPT login accepts) first.
+    assert found["codex"]["choices"] == ["gpt-6-astra", "o3"]
+    assert found["ollama"]["choices"] == found["ollama"]["models"]
     assert found["codex"]["state"] == "signed_in" and found["codex"]["version"] == "0.163.0"
 
 
@@ -243,3 +261,171 @@ def test_local_socket_sends_detected_models(client, token):
         models = ws.receive_json()
         assert models["type"] == "models"
         assert {t["id"] for t in models["models"]["tools"]} == {"ollama", "codex", "claude-sonnet", "claude-opus"}
+
+
+# Round two: the production prompts that still reached qwen2.5-coder:7b, plus identity questions.
+
+
+def test_meta_questions_in_any_wording():
+    cases = {
+        "list of models that you have access to ?": "models",
+        "what are the model you have access to": "models",
+        "which LLMs can you use": "models",
+        "can I switch models?": "models",
+        "who are you": "identity",
+        "Who made you?": "identity",
+        "are you gpt-4": "identity",
+        "what model are you": "identity",
+        "tell me about yourself": "identity",
+        "what can you do?": "capabilities",
+        "what are your capabilities": "capabilities",
+        "how can you help me": "capabilities",
+    }
+    for prompt, kind in cases.items():
+        assert meta_question(prompt) == kind, prompt
+    for prompt in [
+        "fix the bug in models/user.py",
+        "write a django model for orders",
+        "how do I train a model in pytorch",
+        "what are you doing in this function",
+        "explain the data models in this repo",
+    ]:
+        assert meta_question(prompt) is None, prompt
+
+
+async def test_identity_is_answered_without_a_model(settings, store):
+    executor = FakeExecutor("ollama", 0, ["As an AI developed by OpenAI, I have GPT-4 and DALL-E 2."])
+    executor.tool = "ollama"
+    router = RouterBrain([executor], offline=True, detector=ModelDetector(settings, run=fake_run(ALL_READY)))
+
+    async def on_delta(chunk: str) -> None:
+        pass
+
+    for prompt in ["who made you?", "list of models that you have access to ?", "what can you do"]:
+        outcome = await run_job(router, store, Job(prompt), Outcome(), on_delta)
+        assert outcome.executor == "direct", prompt
+        assert "OpenAI, I" not in outcome.content and "DALL-E" not in outcome.content
+    assert executor.jobs == []
+    outcome = await run_job(router, store, Job("who are you"), Outcome(), on_delta)
+    assert "DoAide Code" in outcome.content and "not made by OpenAI" in outcome.content
+
+
+def test_system_prompt_states_identity():
+    assert "You are NOT GPT-4" in CODER_SYSTEM_PROMPT
+    assert "Never claim to be made by OpenAI or have access to GPT/DALL-E models" in CODER_SYSTEM_PROMPT
+
+
+async def test_hallucinated_history_is_not_fed_back(settings, store):
+    executor = FakeExecutor("ollama", 0, ["ok"])
+    router = RouterBrain([executor], offline=True)
+    history = [
+        Turn("user", "what are the model you have access to"),
+        Turn("assistant", "I have access to GPT-4, GPT-3.5-turbo and DALL-E 2."),
+        Turn("user", "explain decorators"),
+        Turn("assistant", "A decorator wraps a function."),
+    ]
+    assert strip_meta_turns(history) == history[2:]
+
+    async def on_delta(chunk: str) -> None:
+        pass
+
+    await run_job(router, store, Job("and generators?", history=history), Outcome(), on_delta)
+    assert [t.content for t in executor.jobs[0].history] == ["explain decorators", "A decorator wraps a function."]
+
+
+def test_cache_clear_and_pin_in_cache_key(store):
+    store.cache_put("k1", "As an AI developed by OpenAI...", "ollama")
+    store.cache_put("k2", "x", "ollama")
+    assert store.cache_clear() == 2 and store.cache_get("k1", 3600) is None
+    job = Job("explain x")
+    assert cache_key(job, None) != cache_key(job, None, {"tool": "claude", "model": "opus"})
+
+
+class ModelEcho(FakeExecutor):
+    """Answers with the model it was asked to run, like `claude --model X`."""
+
+    def __init__(self, name, tier, tool, model):
+        super().__init__(name, tier)
+        self.tool, self.model = tool, model
+
+    async def stream(self, job):
+        self.jobs.append(job)
+        yield f"ran {self.tool} --model {self.model}"
+
+
+async def test_pinned_model_runs_alone(settings, store):
+    ollama = ModelEcho("ollama", 0, "ollama", "qwen2.5-coder:7b")
+    claude = ModelEcho("claude-haiku", 1, "claude", "haiku")
+    router = RouterBrain([ollama, claude], offline=True, detector=ModelDetector(settings, run=fake_run(ALL_READY)))
+
+    async def on_delta(chunk: str) -> None:
+        pass
+
+    outcome = await run_job(router, store, Job("explain x"), Outcome(), on_delta, pin={"tool": "claude", "model": "opus"})
+    assert outcome.status == "done" and outcome.content == "ran claude --model opus"
+    assert outcome.executor == "claude:opus" and claude.model == "haiku"  # the template is untouched
+    outcome = await run_job(
+        router, store, Job("explain y"), Outcome(), on_delta, pin={"tool": "ollama", "model": "llama3.2:latest"}
+    )
+    assert outcome.content == "ran ollama --model llama3.2:latest"
+
+    # Not installed, or the tool is signed out: a clear error, never a silent switch to another model.
+    outcome = await run_job(router, store, Job("explain z"), Outcome(), on_delta, pin={"tool": "ollama", "model": "gpt-4"})
+    assert outcome.status == "error" and "has no model 'gpt-4'" in outcome.content
+    assert ollama.jobs[-1].prompt == "explain y"
+
+
+def test_pin_validation():
+    assert clean_pin({"tool": "claude", "model": "opus"}) == {"tool": "claude", "model": "opus"}
+    assert clean_pin({"tool": "openai", "model": "gpt-4"}) is None
+    assert clean_pin({"tool": "ollama", "model": "x; rm -rf /"}) is None
+    assert clean_pin(None) is None
+    report = {"tools": [{"id": "codex", "label": "Codex CLI", "state": "signed_out", "usable": False,
+                         "setup": "Sign in: `codex login`."}]}
+    assert pin_problem({"tool": "codex", "model": "o3"}, report) == "Codex CLI is not signed in. Sign in: `codex login`."
+
+
+def test_hub_stores_model_choice_and_sends_it_with_jobs(hub, token, agent_token):  # noqa: F811
+    with hub.websocket_connect(f"/ws?token={token}") as browser:
+        assert browser.receive_json()["model_pref"] is None
+        browser.send_json({"type": "set_model", "model": {"tool": "claude", "model": "opus"}})
+        assert drain_until(browser, "model_pref")[-1]["pref"] == {"tool": "claude", "model": "opus"}
+        browser.send_json({"type": "send", "text": "explain this"})
+        drain_until(browser, "status")
+        with hub.websocket_connect(f"/agent?token={agent_token}") as laptop:
+            job = laptop.receive_json()
+            assert job["model"] == {"tool": "claude", "model": "opus"}
+        # Invalid choices reset to automatic routing.
+        browser.send_json({"type": "set_model", "model": {"tool": "openai", "model": "gpt-4"}})
+        assert drain_until(browser, "model_pref")[-1]["pref"] is None
+    # Remembered across reconnects (and devices).
+    browser_snapshot = hub.get("/api/session", headers={"Authorization": f"Bearer {token}"}).json()
+    assert browser_snapshot["model_pref"] is None
+
+
+def test_local_model_choice_persists(client, token):
+    with client.websocket_connect(f"/ws?token={token}") as ws:
+        assert ws.receive_json()["model_pref"] is None
+        ws.send_json({"type": "set_model", "model": {"tool": "ollama", "model": "llama3:latest"}})
+        assert drain_until(ws, "model_pref")[-1]["pref"] == {"tool": "ollama", "model": "llama3:latest"}
+    with client.websocket_connect(f"/ws?token={token}") as ws:
+        assert ws.receive_json()["model_pref"] == {"tool": "ollama", "model": "llama3:latest"}
+
+
+async def test_agent_runs_the_model_sent_by_the_hub(settings, store, tmp_path):
+    codex = ModelEcho("codex", 1, "codex", "o4-mini")
+    router = RouterBrain([codex], offline=True, detector=ModelDetector(settings, run=fake_run(ALL_READY)))
+    agent = LaptopAgent(store, router, "owner@example.com", workspace=str(tmp_path / "ws"))
+    events: list[dict] = []
+
+    async def send(event: dict) -> None:
+        events.append(event)
+
+    await agent.on_message({"type": "job", "id": "j", "text": "explain x", "model": {"tool": "codex", "model": "default"}}, send)
+    await agent._task
+    assert events[-1]["content"] == "ran codex --model default"
+
+
+async def test_codex_without_config_offers_its_default(settings):
+    found = tools(await ModelDetector(settings, run=fake_run(ALL_READY)).detect())
+    assert found["codex"]["choices"] == ["default"]

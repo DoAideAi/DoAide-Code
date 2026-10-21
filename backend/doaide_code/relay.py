@@ -22,6 +22,7 @@ from typing import Any, Protocol
 from .chat import HISTORY_TURNS, public_message
 from .commands import is_command, is_models_command
 from .db import Store
+from .detect import clean_pin
 from .sync import SyncHub
 
 log = logging.getLogger(__name__)
@@ -141,6 +142,7 @@ class RelayService:
             "mode": "hub",
             "agent_online": self.agent_online(user_email),
             "models": self._models.get(user_email),
+            "model_pref": self.store.model_pref(user_email),
             "messages": [public_message(m) for m in self.store.list_messages(session["id"])],
         }
 
@@ -289,6 +291,12 @@ class RelayService:
         await self.hub.publish(user_email, {"type": "agent", "online": False})
         await self._publish_status(user_email)
 
+    async def set_model(self, user_email: str, value: Any) -> None:
+        """Stored on the hub so every device shows it; sent to the laptop with each prompt."""
+        pref = clean_pin(value)
+        self.store.set_model_pref(user_email, pref)
+        await self.hub.publish(user_email, {"type": "model_pref", "pref": pref})
+
     async def _set_models(self, user_email: str, models: Any) -> None:
         if not isinstance(models, dict) or not isinstance(models.get("tools"), list):
             return
@@ -390,7 +398,14 @@ class RelayService:
         await self._publish_message(user_email, job["id"])
         try:
             await agent.send_json(
-                {"type": "job", "id": job["id"], "text": job["text"], "history": history[-HISTORY_TURNS:]}
+                {
+                    "type": "job",
+                    "id": job["id"],
+                    "text": job["text"],
+                    "history": history[-HISTORY_TURNS:],
+                    # The model picked in the UI, or None to let the laptop route.
+                    "model": self.store.model_pref(user_email),
+                }
             )
         except Exception:
             log.warning("could not reach laptop agent for %s", user_email)
