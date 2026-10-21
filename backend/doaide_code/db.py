@@ -499,6 +499,18 @@ class Store:
             (user_email, since),
         )
 
+    def task_history(self, user_email: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Recent dispatch task replies for monitoring."""
+        return self._all(
+            "SELECT m.id, m.created_at, m.executor, m.status, m.meta, "
+            "(SELECT u.content FROM messages u WHERE u.session_id = m.session_id AND u.role = 'user' "
+            " AND u.created_at <= m.created_at ORDER BY u.created_at DESC LIMIT 1) AS prompt "
+            "FROM messages m JOIN sessions s ON s.id = m.session_id "
+            "WHERE s.user_email = ? AND m.role = 'assistant' AND m.meta LIKE '%\"via\": \"dispatch\"%' "
+            "ORDER BY m.created_at DESC LIMIT ?",
+            (user_email, limit),
+        )
+
     # Executor stats
 
     def record_executor(self, executor: str, *, ok: bool, elapsed_ms: int) -> None:

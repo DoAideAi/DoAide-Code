@@ -234,3 +234,23 @@ def test_the_hub_keeps_only_the_dispatch_label_from_the_laptop():
     # "mcp" marks calls the hub relayed itself; a laptop cannot claim it, or anything else.
     assert clean_meta({"via": "mcp", "tool": "execute_code"}) == {}
     assert clean_meta({"via": "<script>"}) == {}
+
+
+def test_task_history_lists_recent_tasks_newest_first(settings, project, auth):
+    ollama = executor("ollama", 0, ["`GREETING` in app.py is 'hi'."], tool="ollama")
+    with app_with(settings, project, ollama) as client:
+        first = post(client, auth, prompt="what is GREETING in app.py?", project="proj").json()
+        second = post(client, auth, prompt="and where is GREETING set in app.py?", project="proj").json()
+        # A chat reply is not a task.
+        store = client.app.state.store
+        session = store.latest_session(settings.owner_email)
+        store.add_message(session["id"], "assistant", "chat reply", status="done", meta={"route": {"model": "x"}})
+        history = client.get("/api/v1/tasks/history", headers=auth).json()["tasks"]
+        limited = client.get("/api/v1/tasks/history?limit=1", headers=auth).json()["tasks"]
+        assert client.get("/api/v1/tasks/history").status_code == 401
+    assert [t["id"] for t in history] == [second["message_id"], first["message_id"]]
+    latest = history[0]
+    assert latest["prompt"] == "and where is GREETING set in app.py?" and latest["status"] == "done"
+    assert latest["executor"] == "ollama" and latest["free"] and latest["cost_usd"] == 0
+    assert latest["escalated_from"] is None and latest["seconds"] is not None
+    assert [t["id"] for t in limited] == [second["message_id"]]

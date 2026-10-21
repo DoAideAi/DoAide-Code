@@ -259,6 +259,34 @@ def create_app(
         answer = await run_task(router, store, root, label, body.prompt, **shown)
         return JSONResponse(answer, status_code=200 if answer["status"] == "done" else status.HTTP_502_BAD_GATEWAY)
 
+    @app.get("/api/v1/tasks/history")
+    async def task_history(limit: int = 50, user: User = Depends(current_user)) -> dict:
+        """Recent dispatch task results: model, cost, time, and status for monitoring."""
+        limit = max(1, min(int(limit), 200))
+        rows = store.task_history(user.email, limit)
+        items = []
+        for row in rows:
+            try:
+                meta = json.loads(row["meta"]) if row["meta"] else {}
+            except (TypeError, ValueError):
+                meta = {}
+            route = meta.get("route") or {}
+            usage = meta.get("usage") or {}
+            elapsed_ms = route.get("elapsed_ms")
+            items.append({
+                "id": row["id"],
+                "created_at": row["created_at"],
+                "prompt": (row["prompt"] or "")[:120],
+                "executor": row["executor"],
+                "model": route.get("model"),
+                "free": bool(route.get("free")),
+                "escalated_from": route.get("escalated_from"),
+                "cost_usd": round(float(usage.get("cost_usd") or 0), 6),
+                "seconds": round(elapsed_ms / 1000, 2) if elapsed_ms is not None else None,
+                "status": row["status"],
+            })
+        return {"tasks": items}
+
     # Files (read-only) and laptop settings
 
     async def browse(user: User, method: str, rel: str) -> dict:
