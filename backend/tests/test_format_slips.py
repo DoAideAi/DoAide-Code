@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from doaide_code.changes import build_changeset, parse_edits
+from doaide_code.changes import build_changeset, parse_edits, strip_edits
 from doaide_code.classify import classify_task
 from doaide_code.executors import Job
 from doaide_code.executors.base import user_message
@@ -88,3 +88,13 @@ def test_a_short_instruction_naming_code_is_an_edit_and_a_claimed_edit_must_exis
     assert incomplete_reason("Updated the handler.", "explain")
     assert incomplete_reason("It returns the updated list.", "question") is None
     assert incomplete_reason("The limit was changed to 5 in 2021 by the config loader.", "question") is None
+
+
+def test_a_replace_marker_used_as_the_divider_is_read(tmp_path):
+    (tmp_path / "usage.py").write_text(USAGE)
+    # Live, qwen2.5-coder:32b: SEARCH, a blank line, REPLACE (as the divider), the code, REPLACE.
+    answer = f"Add `format_usd`.\n\nusage.py\n<<<<<<< SEARCH\n\n>>>>>>> REPLACE\n{NEW}>>>>>>> REPLACE\n"
+    assert incomplete_reason(answer, "edit") is None
+    change = build_changeset(tmp_path, parse_edits(answer)).files["usage.py"]
+    assert change.new == USAGE + "\n\n" + NEW and change.problems == []
+    assert strip_edits(answer) == "Add `format_usd`."

@@ -3,8 +3,9 @@
 Syntax and lint checks (changes.py) cannot tell a correct edit from one that parses but breaks
 behaviour (a local model once "stripped filler" by calling .strip() on every streamed chunk,
 gluing every reply's words together). The project's own tests can. For Python projects with a
-virtualenv and pytest, the tests of the package holding the edited files run after the write:
-exit status 1 means the edit broke them. No tests, no virtualenv or no pytest: nothing runs and
+virtualenv and pytest, the tests of the package holding the edited files run after the write
+(those that reference the edited modules, or all of them when none do): exit status 1 means the
+edit broke them. No tests, no virtualenv or no pytest: nothing runs and
 the edit stands, as before. DOAIDE_RUN_TESTS=0 turns this off.
 """
 
@@ -43,18 +44,58 @@ def test_target(root: Path, paths: list[str]) -> tuple[Path, Path] | None:
     return None
 
 
+def related_tests(folder: Path, root: Path, paths: list[str]) -> list[str]:
+    """Test files (relative to `folder`) that import or name the edited modules, plus edited test
+    files themselves; empty when none do (then the whole suite runs)."""
+    tests = folder / "tests"
+    targets: list[tuple[str, str, set[str]]] = []
+    found: set[str] = set()
+    for rel in paths:
+        path = (root / rel).resolve()
+        if not rel.endswith(".py") or folder not in path.parents:
+            continue
+        if tests in path.parents and path.name.startswith("test_"):
+            found.add(path.relative_to(folder).as_posix())
+            continue
+        dotted = ".".join(path.relative_to(folder).with_suffix("").parts)
+        try:
+            source = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            source = ""
+        # Its top-level functions and classes: tests often import them through a package
+        # ("from app.executors import OllamaExecutor" for app/executors/ollama.py).
+        names = {n for n in re.findall(r"^(?:async\s+)?(?:def|class)\s+(\w+)", source, re.M) if len(n) >= 5}
+        targets.append((dotted.removesuffix(".__init__"), path.stem, names))
+    if not targets:
+        return sorted(found)
+    for test in sorted(tests.rglob("test_*.py")):
+        try:
+            text = test.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for dotted, stem, names in targets:
+            package = dotted.rpartition(".")[0]
+            imports_stem = package and re.search(rf"^\s*from\s+{re.escape(package)}\s+import\s+[^\n]*\b{re.escape(stem)}\b", text, re.M)
+            uses_name = names and re.search(rf"\b(?:{'|'.join(map(re.escape, sorted(names)))})\b", text)
+            if dotted in text or imports_stem or uses_name or test.stem.startswith(f"test_{stem}"):
+                found.add(test.relative_to(folder).as_posix())
+                break
+    return sorted(found)
+
+
 async def failing_tests(root: Path, paths: list[str], *, timeout: float = TIMEOUT) -> str | None:
     """Why the project's tests fail after an edit to `paths` (the first failure), or None when
     they pass, or none could be run."""
     if not enabled() or (target := test_target(root, paths)) is None:
         return None
     folder, python = target
+    selected = related_tests(folder, root.resolve(), paths)
     proc = None
     try:
         # No .pyc files: an edit that keeps a file's size within the same second as the last run
         # would otherwise be tested against the stale bytecode of the code it replaced.
         proc = await asyncio.create_subprocess_exec(
-            str(python), "-B", "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider",
+            str(python), "-B", "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider", *selected,
             cwd=folder, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
             env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         )

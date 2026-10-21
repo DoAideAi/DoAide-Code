@@ -142,8 +142,11 @@ def _block(lines: list[str], i: int) -> tuple[list[str], list[str], int] | None:
         while k < len(lines) and not REPLACE_RE.match(lines[k]):
             k += 1
         return (lines[i + 1 : j], lines[j + 1 : k], k) if k < len(lines) else None
-    # No divider: SEARCH lines, REPLACE marker, then the replacement until the next block's path.
     nxt = next((n for n in range(j + 1, len(lines)) if SEARCH_RE.match(lines[n])), len(lines))
+    # A REPLACE marker where the divider goes, then another closing the block (live, 32b model).
+    if (k := next((n for n in range(j + 1, nxt) if REPLACE_RE.match(lines[n])), None)) is not None:
+        return lines[i + 1 : j], lines[j + 1 : k], k
+    # No divider: SEARCH lines, REPLACE marker, then the replacement until the next block's path.
     end = nxt - 1
     if nxt < len(lines):
         while end > j and (not lines[end].strip() or FENCE_RE.match(lines[end].strip())):

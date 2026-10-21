@@ -82,7 +82,8 @@ def incomplete_reason(answer: str, kind: str, *, reads_files: bool = False) -> s
         return "empty answer"
     if text.count("```") % 2:
         return "a code block was left open"
-    if text.count("<<<<<<< SEARCH") != text.count(">>>>>>> REPLACE"):
+    # More SEARCH markers than REPLACE ones; an extra REPLACE (used as the divider) parses.
+    if text.count("<<<<<<< SEARCH") > text.count(">>>>>>> REPLACE"):
         return CUT_OFF_EDIT
     if not reads_files and _NEEDS_FILES.search(text[:600]):
         return NEEDS_FILES_REASON
