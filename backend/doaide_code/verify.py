@@ -51,9 +51,12 @@ async def failing_tests(root: Path, paths: list[str], *, timeout: float = TIMEOU
     folder, python = target
     proc = None
     try:
+        # No .pyc files: an edit that keeps a file's size within the same second as the last run
+        # would otherwise be tested against the stale bytecode of the code it replaced.
         proc = await asyncio.create_subprocess_exec(
-            str(python), "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider",
+            str(python), "-B", "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider",
             cwd=folder, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         )
         out, _ = await asyncio.wait_for(proc.communicate(), timeout)
     except (OSError, asyncio.TimeoutError):
