@@ -44,6 +44,8 @@ STOPWORDS = {
 }
 # Files scoring below this fraction of the best match are dropped as noise.
 RELATIVE_CUTOFF = 0.3
+# With named files in the context, other files are added only if this much budget is left.
+NAMED_REMAINDER = 4000
 LANG = {".py": "python", ".js": "js", ".jsx": "jsx", ".ts": "ts", ".tsx": "tsx", ".json": "json", ".md": "md",
         ".toml": "toml", ".yaml": "yaml", ".yml": "yaml", ".sh": "bash", ".css": "css", ".html": "html"}
 
@@ -82,13 +84,20 @@ class Ranking:
 
     def render(self, budget: int, *, max_files: int | None = None, extra: str = "") -> tuple[str, list[str]]:
         """Context text within `budget` characters, and the files it includes: the tree, then
-        whole files by rank (at most `max_files`), with `extra` (a recent diff) first."""
+        whole files by rank (at most `max_files`), with `extra` (a recent diff) first.
+
+        Files the request names come whole (the model edits them, and SEARCH text copied from an
+        excerpt does not match) and the tree is left out (it only helps find a file); other files
+        only fill a real remainder of the budget. Less to read, and nothing to confuse."""
         if budget <= 0 or not (self.tree or self.candidates or extra):
             return "", []
-        tree_lines = TREE_LINES if max_files is None or max_files > 3 else SMALL_TREE_LINES
-        parts = ["# Project files (selected for this request)", "## Tree", *self.tree[:tree_lines]]
-        if len(self.tree) > tree_lines:
-            parts.append(f"... {len(self.tree) - tree_lines} more")
+        named = any(c.explicit for c in self.candidates)
+        parts = ["# Project files (selected for this request)"]
+        if not named:
+            tree_lines = TREE_LINES if max_files is None or max_files > 3 else SMALL_TREE_LINES
+            parts += ["## Tree", *self.tree[:tree_lines]]
+            if len(self.tree) > tree_lines:
+                parts.append(f"... {len(self.tree) - tree_lines} more")
         if extra:
             parts.insert(0, extra[: budget // 2])
         used = sum(len(p) + 1 for p in parts)
@@ -102,9 +111,16 @@ class Ranking:
                 continue
             lang = LANG.get(Path(c.path).suffix, "")
             block = f"\n## File: {c.path}\n```{lang}\n{text}\n```"
+            if named and not c.explicit and budget - used < NAMED_REMAINDER:
+                continue  # the named files took the budget; the rest would only be excerpts
             # Small models: a large file is sent as its relevant parts even when it would fit,
-            # since reading the prompt is most of a local model's time.
-            if max_files is not None and len(block) > budget // 3 and (cut := _excerpt(text, self.terms, budget // 3)):
+            # since reading the prompt is most of a local model's time (not files the user named).
+            if (
+                max_files is not None
+                and not (c.explicit and used + len(block) <= budget)
+                and len(block) > budget // 3
+                and (cut := _excerpt(text, self.terms, budget // 3))
+            ):
                 block = f"\n## File: {c.path} (excerpts)\n```{lang}\n{cut}\n```"
             if used + len(block) > budget:
                 room = budget - used - 80

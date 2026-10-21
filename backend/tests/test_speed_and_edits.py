@@ -12,6 +12,7 @@ import pytest
 
 from doaide_code.agent import LaptopAgent
 from doaide_code.changes import build_changeset, parse_edits, strip_edits
+from doaide_code.context import rank_files
 from doaide_code.executors import Job, OllamaExecutor
 from doaide_code.executors.ollama import FIXED_CTX, choose_model
 from doaide_code.relay import RelayService
@@ -252,3 +253,18 @@ async def test_an_edit_that_breaks_the_tests_is_undone_and_held_back(project, st
     assert "Not kept: tests fail" in outcome.content and outcome.meta()["changes"]["status"] == "pending"
     tests = next(c for c in outcome.meta()["checks"]["items"] if c["name"] == "tests")
     assert tests["ok"] is False
+
+
+# The file the request names comes whole
+
+
+def test_a_named_file_is_sent_whole_without_the_tree_or_unrelated_files(tmp_path):
+    body = "".join(f"def helper_{i}(x):\n    return x + {i}\n\n" for i in range(330))  # ~10k chars
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "target.py").write_text(f"PATTERN = 'heading'\n\n{body}")
+    (tmp_path / "pkg" / "other.py").write_text(f"# mentions heading too\n{body}")
+    ctx, files = rank_files(tmp_path, "In pkg/target.py, change PATTERN to match the heading").render(14_000, max_files=3)
+    assert files == ["pkg/target.py"] and "(excerpts)" not in ctx and "## Tree" not in ctx
+    assert "def helper_329(x)" in ctx  # the whole file, not the parts near the terms
+    ctx, files = rank_files(tmp_path, "where is the heading pattern defined").render(14_000, max_files=3)
+    assert "## Tree" in ctx and len(files) >= 1
