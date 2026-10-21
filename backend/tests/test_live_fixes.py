@@ -209,3 +209,38 @@ def test_older_databases_get_the_context_tokens_column(tmp_path):
 )
 def test_code_tasks_are_never_meta_questions(prompt, kind):
     assert meta_question(prompt) == kind
+
+
+# Short answers, no questions back, and Sonnet (not Opus) behind a failed free answer.
+
+
+@pytest.mark.parametrize("style", ["local", "claude", "codex"])
+@pytest.mark.parametrize("kind", ["question", "edit", "design"])
+def test_every_prompt_asks_for_short_autonomous_answers(style, kind):
+    prompt = system_prompt(style, kind)
+    assert "Keep responses concise. Show code changes as diffs with a one-line summary." in prompt
+    assert "Work autonomously. Make decisions without asking the user. Only ask when truly ambiguous." in prompt
+
+
+async def test_a_failed_free_answer_goes_to_sonnet_even_when_opus_is_available(store):
+    coder = executor("ollama-coder", 1, [""], tool="ollama")
+    opus = executor("claude-opus", 3, ["opus answer about pager.py"])
+    codex = executor("codex", 2, ["codex answer about pager.py"], tool="codex")
+    sonnet = executor("claude-sonnet", 2, ["The pager splits rows into pages of 20 in pager.py."])
+    opus.min_task_tier = codex.min_task_tier = 2
+    # Opus listed first on purpose: the order of executors must not matter.
+    brain = RouterBrain([opus, codex, coder, sonnet], offline=True)
+    outcome = await run_job(brain, store, Job("refactor the pager in pager.py to use a generator"), Outcome(), nop)
+    assert outcome.executor == "claude-sonnet" and opus.jobs == [] and codex.jobs == []
+    assert outcome.meta()["route"]["escalated_from"]["executor"] == "ollama-coder"
+
+
+async def test_opus_only_takes_expert_level_work(store):
+    sonnet = executor("claude-sonnet", 2, ["sonnet"])
+    opus = executor("claude-opus", 3, ["A threat model for the auth flow, with the top three risks."])
+    opus.min_task_tier = 2
+    brain = RouterBrain([sonnet, opus], offline=True)
+    expert = await run_job(brain, store, Job("design a distributed architecture and do a security audit across all services"), Outcome(), nop)
+    assert expert.executor == "claude-opus"
+    hard = await run_job(brain, store, Job("refactor the handlers across all files and add a new endpoint"), Outcome(), nop)
+    assert hard.executor == "claude-sonnet"
