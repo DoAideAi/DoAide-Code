@@ -80,6 +80,10 @@ def test_harder_requests_go_to_higher_tiers(client, token, executors):
         ws.receive_json()
         ws.send_json({"type": "send", "text": "do a security audit of the login flow"})
         events = drain_until(ws, "done")
+        assert events[-1]["content"] == "sonnet answer"
+        # Opus only for the hardest: several strong signals together.
+        ws.send_json({"type": "send", "text": "design a distributed architecture and do a security audit across all services"})
+        events = drain_until(ws, "done")
     assert events[-1]["content"] == "opus answer"
     assert not executors[0].jobs
 

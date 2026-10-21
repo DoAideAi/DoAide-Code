@@ -188,7 +188,7 @@ async def run_job(
         previous = outcome.content
         outcome.content = ""
         try:
-            await _drain(executor, run, outcome, store, source, streamed, on_delta)
+            used = await _drain(executor, run, outcome, store, source, streamed, on_delta)
         except ExecutorError as exc:
             store.record_executor(executor.name, ok=False, elapsed_ms=_ms(started))
             log.warning("%s failed: %s", executor.name, exc)
@@ -201,11 +201,11 @@ async def run_job(
             continue
         store.record_executor(executor.name, ok=True, elapsed_ms=_ms(started))
         outcome.executor, outcome.status = executor.name, "done"
-        outcome.route = _route(executor, decision, outcome)
+        outcome.route = _route(executor, decision, used)
 
         # Incomplete? Retry once on the next executor up, with more context.
         reason = incomplete_reason(outcome.content, decision.kind)
-        nxt = _next_up(candidates, executor)
+        nxt = _next_up(candidates, executor, decision.tier)
         if reason and not pin and retries < MAX_RETRIES and nxt is not None:
             retries += 1
             retry_note = f"retried on {nxt.name} with more context ({reason} from {executor.name})"
@@ -226,10 +226,14 @@ async def run_job(
     return outcome
 
 
-def _next_up(candidates: list[Executor], current: Executor) -> Executor | None:
-    """The next candidate after `current` that is a stronger tier (never Opus for simple work)."""
+def _next_up(candidates: list[Executor], current: Executor, task_tier: int) -> Executor | None:
+    """Where to retry an incomplete answer: the next candidate that is stronger (or, at the top
+    of the task's tier, an alternative of the same tier), never above the task's own tier past
+    Sonnet: an incomplete Sonnet answer goes to Codex, not Opus."""
+    ceiling = max(task_tier, 2)
     after = candidates[candidates.index(current) + 1 :]
-    return next((e for e in after if e.tier > current.tier), None)
+    floor = current.tier if current.tier >= 2 else current.tier + 1
+    return next((e for e in after if floor <= e.tier <= ceiling), None)
 
 
 async def _context_for(
@@ -246,8 +250,9 @@ async def _context_for(
     return ranking.render_map(budget, extra=diff)
 
 
-def _route(executor: Executor, decision: RouteDecision, outcome: Outcome) -> dict:
-    model = (outcome.usage.model if outcome.usage else "") or getattr(executor, "model", "") or None
+def _route(executor: Executor, decision: RouteDecision, used: Usage | None) -> dict:
+    # The model this executor reported (not the sum of earlier attempts), else its configured one.
+    model = (used.model if used else "") or getattr(executor, "model", "") or None
     return {
         "executor": executor.name,
         "model": model,
@@ -284,16 +289,19 @@ async def _drain(
     source: str,
     streamed: list[str],
     on_delta: Callable[[str], Awaitable[None]],
-) -> None:
-    """Stream one executor into the outcome, logging its usage."""
+) -> Usage | None:
+    """Stream one executor into the outcome, logging its usage; returns that executor's usage."""
+    used: Usage | None = None
     async for chunk in executor.stream(run):
         if isinstance(chunk, Usage):
             outcome.add_usage(chunk)
+            used = chunk if used is None else used + chunk
             store.record_usage(source, executor.name, chunk.model, chunk.input_tokens, chunk.output_tokens, chunk.cost_usd)
             continue
         streamed.append(chunk)
         outcome.content += chunk
         await on_delta(chunk)
+    return used
 
 
 async def _preview_changes(

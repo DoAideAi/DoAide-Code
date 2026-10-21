@@ -9,8 +9,11 @@ from ..prompts import system_prompt
 from .base import Executor, ExecutorError, Job, cli_env, stream_subprocess, which, with_context
 
 # Read-only: the agent may look around the project, but changes come back as edit blocks that
-# DoAide shows as a diff and applies only on request.
+# DoAide shows as a diff and applies only on request. `--tools` limits which tools exist at all;
+# `--allowedTools` alone only pre-approves, so a user setting like bypassPermissions would still
+# let Claude edit files and run commands. The write tools are also denied explicitly.
 READ_ONLY_TOOLS = ["Read", "Grep", "Glob"]
+WRITE_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"]
 
 
 class ClaudeStreamParser:
@@ -74,8 +77,12 @@ class ClaudeCliExecutor(Executor):
             "stream-json",
             "--verbose",
             "--include-partial-messages",
+            "--tools",
+            ",".join(READ_ONLY_TOOLS),
             "--allowedTools",
             *READ_ONLY_TOOLS,
+            "--disallowedTools",
+            *WRITE_TOOLS,
             "--append-system-prompt",
             system_prompt("claude", kind),
         ]

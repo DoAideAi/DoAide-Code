@@ -321,3 +321,35 @@ def test_general_questions_get_no_project_files():
     assert classify_task("what does LaptopAgent do").about_project is True
     assert classify_task("where is the jwt secret configured").about_project is True
     assert classify_task("what does refresh_session return").about_project is True
+
+
+# Found by dogfooding through the MCP relay.
+
+
+def test_claude_cli_cannot_write_even_with_bypass_permissions():
+    from doaide_code.executors import ClaudeCliExecutor
+
+    argv = ClaudeCliExecutor("claude", "sonnet", name="claude-sonnet", tier=2).argv("fix it", "debug")
+    # --allowedTools only pre-approves; --tools limits what exists, and writes are denied too.
+    assert argv[argv.index("--tools") + 1] == "Read,Grep,Glob"
+    denied = argv[argv.index("--disallowedTools") + 1 :]
+    assert {"Edit", "Write", "Bash"} <= set(denied)
+
+
+def test_a_traceback_is_one_debugging_signal_not_two():
+    trace = 'Traceback (most recent call last):\n  File "/x/dashboard.py", line 38\nValueError: bad\nfix this'
+    profile = classify_task(trace)
+    assert profile.tier == 1 and profile.kind in {"debug", "edit"} and profile.has_error
+
+
+async def test_incomplete_sonnet_answer_retries_on_codex_not_opus(store):
+    sonnet = FakeExecutor("claude-sonnet", 2, ["I'll check the file."])
+    codex = FakeExecutor("codex", 2, ["Here is the refactor:\n```python\ndef handler():\n    return 1\n```"])
+    opus = FakeExecutor("claude-opus", 3, ["opus"])
+    codex.min_task_tier = opus.min_task_tier = 2
+    codex.model, sonnet.model = "gpt-6-astra", "sonnet"
+    brain = RouterBrain([sonnet, opus, codex], offline=True)
+    outcome = await run_job(brain, store, Job("refactor the handlers across all files"), Outcome(), nop)
+    assert opus.jobs == [] and outcome.executor == "codex"
+    # The route names the model that answered, not one from an earlier attempt.
+    assert outcome.meta()["route"]["model"] == "gpt-6-astra"

@@ -72,7 +72,9 @@ def test_claude_argv_matches_spec():
     assert argv[argv.index("--output-format") + 1] == "stream-json"
     assert "--verbose" in argv  # required by the CLI for stream-json with -p
     # Read-only: edits come back as blocks for preview, never written by the CLI.
-    assert "acceptEdits" not in argv and "Edit" not in argv and "Write" not in argv
+    assert "acceptEdits" not in argv
+    allowed = argv[argv.index("--tools") + 1 : argv.index("--disallowedTools")]
+    assert "Edit" not in " ".join(allowed) and "Write" not in " ".join(allowed)
     assert argv[argv.index("--allowedTools") + 1 : argv.index("--allowedTools") + 4] == ["Read", "Grep", "Glob"]
     assert "SEARCH" in argv[argv.index("--append-system-prompt") + 1]
 

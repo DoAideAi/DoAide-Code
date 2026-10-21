@@ -90,10 +90,11 @@ def classify_task(prompt: str) -> TaskProfile:
         score += 2 * (len(files) - 2)
         reasons.append(f"{len(files)} files named (+{2 * (len(files) - 2):g})")
     has_error = bool(_TRACEBACK.search(text))
-    if has_error:
-        score += 2
-        kinds["debug"] = kinds.get("debug", 0) + 2
-        reasons.append("error output (+2)")
+    if has_error and "debug" not in kinds:
+        # Error output is a debugging task; it is not extra difficulty on top of one.
+        score += 3
+        kinds["debug"] = 3
+        reasons.append("error output (+3)")
     words = len(text.split())
     if words > 250:
         bonus = min(4.0, words / 250)
