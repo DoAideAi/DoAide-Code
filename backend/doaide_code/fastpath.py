@@ -107,7 +107,7 @@ def usage_answer(root: Path, prompt: str) -> str | None:
     return "\n".join(parts)
 
 
-# "Rename X to Y" (optionally "in app/x.py"): every whole-word occurrence across the project,
+# "Rename X to Y" (optionally "in app/x.py"): whole words in its file and the files importing it,
 # written as edit blocks so it is validated, applied and undoable like a model's edit. Models
 # renamed the definition and missed the uses, then Sonnet was paid to finish.
 _IDENT = r"`?([A-Za-z_]\w*)(?:\(\))?`?"
@@ -121,30 +121,48 @@ RENAME_RE = re.compile(
 
 
 def rename_answer(root: Path, prompt: str) -> str | None:
-    """Edit blocks renaming a name everywhere, or None when a model should handle the request
-    (not a plain rename, the name is not in the named file, or the new name is already taken)."""
+    """Edit blocks renaming a name in the file that defines it (the one named, else the only
+    definition) and in the files importing it from there; None when a model should handle the
+    request (not a plain rename, no single home for the name, or the new name is taken there)."""
     match = RENAME_RE.match(prompt)
     if not match:
         return None
     first, old, path_a, new, path_b = match.groups()
-    named = first or path_a or path_b
+    named = (first or path_a or path_b or "").lstrip("./")
     if old == new:
         return None
     word = re.compile(rf"\b{re.escape(old)}\b")
-    files = [(rel, text) for rel, text in _files_with(root, old) if word.search(text)]
-    if not files or any(re.search(rf"\b{re.escape(new)}\b", text) for _, text in _files_with(root, new)):
+    files = {rel: text for rel, text in _files_with(root, old) if word.search(text)}
+    definition = _definition(old)
+    homes = [rel for rel, text in files.items() if any(definition.match(line) for line in text.splitlines())]
+    if named:
+        homes = [rel for rel in homes if rel == named or rel.endswith("/" + named)]
+    if len(homes) != 1:
         return None
-    if named and not any(rel == named.lstrip("./") or rel.endswith("/" + named.lstrip("./")) for rel, _ in files):
+    home = homes[0]
+    # Same-named symbols elsewhere are other things: only files that import this one change.
+    stem = re.escape(Path(home).stem)
+    imports = re.compile(
+        rf"^\s*from\s+[\w.]*\b{stem}\s+import\s+(\([^)]*\)|[^\n]*)"
+        rf"|import\s*\{{([^}}]*)\}}\s*from\s*['\"][^'\"]*\b{stem}\b[^'\"]*['\"]"
+        rf"|\b{stem}\.{re.escape(old)}\b()",
+        re.M,
+    )
+    scope = [home] + [
+        rel for rel, text in files.items()
+        if rel != home and any(m.group(3) is not None or word.search(m.group(1) or m.group(2) or "") for m in imports.finditer(text))
+    ]
+    if any(re.search(rf"\b{re.escape(new)}\b", files[rel]) for rel in scope):
         return None
     blocks, count = [], 0
-    for rel, text in files:
-        lines = text.splitlines()
+    for rel in scope:
+        lines = files[rel].splitlines()
         hits = [i for i, line in enumerate(lines) if word.search(line)]
         span = lines[hits[0] : hits[-1] + 1]
         count += sum(len(word.findall(line)) for line in span)
         renamed = [word.sub(new, line) for line in span]
         blocks.append(f"{rel}\n<<<<<<< SEARCH\n" + "\n".join(span) + "\n=======\n" + "\n".join(renamed) + "\n>>>>>>> REPLACE")
-    where = f"{len(files)} file{'s' * (len(files) != 1)}"
+    where = f"{len(scope)} file{'s' * (len(scope) != 1)}"
     return f"Renamed `{old}` to `{new}`: {count} occurrence{'s' * (count != 1)} in {where}.\n\n" + "\n\n".join(blocks)
 
 
