@@ -16,7 +16,8 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from .commands import is_command, run_command
+from .commands import is_command, is_models_command, run_command
+from .detect import format_report, same_report
 from .config import Settings
 from .db import Store
 from .executors import Job, Turn
@@ -43,6 +44,8 @@ class LaptopAgent:
         # MCP tool calls relayed from the hub; they can run for minutes, so each gets a task.
         self.tools = LaptopTools(store, router, owner_email, workspace=workspace)
         self._mcp_tasks: set[asyncio.Task] = set()
+        # Last model report sent to the hub.
+        self._models: dict[str, Any] | None = None
 
     def project_name(self) -> str | None:
         project = self.store.active_project(self.owner)
@@ -50,7 +53,22 @@ class LaptopAgent:
 
     async def hello(self) -> dict[str, Any]:
         executors = [e.name for e in self.router.executors if await e.available()]
-        return {"type": "hello", "project": self.project_name(), "executors": executors}
+        models = await self.router.models(force=True)
+        self._models = models
+        return {"type": "hello", "project": self.project_name(), "executors": executors, "models": models}
+
+    async def watch_models(self, send: Send, interval: float = 60) -> None:
+        """Re-detect models now and then, and tell the hub when something was installed, started,
+        signed in or removed, so every device shows what the laptop can really run."""
+        while True:
+            await asyncio.sleep(interval)
+            await self.send_models(send, force=True)
+
+    async def send_models(self, send: Send, *, force: bool = False) -> None:
+        models = await self.router.models(force=force)
+        if not same_report(models, self._models):
+            self._models = models
+            await send({"type": "models", "models": models})
 
     async def on_message(self, message: dict[str, Any], send: Send) -> None:
         kind = message.get("type")
@@ -115,6 +133,11 @@ class LaptopAgent:
 
     async def run(self, message: dict[str, Any], send: Send) -> None:
         job_id, text = message["id"], message["text"]
+        if is_models_command(text):
+            models = await self.router.models(force=True)
+            await send({"type": "done", "id": job_id, "role": "system", "status": "done", "content": format_report(models)})
+            await self.send_models(send)
+            return
         if is_command(text):
             result = run_command(self.store, self.owner, text, workspace=self.workspace)
             if result.changes and result.changes[0]:
@@ -179,13 +202,17 @@ async def serve(agent: LaptopAgent, url: str, token: str, *, max_backoff: float 
                     await ws.send(json.dumps(data))
 
                 await send(await agent.hello())
-                async for raw in ws:
-                    try:
-                        message = json.loads(raw)
-                    except ValueError:
-                        continue
-                    if isinstance(message, dict):
-                        await agent.on_message(message, send)
+                watcher = asyncio.create_task(agent.watch_models(send))
+                try:
+                    async for raw in ws:
+                        try:
+                            message = json.loads(raw)
+                        except ValueError:
+                            continue
+                        if isinstance(message, dict):
+                            await agent.on_message(message, send)
+                finally:
+                    watcher.cancel()
         except ConnectionClosed as exc:
             if exc.rcvd is not None and exc.rcvd.code == 4401:
                 raise SystemExit("The hub rejected this agent token. Create a new one with 'Connect laptop'.")

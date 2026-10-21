@@ -45,8 +45,13 @@ async def test_ollama_streams_chunks_with_history():
 async def test_ollama_falls_back_to_installed_coder_model():
     ex = OllamaExecutor("http://ollama", "qwen3-coder", transport=ollama_transport(["llama3:latest", "qwen2.5-coder:7b"], [], []))
     assert await ex.resolve_model() == "qwen2.5-coder:7b"
-    none = OllamaExecutor("http://ollama", "qwen3-coder", transport=ollama_transport(["llama3:latest"], [], []))
-    assert await none.available() is False
+    # No coder model: the smallest installed chat model, never an embedding model.
+    chat = OllamaExecutor(
+        "http://ollama", "qwen3-coder", transport=ollama_transport(["nomic-embed-text:latest", "llama3:latest"], [], [])
+    )
+    assert await chat.resolve_model() == "llama3:latest"
+    embed_only = OllamaExecutor("http://ollama", "qwen3-coder", transport=ollama_transport(["nomic-embed-text:latest"], [], []))
+    assert await embed_only.available() is False
 
 
 @pytest.mark.anyio
@@ -135,7 +140,8 @@ async def test_stream_subprocess_parses_lines_and_raises_on_exit(tmp_path: Path)
             [sys.executable, str(script), "0"], parse=lambda e: e.get("t"), cwd=tmp_path, env={}, timeout=20
         )
     ]
-    assert out == ["one", "plain line\n", "two"]
+    # Non-JSON stdout (banners, warnings) is not part of the answer.
+    assert out == ["one", "two"]
     with pytest.raises(ExecutorError, match="boom"):
         [c async for c in stream_subprocess([sys.executable, str(script), "3"], parse=lambda e: None, cwd=None, env={}, timeout=20)]
 

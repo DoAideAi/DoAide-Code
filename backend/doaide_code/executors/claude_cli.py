@@ -47,6 +47,8 @@ class ClaudeStreamParser:
 
 
 class ClaudeCliExecutor(Executor):
+    tool = "claude"
+
     def __init__(self, binary: str, model: str, *, name: str, tier: int, timeout: float = 600):
         self.binary = binary
         self.model = model

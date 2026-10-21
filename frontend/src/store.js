@@ -9,6 +9,9 @@ export const initialChat = {
   serverStatus: 'idle', // idle | busy | error
   mode: 'local', // local: this server runs the models | hub: prompts are relayed to the laptop
   agentOnline: false, // hub mode only: is the laptop agent connected?
+  // What the laptop can run, detected from `ollama list` / `claude auth status` /
+  // `codex login status`; null until the laptop (or local server) reports it.
+  models: null,
 }
 
 // Pure reducer for server events, kept separate from the store so it is easy to test.
@@ -25,6 +28,8 @@ export function applyEvent(state, event) {
         serverStatus: event.status,
         mode: event.mode ?? 'local',
         agentOnline: Boolean(event.agent_online),
+        // Local snapshots leave models to a separate event; keep what we have.
+        models: 'models' in event ? event.models : state.models,
       }
     case 'message': {
       const exists = state.messages.some((m) => m.id === event.message.id)
@@ -66,7 +71,10 @@ export function applyEvent(state, event) {
     case 'status':
       return { ...state, serverStatus: event.state }
     case 'agent':
-      return { ...state, agentOnline: event.online }
+      // A disconnected laptop's report is stale: nothing runs until it reconnects.
+      return { ...state, agentOnline: event.online, models: event.online ? state.models : null }
+    case 'models':
+      return { ...state, models: event.models ?? null }
     case 'project':
       return { ...state, project: event.project }
     case 'notice':
@@ -88,6 +96,11 @@ export const useChat = create((set) => ({
   apply: (event) => set((state) => applyEvent(state, event)),
   setConnection: (connection) => set({ connection }),
 }))
+
+// Usable tools from a models report, e.g. for the top bar summary.
+export function usableTools(models) {
+  return (models?.tools ?? []).filter((t) => t.usable)
+}
 
 // green: connected and healthy; red: last run failed; gray: offline (including, on the
 // hub, when the laptop that runs the models is not connected).

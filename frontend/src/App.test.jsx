@@ -143,6 +143,7 @@ beforeEach(() => {
     serverStatus: 'idle',
     mode: 'local',
     agentOnline: false,
+    models: null,
     connection: 'closed',
   })
   localStorage.clear()
@@ -415,6 +416,66 @@ describe('laptop setup (hub)', () => {
     await boot(true, { mode: 'hub', agent_online: false })
     await flush()
     expect(screen.queryByTestId('setup-page')).toBeNull()
+    expect(screen.getByTestId('laptop-banner')).toBeTruthy()
+  })
+})
+
+const REPORT = {
+  checked_at: 1,
+  any_usable: true,
+  tools: [
+    { id: 'ollama', label: 'Ollama', state: 'ready', usable: true, detail: '', models: ['llama3:latest', 'codellama:7b'] },
+    { id: 'claude', label: 'Claude CLI', state: 'signed_in', usable: true, detail: 'signed in', version: '2.1.0' },
+    {
+      id: 'codex',
+      label: 'Codex CLI',
+      state: 'not_found',
+      usable: false,
+      detail: '',
+      setup: 'Install Codex CLI: `npm install -g @openai/codex`, then `codex login`.',
+    },
+  ],
+}
+
+describe('detected models', () => {
+  it('shows only what the laptop reported, in the top bar menu', async () => {
+    const ws = await boot(true)
+    // Nothing reported yet: no invented list.
+    expect(screen.queryByTestId('models-toggle')).toBeNull()
+    await act(async () => ws.emit({ type: 'models', models: REPORT }))
+    expect(screen.getByTestId('models-toggle').textContent).toBe('2 of 3 models ready')
+    await act(async () => fireEvent.click(screen.getByTestId('models-toggle')))
+    expect(screen.getByTestId('model-tool-ollama').textContent).toContain('Ollama:llama3:latest, codellama:7b')
+    expect(screen.getByTestId('model-tool-claude').textContent).toContain('Claude CLI:signed in · v2.1.0')
+    expect(screen.getByTestId('model-tool-codex').textContent).toContain('Codex CLI:not found')
+    expect(screen.getByTestId('model-tool-codex').textContent).toContain('npm install -g @openai/codex')
+    expect(screen.queryByTestId('no-models-banner')).toBeNull()
+  })
+
+  it('shows a setup guide when nothing can run', async () => {
+    const none = {
+      checked_at: 1,
+      any_usable: false,
+      tools: [
+        { id: 'ollama', label: 'Ollama', state: 'not_running', usable: false, detail: '', setup: 'Start Ollama.' },
+        { id: 'claude', label: 'Claude CLI', state: 'signed_out', usable: false, detail: '', setup: 'Sign in: `claude auth login`.' },
+        { id: 'codex', label: 'Codex CLI', state: 'disabled', usable: false, detail: '' },
+      ],
+    }
+    await boot(true, { mode: 'hub', agent_online: true, models: none })
+    const banner = screen.getByTestId('no-models-banner')
+    expect(banner.textContent).toContain('No model is available on your laptop yet')
+    expect(banner.textContent).toContain('Ollama (not running): Start Ollama.')
+    expect(banner.textContent).toContain('Claude CLI (not signed in): Sign in: `claude auth login`.')
+    expect(banner.textContent).not.toContain('Codex')
+    expect(screen.getByTestId('models-toggle').textContent).toBe('No models')
+  })
+
+  it('drops the report when the laptop disconnects', async () => {
+    const ws = await boot(true, { mode: 'hub', agent_online: true, models: REPORT })
+    expect(screen.getByTestId('models-toggle')).toBeTruthy()
+    await act(async () => ws.emit({ type: 'agent', online: false }))
+    expect(screen.queryByTestId('models-toggle')).toBeNull()
     expect(screen.getByTestId('laptop-banner')).toBeTruthy()
   })
 })

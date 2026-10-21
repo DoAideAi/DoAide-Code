@@ -15,6 +15,7 @@ import {
 import Composer from './components/Composer.jsx'
 import { CodeViewer, FileTree } from './components/Files.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
+import { NoModelsBanner } from './components/Models.jsx'
 import MessageList from './components/MessageList.jsx'
 import SetupPage from './components/SetupPage.jsx'
 import SignIn from './components/SignIn.jsx'
@@ -150,8 +151,20 @@ function useStoredFlag(key) {
 export default function App() {
   const desktop = useIsDesktop()
   const { token, needsSignIn, clientId, error, onCredential, renew } = useAuth()
-  const { messages, project, serverStatus, mode, agentOnline, connection, apply, setConnection, sessionId, title, source } =
-    useChat()
+  const {
+    messages,
+    project,
+    serverStatus,
+    mode,
+    agentOnline,
+    models,
+    connection,
+    apply,
+    setConnection,
+    sessionId,
+    title,
+    source,
+  } = useChat()
   const socket = useRef(null)
   const [filesOpen, toggleFiles] = useStoredFlag(FILES_KEY)
   const [openFile, setOpenFile] = useState(null)
@@ -205,6 +218,7 @@ export default function App() {
         onToggleFiles={desktop ? toggleFiles : null}
         laptop={mode === 'hub' && connection === 'open' ? agentOnline : null}
         onLaptop={() => setSetupOpen(true)}
+        models={connection === 'open' ? models : null}
         sessions={
           token && {
             token,
@@ -228,6 +242,7 @@ export default function App() {
           {mode === 'hub' && connection === 'open' && !agentOnline && (
             <LaptopBanner onSetup={() => setSetupOpen(true)} />
           )}
+          {connection === 'open' && <NoModelsBanner models={models} />}
           <div className="flex min-h-0 flex-1">
             {showFiles && <FileTree token={token} version={filesVersion} selected={openFile} onOpen={setOpenFile} />}
             {showViewer && (

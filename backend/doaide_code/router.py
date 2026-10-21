@@ -10,7 +10,9 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from typing import Any
 
+from .detect import ModelDetector, executor_report
 from .executors import Executor, JevExecutor
 from .usage import Usage
 
@@ -77,8 +79,11 @@ class RouterBrain:
         jev: JevExecutor | None = None,
         offline: bool = False,
         cache_ttl: float = 0,
+        detector: ModelDetector | None = None,
     ):
         self.executors = sorted(executors, key=lambda e: e.tier)
+        # Detects installed models and CLI sign-ins; None for routers over injected executors.
+        self.detector = detector
         # How long answers from cacheable executors are reused (0 = never).
         self.cache_ttl = cache_ttl
         self.jev = jev
@@ -94,6 +99,21 @@ class RouterBrain:
                 log.warning("Jev routing failed: %s", exc)
         return heuristic_tier(message)
 
+    async def models(self, *, force: bool = False) -> dict[str, Any]:
+        """What this machine can run, detected from the installed tools (never from a model)."""
+        if self.detector is not None:
+            return await self.detector.detect(force=force)
+        return executor_report({e.name: await e.available() for e in self.executors})
+
+    async def _usable(self, executor: Executor) -> bool:
+        if self.detector is not None and executor.tool:
+            report = await self.detector.detect()
+            tool = next((t for t in report["tools"] if t["id"] == executor.tool), None)
+            # A missing binary, a signed-out CLI or a stopped Ollama would only fail at run time.
+            if tool is not None and not tool["usable"]:
+                return False
+        return await executor.available()
+
     async def candidates(self, tier: int) -> list[Executor]:
         """Available executors to try: the target tier, then escalate, then fall back down, all
         among primary executors first; subscription CLIs come last, same order."""
@@ -108,4 +128,4 @@ class RouterBrain:
         order = ordered([e for e in self.executors if not e.fallback]) + ordered(
             [e for e in self.executors if e.fallback]
         )
-        return [e for e in order if await e.available()]
+        return [e for e in order if await self._usable(e)]

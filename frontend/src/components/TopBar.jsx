@@ -1,3 +1,4 @@
+import ModelsMenu from './Models.jsx'
 import Sessions from './Sessions.jsx'
 
 const DOT = {
@@ -7,7 +8,17 @@ const DOT = {
 }
 
 // `laptop` is null in local mode; on the hub it is whether the laptop agent is connected.
-export default function TopBar({ project, color, busy, filesOpen, onToggleFiles, sessions, laptop = null, onLaptop }) {
+export default function TopBar({
+  project,
+  color,
+  busy,
+  filesOpen,
+  onToggleFiles,
+  sessions,
+  laptop = null,
+  onLaptop,
+  models = null,
+}) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4">
       <div className="flex min-w-0 items-center gap-3">
@@ -30,6 +41,7 @@ export default function TopBar({ project, color, busy, filesOpen, onToggleFiles,
         {sessions && <Sessions {...sessions} />}
       </div>
       <div className="flex items-center gap-3">
+        <ModelsMenu models={models} />
         {laptop !== null && (
           <button
             type="button"

@@ -47,10 +47,16 @@ async def test_hello_reports_project_and_available_executors(store, executors, t
     executors[1].up = False
     agent = make_agent(store, executors)
     store.set_active_project(OWNER, store.add_project("alpha", str(tmp_path))["id"])
-    assert await agent.hello() == {
+    hello = await agent.hello()
+    models = hello.pop("models")
+    assert hello == {
         "type": "hello",
         "project": "alpha",
         "executors": ["ollama", "claude-sonnet", "claude-opus"],
+    }
+    # Without a detector the report comes from executor availability, never from a model.
+    assert {t["id"]: t["usable"] for t in models["tools"]} == {
+        "ollama": True, "codex": False, "claude-sonnet": True, "claude-opus": True
     }
 
 

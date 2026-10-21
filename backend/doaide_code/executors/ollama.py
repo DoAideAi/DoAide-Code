@@ -12,9 +12,25 @@ from ..usage import Usage
 from .base import CODER_SYSTEM_PROMPT, Executor, ExecutorError, Job
 
 
+def choose_model(configured: str, names: list[str]) -> str | None:
+    """The configured model if pulled, else the same family, else the smallest coder model, else
+    the smallest chat model. `names` is ordered smallest first; embedding models never chat."""
+    names = [n for n in names if "embed" not in n.lower()]
+    wanted = configured if ":" in configured else f"{configured}:latest"
+    if configured in names or wanted in names:
+        return configured if configured in names else wanted
+    family = configured.split(":")[0]
+    return (
+        next((n for n in names if n.startswith(family)), None)
+        or next((n for n in names if "coder" in n), None)
+        or (names[0] if names else None)
+    )
+
+
 class OllamaExecutor(Executor):
     name = "ollama"
     tier = 0
+    tool = "ollama"
     needs_context = True
     cacheable = True
     # Small local models have small windows; keep their context modest.
@@ -31,7 +47,7 @@ class OllamaExecutor(Executor):
         return httpx.AsyncClient(base_url=self.base_url, timeout=timeout, transport=self._transport)
 
     async def resolve_model(self) -> str | None:
-        """Use the configured model if pulled, else the closest installed coder model."""
+        """The installed model to use (see choose_model), rechecked every 30 s."""
         if self._resolved and time.monotonic() - self._checked_at < 30:
             return self._resolved
         try:
@@ -43,14 +59,7 @@ class OllamaExecutor(Executor):
         except (httpx.HTTPError, ValueError):
             self._resolved = None
             return None
-        wanted = self.model if ":" in self.model else f"{self.model}:latest"
-        chosen = None
-        if self.model in names or wanted in names:
-            chosen = self.model if self.model in names else wanted
-        else:
-            family = self.model.split(":")[0]
-            chosen = next((n for n in names if n.startswith(family)), None)
-            chosen = chosen or next((n for n in names if "coder" in n), None)
+        chosen = choose_model(self.model, names)
         self._resolved, self._checked_at = chosen, time.monotonic()
         return chosen
 
@@ -60,7 +69,7 @@ class OllamaExecutor(Executor):
     async def stream(self, job: Job) -> AsyncIterator[str | Usage]:
         model = await self.resolve_model()
         if not model:
-            raise ExecutorError("Ollama is not reachable or has no coder model pulled")
+            raise ExecutorError("Ollama is not reachable or has no model pulled")
         messages = [{"role": "system", "content": CODER_SYSTEM_PROMPT}]
         messages += [{"role": t.role, "content": t.content} for t in job.history]
         prompt = f"{job.context}\n\n# Request\n{job.prompt}" if job.context else job.prompt

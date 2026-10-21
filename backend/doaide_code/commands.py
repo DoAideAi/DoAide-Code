@@ -26,6 +26,7 @@ HELP = """Commands:
 /workspace [<path>|reset]    show or change the default workspace folder
 /apply [<id>]                write the proposed changes (latest if no id)
 /discard [<id>]              drop proposed changes
+/models                      which models and CLIs this laptop can use (detected, not guessed)
 /usage                       tokens and cost today, this week, and this month
 /new                         start a new chat session
 /help                        show this help"""
@@ -71,6 +72,12 @@ def discard_changes(store: Store, changeset_id: str | None = None) -> CommandRes
 
 def is_command(text: str) -> bool:
     return text.lstrip().startswith("/")
+
+
+def is_models_command(text: str) -> bool:
+    """`/models` needs the router's detector, so the chat and the agent answer it, not run_command."""
+    parts = text.strip().split()
+    return bool(parts) and parts[0].lower() in {"/models", "/status"}
 
 
 def _format_projects(store: Store, active_id: int | None) -> str:

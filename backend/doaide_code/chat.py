@@ -8,7 +8,8 @@ import json
 import uuid
 from typing import Any
 
-from .commands import is_command, run_command
+from .commands import is_command, is_models_command, run_command
+from .detect import format_report
 from .db import Store
 from .executors import Job, Turn
 from .router import RouterBrain
@@ -110,6 +111,13 @@ class ChatService:
         session = self.current_session(user_email)
         user_msg = self.store.add_message(session["id"], "user", text)
         await self.hub.publish(user_email, {"type": "message", "message": public_message(user_msg)})
+
+        if is_models_command(text):
+            models = await self.router.models(force=True)
+            reply = self.store.add_message(session["id"], "system", format_report(models))
+            await self.hub.publish(user_email, {"type": "message", "message": public_message(reply)})
+            await self.hub.publish(user_email, {"type": "models", "models": models})
+            return
 
         if is_command(text):
             result = run_command(self.store, user_email, text, workspace=self.workspace)

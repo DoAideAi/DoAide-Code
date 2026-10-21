@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import shutil
 from abc import ABC, abstractmethod
@@ -12,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..usage import Usage
+
+log = logging.getLogger(__name__)
 
 
 CODER_SYSTEM_PROMPT = """You are DoAide Code, a concise senior software engineer working in the user's project.
@@ -25,7 +28,12 @@ exact lines currently in the file (enough to be unique; empty to create a new fi
 the replacement lines
 >>>>>>> REPLACE
 Keep SEARCH sections short and copied exactly from the file shown in the context. Use one block
-per change, and explain the change in a sentence or two before the blocks."""
+per change, and explain the change in a sentence or two before the blocks.
+
+You are one of several local models DoAide routes requests to. You cannot see which models, CLIs or
+tools are installed on this laptop, so never list, guess or describe them, and never present general
+knowledge (for example about OpenAI or other providers' models) as facts about this system. If asked
+which models are available, reply only that the user can type /models to see what was detected."""
 
 
 class ExecutorError(RuntimeError):
@@ -50,6 +58,8 @@ class Job:
 class Executor(ABC):
     name: str
     tier: int
+    # Installed tool this executor runs on ("ollama", "claude", "codex"); see detect.py.
+    tool: str = ""
     # Last-resort executors (subscription CLIs) are tried only after every primary one.
     fallback: bool = False
     # API executors cannot open files, so they get selected context; CLI agents read for themselves.
@@ -101,8 +111,8 @@ async def stream_subprocess(
 ) -> AsyncIterator[str | Usage]:
     """Run `argv` and yield text parsed from each JSON line of its stdout.
 
-    Non-JSON lines are passed through unchanged. A non-zero exit raises ExecutorError
-    carrying the tail of stderr.
+    Non-JSON lines (CLI banners, update notices, warnings) are logged, not shown: they are not
+    the model's answer. A non-zero exit raises ExecutorError carrying the tail of stderr.
     """
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -137,7 +147,7 @@ async def stream_subprocess(
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
-                yield line + "\n"
+                log.debug("%s: %s", argv[0], line)
                 continue
             if not isinstance(event, dict):
                 continue

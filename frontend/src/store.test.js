@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { splitFences, usageLabel } from './components/MessageList.jsx'
-import { applyEvent, initialChat, statusColor } from './store.js'
+import { applyEvent, initialChat, statusColor, usableTools } from './store.js'
 
 const msg = (id, role, content, status = 'done') => ({ id, role, content, status, created_at: 0 })
 
@@ -113,5 +113,25 @@ describe('reply meta', () => {
     expect(usageLabel({ tokens_in: 0, tokens_out: 0, cost_usd: 0 })).toBe('no model · $0')
     expect(usageLabel({ cached: true })).toBe('cached · $0')
     expect(usageLabel(undefined)).toBeNull()
+  })
+})
+
+describe('models report', () => {
+  const report = { any_usable: true, tools: [{ id: 'ollama', usable: true }, { id: 'codex', usable: false }] }
+
+  it('is set by models events, kept across local snapshots, and cleared when the laptop leaves', () => {
+    let s = applyEvent(initialChat, { type: 'models', models: report })
+    expect(s.models).toBe(report)
+    s = applyEvent(s, { type: 'snapshot', session_id: 's', project: null, status: 'idle', messages: [] })
+    expect(s.models).toBe(report)
+    s = applyEvent(s, { type: 'snapshot', session_id: 's', project: null, status: 'idle', messages: [], models: null })
+    expect(s.models).toBeNull()
+    s = applyEvent({ ...s, models: report }, { type: 'agent', online: false })
+    expect(s.models).toBeNull()
+  })
+
+  it('lists usable tools', () => {
+    expect(usableTools(report).map((t) => t.id)).toEqual(['ollama'])
+    expect(usableTools(null)).toEqual([])
   })
 })

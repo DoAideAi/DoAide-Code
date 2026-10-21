@@ -125,6 +125,8 @@ class LaptopTools:
             "projects": [{"name": p["name"], "path": p["path"]} for p in self.store.list_projects()],
             "executors": executors,
             "available_executors": [e["name"] for e in executors if e["available"]],
+            # Detected from `ollama list`, `claude auth status` and `codex login status`.
+            "models": await self.router.models(),
             "usage_today": {
                 "cost_usd": round(sum(r["cost_usd"] or 0 for r in self.store.usage_summary(time.time() - 86400)), 6),
             },
@@ -358,7 +360,8 @@ def build_server(tools: LaptopTools):
     @server.tool(annotations=read_only)
     async def get_status() -> dict[str, Any]:
         """Whether the laptop executor is online, which local LLMs (Ollama, Codex CLI, Claude CLI)
-        are available, the workspace folder, and the registered projects."""
+        are available, the workspace folder, and the registered projects. `models` is detected from
+        the installed tools (`ollama list`, `claude auth status`, `codex login status`)."""
         return await guard(tools.get_status())
 
     @server.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True, open_world_hint=True))

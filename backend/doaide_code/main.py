@@ -34,8 +34,9 @@ from .installer import PLATFORMS, agent_package, build_installer, package_filena
 from .relay import LaptopOffline, RelayService
 from .config import Settings
 from .db import Store
-from .executors import Executor, build_executors
+from .executors import Executor
 from .router import RouterBrain
+from .runner import build_router
 from .sync import SyncHub
 from .workspace import set_workspace, working_root, workspace_path
 
@@ -76,7 +77,7 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
         chat = RelayService(store, hub)
     else:
         # Local executors only (Ollama, Codex CLI, Claude CLI); routing is local heuristics.
-        router = RouterBrain(executors if executors is not None else build_executors(settings), offline=True)
+        router = RouterBrain(executors, offline=True) if executors is not None else build_router(settings)
         chat = ChatService(store, router, hub, workspace=settings.workspace)
 
     @asynccontextmanager
@@ -123,7 +124,7 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
         if router is None:
             return {"ok": True, "mode": "hub"}
         available = [e.name for e in router.executors if await e.available()]
-        return {"ok": True, "mode": "local", "executors": available}
+        return {"ok": True, "mode": "local", "executors": available, "models": await router.models()}
 
     @app.get("/api/config")
     async def public_config() -> dict:
@@ -275,6 +276,9 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
         await hub.join(user.email, ws)
         try:
             await ws.send_json(chat.snapshot(user.email))
+            if router is not None:
+                # Hub snapshots carry the laptop's report; here this server is the laptop.
+                await ws.send_json({"type": "models", "models": await router.models()})
             while True:
                 data = await ws.receive_json()
                 kind = data.get("type") if isinstance(data, dict) else None

@@ -15,21 +15,27 @@ from .changes import propose, repair_prompt, strip_edits
 from .config import Settings
 from .context import Ranking, rank_files
 from .db import Store
+from .detect import ModelDetector, asks_about_models, format_report
 from .executors import Executor, ExecutorError, Job, Turn, build_executors
+from .executors.base import CODER_SYSTEM_PROMPT
 from .fastpath import direct_answer
 from .router import RouterBrain
 from .usage import Usage
 
 log = logging.getLogger(__name__)
 
-NO_EXECUTOR = "No executor is available. Start Ollama or sign in to the Claude or Codex CLI."
+NO_EXECUTOR = "No model is available on this laptop. Type /models to see what was detected and how to set one up."
+# Cached answers are only reused while the instructions that produced them are unchanged.
+PROMPT_VERSION = hashlib.sha256(CODER_SYSTEM_PROMPT.encode()).hexdigest()[:12]
 # Characters of project context for API executors that do not set their own budget (~15k tokens).
 DEFAULT_CONTEXT_CHARS = 60_000
 
 
 def build_router(settings: Settings) -> RouterBrain:
     """Router over this machine's executors. Routing is local heuristics: no API calls."""
-    return RouterBrain(build_executors(settings), offline=True, cache_ttl=settings.cache_ttl)
+    return RouterBrain(
+        build_executors(settings), offline=True, cache_ttl=settings.cache_ttl, detector=ModelDetector(settings)
+    )
 
 
 @dataclass
@@ -63,7 +69,7 @@ class Outcome:
 def cache_key(job: Job, ranking: Ranking | None) -> str:
     history = [(t.role, t.content) for t in list(job.history)[-6:]]
     prompt = " ".join(job.prompt.split())
-    payload = json.dumps([prompt, history, ranking.fingerprint if ranking else str(job.cwd)])
+    payload = json.dumps([PROMPT_VERSION, prompt, history, ranking.fingerprint if ranking else str(job.cwd)])
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -77,15 +83,19 @@ async def run_job(
     project: str | None = None,
     source: str = "chat",
 ) -> Outcome:
-    # 1. Reading a file or listing a folder needs no model at all.
-    if job.cwd is not None:
+    # 1. Reading a file or listing a folder needs no model at all, and questions about which
+    # models exist are answered by detection: a model asked that only guesses.
+    answer = None
+    if asks_about_models(job.prompt):
+        answer = format_report(await router.models(force=True))
+    elif job.cwd is not None:
         answer = await asyncio.to_thread(direct_answer, job.cwd, job.prompt)
-        if answer is not None:
-            outcome.content, outcome.status, outcome.executor = answer, "done", "direct"
-            outcome.add_usage(Usage("none"))
-            store.record_usage(source, "direct", None, 0, 0, 0.0)
-            await on_delta(answer)
-            return outcome
+    if answer is not None:
+        outcome.content, outcome.status, outcome.executor = answer, "done", "direct"
+        outcome.add_usage(Usage("none"))
+        store.record_usage(source, "direct", None, 0, 0, 0.0)
+        await on_delta(answer)
+        return outcome
 
     # 2. Rank project files once: it feeds both the cache key and every executor's context.
     ranking: Ranking | None = None

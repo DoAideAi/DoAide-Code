@@ -20,7 +20,7 @@ import uuid
 from typing import Any, Protocol
 
 from .chat import HISTORY_TURNS, public_message
-from .commands import is_command
+from .commands import is_command, is_models_command
 from .db import Store
 from .sync import SyncHub
 
@@ -39,6 +39,12 @@ def clean_meta(value: Any) -> dict[str, Any]:
     meta = {k: v for k, v in value.items() if k in META_KEYS and isinstance(v, dict)}
     return meta if len(json.dumps(meta)) <= MAX_META_BYTES else {}
 DISCONNECTED = "[laptop disconnected before finishing]"
+# The laptop's model report (a few tools and their model names) is small; cap what is kept.
+MAX_MODELS_BYTES = 64_000
+LAPTOP_OFFLINE_MODELS = (
+    "Your laptop is offline, so its models cannot be detected. Models run on the laptop: start the "
+    "DoAide agent there (Set up laptop), then type /models again."
+)
 # An MCP conversation idle this long is closed; the next call starts a new one.
 MCP_SESSION_IDLE = 1800
 # Characters of a tool's output kept in the conversation.
@@ -101,6 +107,8 @@ class RelayService:
         self.hub = hub
         self._agents: dict[str, AgentSocket] = {}
         self._executors: dict[str, list[str]] = {}
+        # Each connected laptop's detected models (see detect.py); never produced by a model.
+        self._models: dict[str, dict[str, Any]] = {}
         self._running: dict[str, str] = {}
         self._partial: dict[str, str] = {}
         self._error: dict[str, bool] = {}
@@ -132,6 +140,7 @@ class RelayService:
             "status": self.status(user_email),
             "mode": "hub",
             "agent_online": self.agent_online(user_email),
+            "models": self._models.get(user_email),
             "messages": [public_message(m) for m in self.store.list_messages(session["id"])],
         }
 
@@ -165,6 +174,11 @@ class RelayService:
         user_msg = self.store.add_message(session["id"], "user", text)
         await self.hub.publish(user_email, {"type": "message", "message": public_message(user_msg)})
 
+        # Model detection runs on the laptop; while it is offline there is nothing to detect.
+        if is_models_command(text) and not self.agent_online(user_email):
+            reply = self.store.add_message(session["id"], "system", LAPTOP_OFFLINE_MODELS)
+            await self.hub.publish(user_email, {"type": "message", "message": public_message(reply)})
+            return None
         # Sessions live on the hub, so /new is handled here rather than on the laptop.
         if is_command(text) and text.split()[0].lower() == "/new":
             self.store.create_session(user_email)
@@ -263,6 +277,7 @@ class RelayService:
             return
         del self._agents[user_email]
         self._executors.pop(user_email, None)
+        self._models.pop(user_email, None)
         for owner, future in list(self._rpc.values()):
             if owner == user_email and not future.done():
                 future.set_exception(LaptopOffline())
@@ -274,12 +289,24 @@ class RelayService:
         await self.hub.publish(user_email, {"type": "agent", "online": False})
         await self._publish_status(user_email)
 
+    async def _set_models(self, user_email: str, models: Any) -> None:
+        if not isinstance(models, dict) or not isinstance(models.get("tools"), list):
+            return
+        if len(json.dumps(models)) > MAX_MODELS_BYTES:
+            return
+        self._models[user_email] = models
+        await self.hub.publish(user_email, {"type": "models", "models": models})
+
     async def on_agent_event(self, user_email: str, event: dict[str, Any]) -> None:
         kind = event.get("type")
         if kind == "hello":
             project = event.get("project")
             self._executors[user_email] = [str(e) for e in event.get("executors") or []]
+            await self._set_models(user_email, event.get("models"))
             await self._set_project(user_email, project if isinstance(project, str) else None)
+            return
+        if kind == "models":
+            await self._set_models(user_email, event.get("models"))
             return
         if kind == "project":
             project = event.get("project")

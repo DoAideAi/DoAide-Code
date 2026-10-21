@@ -32,6 +32,7 @@ class Settings:
 
     ollama_url: str = field(default_factory=lambda: os.environ.get("OLLAMA_URL", "http://localhost:11434"))
     ollama_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_OLLAMA_MODEL", "qwen3-coder"))
+    ollama_bin: str = field(default_factory=lambda: os.environ.get("DOAIDE_OLLAMA_BIN", "ollama"))
 
     claude_bin: str = field(default_factory=lambda: os.environ.get("DOAIDE_CLAUDE_BIN", "claude"))
     claude_haiku_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_CLAUDE_HAIKU_MODEL", "haiku"))
