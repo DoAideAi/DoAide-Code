@@ -100,7 +100,7 @@ def early_problem(partial: str) -> str | None:
 # and the "Sure, here is..." opener. Replies are a short summary; the code is in the files.
 _EXTRA_HEADING = re.compile(
     r"^(?:#{1,6}\s*|\*\*)(?:explanation(?: of (?:the )?changes)?|changes made|summary of changes|how it works|"
-    r"notes?|usage|example usage|key points|file:\s*\S+)\b.*$",
+    r"notes?|usage|example usage|key points|in summary|file:\s*\S+)\b.*$",
     re.I | re.M,
 )
 _OPENER = re.compile(r"^\s*(?:(?:sure|certainly|of course|absolutely)[,!.]?\s+)?(?:here(?:'s| is)|below is)\s+", re.I)
