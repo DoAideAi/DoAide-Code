@@ -26,6 +26,7 @@ from pathlib import Path
 
 from .changes import SEARCH_RE, apply_record, parse_edits, propose, repair_prompt, strip_edits, undo_record
 from .config import Settings
+from .metrics import log_task
 from .context import HOST, Ranking, git_context, mentioned_paths, rank_files
 from .db import Store
 from .detect import ModelDetector, answer_access, answer_meta, meta_question
@@ -198,6 +199,7 @@ async def run_job(
     finally:
         if outcome.route is not None:
             outcome.route["elapsed_ms"] = _ms(started)
+        log_task(job.prompt, outcome.meta(), status=outcome.status, source=source)
 
 
 async def _run_job(

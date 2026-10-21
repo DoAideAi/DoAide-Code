@@ -254,3 +254,31 @@ def test_task_history_lists_recent_tasks_newest_first(settings, project, auth):
     assert latest["executor"] == "ollama" and latest["free"] and latest["cost_usd"] == 0
     assert latest["escalated_from"] is None and latest["seconds"] is not None
     assert [t["id"] for t in limited] == [second["message_id"]]
+
+
+def test_task_history_says_whether_checks_passed_and_the_task_escalated(settings, project, auth):
+    ollama = executor("ollama", 0, ["I cannot see the file, please paste it."], tool="ollama")
+    sonnet = executor("claude-sonnet", 2, ["`GREETING` in app.py is 'hi'."])
+    with app_with(settings, project, ollama, sonnet) as client:
+        post(client, auth, prompt="what is GREETING in app.py?", project="proj")
+        task = client.get("/api/v1/tasks/history", headers=auth).json()["tasks"][0]
+    assert task["escalated"] is True and task["escalated_from"]["executor"] == "ollama"
+    assert task["executor"] == "claude-sonnet" and task["validation_result"] == "passed"
+    assert task["response_time_seconds"] == task["seconds"] is not None
+
+
+def test_every_task_appends_one_metrics_line(settings, project, auth, tmp_path):
+    ollama = executor("ollama", 0, ["`GREETING` in app.py is 'hi'."], tool="ollama")
+    with app_with(settings, project, ollama) as client:
+        post(client, auth, prompt="what is GREETING in app.py? " + "x" * 200, project="proj")
+    lines = (tmp_path / "metrics.jsonl").read_text().splitlines()
+    assert len(lines) == 1
+    row = json.loads(lines[0])
+    assert set(row) == {
+        "ts", "prompt", "executor", "model", "cost_usd", "response_time_seconds",
+        "validation_result", "escalated", "status", "source",
+    }
+    assert row["prompt"].startswith("what is GREETING") and len(row["prompt"]) == 100
+    assert row["executor"] == "ollama" and row["cost_usd"] == 0 and row["escalated"] is False
+    assert row["validation_result"] == "passed" and row["status"] == "done" and row["source"] == "dispatch"
+    assert row["response_time_seconds"] is not None

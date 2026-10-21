@@ -36,8 +36,8 @@ class FakeExecutor(Executor):
 
 @pytest.fixture(autouse=True)
 def _metrics_file(tmp_path: Path, monkeypatch) -> None:
-    # Tasks API runs append to ~/.doaide-code/metrics.jsonl; tests must not.
-    monkeypatch.setattr("doaide_code.tasks._METRICS_FILE", tmp_path / "metrics.jsonl")
+    # Every task appends to ~/.doaide-code/metrics.jsonl; tests must not.
+    monkeypatch.setattr("doaide_code.metrics.METRICS_FILE", tmp_path / "metrics.jsonl")
 
 
 @pytest.fixture

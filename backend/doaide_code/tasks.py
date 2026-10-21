@@ -16,7 +16,6 @@ through the usual mirror. Usage is recorded with source "dispatch".
 from __future__ import annotations
 
 import asyncio
-import datetime
 import json
 import time
 from collections.abc import AsyncIterator
@@ -93,24 +92,6 @@ def result(outcome: Outcome, root: Path, label: str, seconds: float) -> dict[str
     }
 
 
-_METRICS_FILE = Path.home() / ".doaide-code" / "metrics.jsonl"
-
-
-def _log_metric(res: dict) -> None:
-    _METRICS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    row = {
-        "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "model": res.get("model"),
-        "executor": res.get("executor"),
-        "cost_usd": res.get("cost_usd"),
-        "seconds": res.get("seconds"),
-        "pass": res.get("status") == "done",
-        "project": res.get("project"),
-    }
-    with _METRICS_FILE.open("a") as fh:
-        fh.write(json.dumps(row) + "\n")
-
-
 async def run_task(
     router: RouterBrain,
     store: Store,
@@ -148,9 +129,7 @@ async def run_task(
     finally:
         if chat is not None and reply_id is not None:
             await _finish(chat, store, user_email, reply_id, outcome)
-    res = {**result(outcome, root, label, time.monotonic() - started), "message_id": reply_id}
-    _log_metric(res)
-    return res
+    return {**result(outcome, root, label, time.monotonic() - started), "message_id": reply_id}
 
 
 async def _finish(chat: ChatService, store: Store, user_email: str, reply_id: str, outcome: Outcome) -> None:

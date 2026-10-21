@@ -36,6 +36,7 @@ from .config import Settings
 from .dashboard import model_comparison, usage_report
 from .db import Store
 from .executors import Executor
+from .metrics import summary as metrics_summary
 from .router import RouterBrain
 from .runner import build_router
 from .sync import SyncHub
@@ -271,18 +272,17 @@ def create_app(
             except (TypeError, ValueError):
                 meta = {}
             route = meta.get("route") or {}
-            usage = meta.get("usage") or {}
-            elapsed_ms = route.get("elapsed_ms")
+            task = metrics_summary(meta)
             items.append({
                 "id": row["id"],
                 "created_at": row["created_at"],
                 "prompt": (row["prompt"] or "")[:120],
+                **task,
                 "executor": row["executor"],
-                "model": route.get("model"),
                 "free": bool(route.get("free")),
                 "escalated_from": route.get("escalated_from"),
-                "cost_usd": round(float(usage.get("cost_usd") or 0), 6),
-                "seconds": round(elapsed_ms / 1000, 2) if elapsed_ms is not None else None,
+                # Kept for existing callers (scripts/monitor.sh); same as response_time_seconds.
+                "seconds": task["response_time_seconds"],
                 "status": row["status"],
             })
         return {"tasks": items}
