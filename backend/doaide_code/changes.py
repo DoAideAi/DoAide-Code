@@ -341,9 +341,12 @@ async def check_file(path: str, content: str) -> list[str]:
         except SyntaxError as exc:
             return [f"{path}:{exc.lineno}: SyntaxError: {exc.msg}"]
         if ruff := shutil.which("ruff"):
-            # Only errors that break code: syntax, undefined names, redefinitions.
+            # Errors that break code (syntax, undefined names) and the damage local models do when
+            # they paste a module's header into its middle: a re-import or redefinition (F811), an
+            # unused import (F401), an import below code (E402). Only problems an edit introduces
+            # count (see validate), so a file that already has them can still be edited.
             _, out = await _run(
-                [ruff, "check", "--quiet", "--no-cache", "--output-format", "concise", "--select", "E9,F63,F7,F82",
+                [ruff, "check", "--quiet", "--no-cache", "--output-format", "concise", "--select", "E9,F63,F7,F82,F811,F401,E402",
                  "--stdin-filename", path, "-"],
                 stdin=content,
             )

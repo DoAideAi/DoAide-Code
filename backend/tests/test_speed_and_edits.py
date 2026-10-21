@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from doaide_code.agent import LaptopAgent
-from doaide_code.changes import build_changeset, parse_edits, strip_edits
+from doaide_code.changes import build_changeset, parse_edits, propose, strip_edits
 from doaide_code.context import rank_files
 from doaide_code.executors import Job, OllamaExecutor
 from doaide_code.executors.ollama import FIXED_CTX, choose_model
@@ -268,3 +268,14 @@ def test_a_named_file_is_sent_whole_without_the_tree_or_unrelated_files(tmp_path
     assert "def helper_329(x)" in ctx  # the whole file, not the parts near the terms
     ctx, files = rank_files(tmp_path, "where is the heading pattern defined").render(14_000, max_files=3)
     assert "## Tree" in ctx and len(files) >= 1
+
+
+async def test_an_edit_that_pastes_imports_and_constants_mid_file_fails_its_checks(tmp_path):
+    (tmp_path / "m.py").write_text("import os\n\nLIMIT = 3\n\n\ndef f():\n    return os.sep * LIMIT\n")
+    pasted = "m.py\n<<<<<<< SEARCH\ndef f():\n=======\nimport os\n\nLIMIT = 3\n\n\ndef f():\n>>>>>>> REPLACE"
+    changeset = await propose(tmp_path, pasted)
+    assert any("F811" in p for p in changeset.all_problems)
+    # A file that already has such a problem can still be edited.
+    (tmp_path / "n.py").write_text("x = 1\nimport os\n\n\ndef g():\n    return os.sep\n")
+    fine = "n.py\n<<<<<<< SEARCH\n    return os.sep\n=======\n    return os.sep * 2\n>>>>>>> REPLACE"
+    assert (await propose(tmp_path, fine)).all_problems == []
