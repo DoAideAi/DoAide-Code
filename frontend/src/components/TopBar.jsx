@@ -6,7 +6,8 @@ const DOT = {
   gray: 'bg-zinc-600',
 }
 
-export default function TopBar({ project, color, busy, filesOpen, onToggleFiles, sessions }) {
+// `laptop` is null in local mode; on the hub it is whether the laptop agent is connected.
+export default function TopBar({ project, color, busy, filesOpen, onToggleFiles, sessions, laptop = null, onLaptop }) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4">
       <div className="flex min-w-0 items-center gap-3">
@@ -29,6 +30,19 @@ export default function TopBar({ project, color, busy, filesOpen, onToggleFiles,
         {sessions && <Sessions {...sessions} />}
       </div>
       <div className="flex items-center gap-3">
+        {laptop !== null && (
+          <button
+            type="button"
+            data-testid="laptop-status"
+            data-online={laptop ? 'true' : 'false'}
+            title={laptop ? 'Laptop connected' : 'Laptop offline: click to set it up'}
+            onClick={onLaptop}
+            className="flex shrink-0 items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200"
+          >
+            <span className={`h-2 w-2 rounded-full ${laptop ? DOT.green : DOT.red}`} />
+            <span className="hidden sm:inline">{laptop ? 'Laptop online' : 'Laptop offline'}</span>
+          </button>
+        )}
         <span
           data-testid="project-pill"
           className="max-w-[45vw] truncate rounded-full border border-zinc-700 bg-zinc-900 px-3 py-0.5 text-xs text-zinc-300"

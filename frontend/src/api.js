@@ -71,6 +71,27 @@ export async function createAgentToken(token) {
   return resp.json()
 }
 
+// Hub only: is the laptop agent connected now, and has one ever connected?
+export const setupStatus = (token) => get('/api/v1/setup/status', token)
+
+// Fetches the personalised installer (it needs the bearer token, so no plain link) and
+// hands it to the browser as a download. Returns the saved file name.
+export async function downloadInstaller(token, platform) {
+  const resp = await fetch(`/api/v1/setup/installer?platform=${encodeURIComponent(platform)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!resp.ok) throw new Error(`Download failed (${resp.status})`)
+  const disposition = resp.headers?.get?.('content-disposition') ?? ''
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? 'DoAide-Code-Setup'
+  const url = URL.createObjectURL(await resp.blob())
+  const link = Object.assign(document.createElement('a'), { href: url, download: filename })
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  return filename
+}
+
 export const localLogin = () => post('/api/auth/local')
 export const googleLogin = (credential) => post('/api/auth/google', { credential })
 export const refreshSession = (refresh) => post('/api/auth/refresh', { refresh_token: refresh })

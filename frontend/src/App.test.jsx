@@ -61,6 +61,7 @@ function setViewport(desktop) {
 // Routes keyed by path (without query). `validTokens` decides what /api/me accepts.
 let validTokens
 let config
+let setup
 function mockFetch() {
   globalThis.fetch = vi.fn(async (url, init = {}) => {
     const [path, query = ''] = url.split('?')
@@ -78,6 +79,17 @@ function mockFetch() {
         if (refresh !== 'ref') return reply({ detail: 'Sign in again' }, false, 401)
         validTokens.add('renewed')
         return reply({ token: 'renewed', email: 'me' })
+      }
+      case '/api/v1/setup/status':
+        return reply(setup)
+      case '/api/v1/setup/installer': {
+        const filename = query === 'platform=windows' ? 'DoAide-Code-Setup.bat' : 'DoAide-Code-Setup.zip'
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => `attachment; filename="${filename}"` },
+          blob: async () => new Blob(['script']),
+        }
       }
       case '/api/agent-token':
         return reply({ token: 'agent-tok', hub_url: 'wss://code.doaide.com/agent' })
@@ -136,6 +148,7 @@ beforeEach(() => {
   localStorage.clear()
   validTokens = new Set(['tok'])
   config = { google_client_id: '', local_login: true }
+  setup = { agent_online: false, ever_connected: true }
   mockFetch()
 })
 
@@ -172,12 +185,14 @@ describe('App', () => {
     expect(screen.getByTestId('status-dot').dataset.color).toBe('red')
   })
 
-  it('local mode never shows the laptop banner', async () => {
+  it('local mode never shows the laptop banner or laptop dot', async () => {
     await boot(true)
     expect(screen.queryByTestId('laptop-banner')).toBeNull()
+    expect(screen.queryByTestId('laptop-status')).toBeNull()
+    expect(globalThis.fetch.mock.calls.some(([url]) => url.startsWith('/api/v1/setup'))).toBe(false)
   })
 
-  it('hub with laptop offline: gray dot, banner, queued replies, and a connect command', async () => {
+  it('hub with laptop offline: gray dot, red laptop dot, banner, queued replies, and a connect command', async () => {
     const ws = await boot(false, {
       mode: 'hub',
       agent_online: false,
@@ -187,17 +202,22 @@ describe('App', () => {
       ],
     })
     expect(screen.getByTestId('status-dot').dataset.color).toBe('gray')
+    expect(screen.getByTestId('laptop-status').dataset.online).toBe('false')
     expect(screen.getByText('Queued for your laptop…')).toBeTruthy()
     expect(screen.getByLabelText('Message').disabled).toBe(false)
 
-    await act(async () => fireEvent.click(screen.getByText('Connect laptop')))
+    await act(async () => fireEvent.click(screen.getByText('Set up laptop')))
+    expect(screen.getByTestId('setup-page')).toBeTruthy()
+    await act(async () => fireEvent.click(screen.getByText(/Show the command instead/)))
     expect(screen.getByTestId('agent-command').textContent).toBe(
       'DOAIDE_HUB_URL=wss://code.doaide.com/agent DOAIDE_HUB_TOKEN=agent-tok doaide-code agent',
     )
+    await act(async () => fireEvent.click(screen.getByText('Skip for now')))
 
     await act(async () => ws.emit({ type: 'agent', online: true }))
     expect(screen.queryByTestId('laptop-banner')).toBeNull()
     expect(screen.getByTestId('status-dot').dataset.color).toBe('green')
+    expect(screen.getByTestId('laptop-status').dataset.online).toBe('true')
   })
 
   it('phone prompts are sent to the hub for the laptop to run', async () => {
@@ -335,5 +355,66 @@ describe('Claude Code activity and diff previews', () => {
     await flush()
     fireEvent.click(screen.getByText('Older chat'))
     expect(ws.sent.at(-1)).toEqual({ type: 'open', session_id: 'other' })
+  })
+})
+
+describe('laptop setup (hub)', () => {
+  const MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15'
+  let clicked
+
+  beforeEach(() => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(MAC_UA)
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    URL.createObjectURL = vi.fn(() => 'blob:installer')
+    URL.revokeObjectURL = vi.fn()
+    clicked = []
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      clicked.push(this.download)
+    })
+  })
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('first sign-in with no laptop ever connected opens the setup page', async () => {
+    setup = { agent_online: false, ever_connected: false }
+    const ws = await boot(true, { mode: 'hub', agent_online: false })
+    await flush()
+    expect(screen.getByTestId('setup-page')).toBeTruthy()
+    expect(screen.getByTestId('setup-agent-status').dataset.online).toBe('false')
+    expect(screen.queryByLabelText('Message')).toBeNull()
+
+    await act(async () => fireEvent.click(screen.getByTestId('setup-download')))
+    await flush()
+    const call = globalThis.fetch.mock.calls.find(([url]) => url.startsWith('/api/v1/setup/installer'))
+    expect(call[0]).toBe('/api/v1/setup/installer?platform=macos')
+    expect(call[1].headers.Authorization).toBe('Bearer tok')
+    expect(clicked).toEqual(['DoAide-Code-Setup.zip'])
+    expect(screen.getByTestId('setup-steps').textContent).toContain('DoAide-Code-Setup.command')
+
+    // The laptop connects while the page is open: it turns green and offers to continue.
+    await act(async () => ws.emit({ type: 'agent', online: true }))
+    expect(screen.getByTestId('setup-agent-status').dataset.online).toBe('true')
+    await act(async () => fireEvent.click(screen.getByText('Start coding')))
+    expect(screen.queryByTestId('setup-page')).toBeNull()
+    expect(screen.getByLabelText('Message')).toBeTruthy()
+  })
+
+  it('offers the other platforms too', async () => {
+    setup = { agent_online: false, ever_connected: false }
+    await boot(true, { mode: 'hub', agent_online: false })
+    await flush()
+    await act(async () => fireEvent.click(screen.getByText('Windows')))
+    await flush()
+    expect(globalThis.fetch.mock.calls.some(([url]) => url === '/api/v1/setup/installer?platform=windows')).toBe(true)
+    expect(clicked).toEqual(['DoAide-Code-Setup.bat'])
+    expect(screen.getByTestId('setup-steps').textContent).toContain('Run anyway')
+  })
+
+  it('does not interrupt a user whose laptop has connected before', async () => {
+    setup = { agent_online: false, ever_connected: true }
+    await boot(true, { mode: 'hub', agent_online: false })
+    await flush()
+    expect(screen.queryByTestId('setup-page')).toBeNull()
+    expect(screen.getByTestId('laptop-banner')).toBeTruthy()
   })
 })

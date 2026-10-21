@@ -127,8 +127,26 @@ phone / laptop browser ──/ws──▶ hub (code.doaide.com) ◀──/agent�
 
 1. Sign in at code.doaide.com from any device. Every device can read and send.
 2. Prompts are saved and queued on the hub. While the laptop is offline the status
-   dot is gray and a banner says so.
-3. Click **Connect laptop** to get an agent token (never expires, revocable), then on the laptop run:
+   dot is gray, the **Laptop** dot in the top bar is red, and a banner says so.
+3. **One-click setup.** If no laptop has ever connected for your account, signing in opens
+   *Set up your laptop*. It detects your OS and downloads a personal installer from
+   `GET /api/v1/setup/installer?platform=macos|windows|linux` (signed-in users only; each
+   download bakes in a new never-expiring agent token, not the browser session):
+
+   | OS | Download | What it sets up |
+   | --- | --- | --- |
+   | macOS | `DoAide-Code-Setup.zip` → `.command` | LaunchAgent `~/Library/LaunchAgents/com.doaide.code-agent.plist` |
+   | Windows | `DoAide-Code-Setup.bat` | hidden, self-restarting `DoAide Code Agent.vbs` in the Startup folder |
+   | Linux | `doaide-code-setup.sh` | systemd user service `doaide-code-agent` |
+
+   Each installer gets uv (which brings its own Python 3.12), installs the agent package from
+   `GET /api/v1/setup/agent-package` (an sdist of the code the hub runs) into
+   `~/.doaide-code/venv`, starts it now and at every login, waits on
+   `GET /api/v1/setup/status` until the laptop shows as connected, then deletes itself
+   (it contains the token). Logs go to `~/.doaide-code/logs/agent.log`. To remove it on
+   macOS: `launchctl bootout gui/$(id -u)/com.doaide.code-agent` and delete the plist.
+
+   Prefer a terminal? The setup page can also show an agent token and command:
 
    ```bash
    cd backend

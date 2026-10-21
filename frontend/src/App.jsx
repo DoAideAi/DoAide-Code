@@ -3,17 +3,20 @@ import {
   checkToken,
   clearSession,
   createAgentToken,
+  downloadInstaller,
   fetchConfig,
   googleLogin,
   loadSession,
   localLogin,
   refreshSession,
   saveSession,
+  setupStatus,
 } from './api.js'
 import Composer from './components/Composer.jsx'
 import { CodeViewer, FileTree } from './components/Files.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
 import MessageList from './components/MessageList.jsx'
+import SetupPage from './components/SetupPage.jsx'
 import SignIn from './components/SignIn.jsx'
 import TopBar from './components/TopBar.jsx'
 import { connect } from './socket.js'
@@ -152,6 +155,7 @@ export default function App() {
   const socket = useRef(null)
   const [filesOpen, toggleFiles] = useStoredFlag(FILES_KEY)
   const [openFile, setOpenFile] = useState(null)
+  const [setupOpen, setSetupOpen] = useState(false)
 
   // Every device can read and send; on the hub, prompts are queued and run by the laptop.
   useEffect(() => {
@@ -165,6 +169,18 @@ export default function App() {
     })
     return () => socket.current?.close()
   }, [token, apply, setConnection, renew])
+
+  // Hub only: a user whose laptop has never connected lands on the setup page first.
+  useEffect(() => {
+    if (!token || mode !== 'hub') return
+    let active = true
+    setupStatus(token)
+      .then((s) => active && !s.ever_connected && !s.agent_online && setSetupOpen(true))
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [token, mode])
 
   // Re-read the tree and open file after each finished answer, so edits show up.
   const filesVersion = useMemo(
@@ -187,6 +203,8 @@ export default function App() {
         busy={busy}
         filesOpen={filesOpen}
         onToggleFiles={desktop ? toggleFiles : null}
+        laptop={mode === 'hub' && connection === 'open' ? agentOnline : null}
+        onLaptop={() => setSetupOpen(true)}
         sessions={
           token && {
             token,
@@ -198,24 +216,35 @@ export default function App() {
           }
         }
       />
-      {mode === 'hub' && connection === 'open' && !agentOnline && (
-        <LaptopBanner onCreateToken={() => createAgentToken(token)} />
+      {setupOpen && token ? (
+        <SetupPage
+          agentOnline={agentOnline}
+          onDownload={(platform) => downloadInstaller(token, platform)}
+          onCreateToken={() => createAgentToken(token)}
+          onClose={() => setSetupOpen(false)}
+        />
+      ) : (
+        <>
+          {mode === 'hub' && connection === 'open' && !agentOnline && (
+            <LaptopBanner onSetup={() => setSetupOpen(true)} />
+          )}
+          <div className="flex min-h-0 flex-1">
+            {showFiles && <FileTree token={token} version={filesVersion} selected={openFile} onOpen={setOpenFile} />}
+            {showViewer && (
+              <CodeViewer token={token} path={openFile} version={filesVersion} onClose={() => setOpenFile(null)} />
+            )}
+            <section className={`flex min-w-0 flex-col ${showViewer ? 'w-[26rem] shrink-0 lg:w-[34rem]' : 'flex-1'}`}>
+              <MessageList messages={messages} onSend={send} />
+              <Composer
+                busy={busy}
+                disabled={connection !== 'open'}
+                onSend={send}
+                onStop={() => socket.current?.send({ type: 'stop' })}
+              />
+            </section>
+          </div>
+        </>
       )}
-      <div className="flex min-h-0 flex-1">
-        {showFiles && <FileTree token={token} version={filesVersion} selected={openFile} onOpen={setOpenFile} />}
-        {showViewer && (
-          <CodeViewer token={token} path={openFile} version={filesVersion} onClose={() => setOpenFile(null)} />
-        )}
-        <section className={`flex min-w-0 flex-col ${showViewer ? 'w-[26rem] shrink-0 lg:w-[34rem]' : 'flex-1'}`}>
-          <MessageList messages={messages} onSend={send} />
-          <Composer
-            busy={busy}
-            disabled={connection !== 'open'}
-            onSend={send}
-            onStop={() => socket.current?.send({ type: 'stop' })}
-          />
-        </section>
-      </div>
     </div>
   )
 }

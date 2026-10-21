@@ -30,6 +30,7 @@ from .auth import (
 )
 from .chat import ChatService
 from .files import FileAccessError, list_dir, read_file
+from .installer import PLATFORMS, agent_package, build_installer, package_filename
 from .relay import LaptopOffline, RelayService
 from .config import Settings
 from .db import Store
@@ -97,6 +98,17 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
             return verify_token(settings, bearer(request.headers.get("authorization")))
         except AuthError as exc:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+
+    def public_urls(request: Request) -> tuple[str, str]:
+        """This hub's public base URL and agent socket URL, as the browser reached it."""
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("host", request.url.netloc)
+        return f"{proto}://{host}", f"{'wss' if proto == 'https' else 'ws'}://{host}/agent"
+
+    def new_agent_token(user: User) -> str:
+        raw, digest = new_refresh_token()
+        store.add_refresh_token(digest, user.email, "agent", name="laptop")
+        return raw
 
     def start_session(user: User) -> dict:
         """Access token plus a refresh token that never expires (revoked by /api/auth/logout)."""
@@ -190,14 +202,7 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
         """Long-lived token that lets the user's laptop agent connect to this hub."""
         if not settings.is_hub:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Only the hub accepts laptop agents")
-        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-        host = request.headers.get("host", request.url.netloc)
-        raw, digest = new_refresh_token()
-        store.add_refresh_token(digest, user.email, "agent", name="laptop")
-        return {
-            "token": raw,
-            "hub_url": f"{'wss' if proto == 'https' else 'ws'}://{host}/agent",
-        }
+        return {"token": new_agent_token(user), "hub_url": public_urls(request)[1]}
 
     @app.post("/api/mcp-token")
     async def mcp_token(user: User = Depends(current_user)) -> dict:
@@ -389,6 +394,52 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
             if not isinstance(answer.get("result"), dict):
                 return rpc_error(-32603, str(answer.get("error") or "Laptop gave no answer"), request_id=message["id"])
             return JSONResponse(answer["result"])
+
+        # One-click laptop setup
+
+        def setup_user(request: Request) -> User:
+            """A browser access token, or the agent token an installer was generated with."""
+            raw = bearer(request.headers.get("authorization"))
+            try:
+                return verify_token(settings, raw)
+            except AuthError:
+                pass
+            row = store.find_refresh_token(hash_token(raw), "agent") if raw else None
+            if row is None:
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign in again")
+            return User(email=row["user_email"], scope="agent")
+
+        @app.get("/api/v1/setup/installer")
+        async def setup_installer(platform: str, request: Request, user: User = Depends(current_user)) -> Response:
+            """A double-clickable installer for the user's OS with a new agent token baked in."""
+            if platform not in PLATFORMS:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, f"platform must be one of {', '.join(PLATFORMS)}")
+            base_url, hub_url = public_urls(request)
+            try:
+                installer = build_installer(
+                    platform, base_url=base_url, hub_url=hub_url, token=new_agent_token(user), email=user.email
+                )
+            except ValueError as exc:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+            headers = {
+                "Content-Disposition": f'attachment; filename="{installer.filename}"',
+                "Cache-Control": "no-store",
+            }
+            return Response(installer.content, media_type=installer.media_type, headers=headers)
+
+        @app.get("/api/v1/setup/agent-package")
+        async def setup_agent_package(user: User = Depends(setup_user)) -> Response:
+            """The agent itself (an sdist of this code), fetched by the installer."""
+            headers = {"Content-Disposition": f'attachment; filename="{package_filename()}"'}
+            return Response(agent_package(), media_type="application/gzip", headers=headers)
+
+        @app.get("/api/v1/setup/status")
+        async def setup_status(user: User = Depends(setup_user)) -> dict:
+            """Is the laptop connected now, and has one ever connected (else the UI offers setup)?"""
+            return {
+                "agent_online": relay.agent_online(user.email),
+                "ever_connected": store.agent_ever_connected(user.email),
+            }
 
     mount_frontend(app, settings.frontend_dist)
     return app

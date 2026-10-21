@@ -337,6 +337,17 @@ class Store:
             self._exec("UPDATE refresh_tokens SET last_used = ? WHERE token_hash = ?", (time.time(), token_hash))
         return row
 
+    def find_refresh_token(self, token_hash: str, scope: str) -> dict[str, Any] | None:
+        """Look a token up without marking it used (last_used records real agent connections)."""
+        return self._one("SELECT * FROM refresh_tokens WHERE token_hash = ? AND scope = ?", (token_hash, scope))
+
+    def agent_ever_connected(self, user_email: str) -> bool:
+        row = self._one(
+            "SELECT 1 AS seen FROM refresh_tokens WHERE user_email = ? AND scope = 'agent' AND last_used IS NOT NULL",
+            (user_email,),
+        )
+        return row is not None
+
     def delete_refresh_token(self, token_hash: str) -> bool:
         return self._exec("DELETE FROM refresh_tokens WHERE token_hash = ?", (token_hash,)).rowcount > 0
 
