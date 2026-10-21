@@ -79,6 +79,15 @@ def usage_for(model: str, input_tokens: int, output_tokens: int) -> Usage:
     return Usage(model, input_tokens, output_tokens, price(model, input_tokens, output_tokens))
 
 
+# Claude Sonnet list price per 1M tokens (input, output): what a free answer would have cost had
+# it gone to the default paid model ("saved" in the UI and the usage dashboard).
+SONNET_RATES = (3.00, 15.00)
+
+
+def sonnet_equivalent(input_tokens: int, output_tokens: int) -> float:
+    return (input_tokens * SONNET_RATES[0] + output_tokens * SONNET_RATES[1]) / 1_000_000
+
+
 def estimate_tokens(text: str) -> int:
     """Rough token count (~4 characters per token) for executors that do not report usage."""
     return max(1, len(text) // 4) if text else 0

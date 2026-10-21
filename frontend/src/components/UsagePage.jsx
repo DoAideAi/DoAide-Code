@@ -165,6 +165,13 @@ export default function UsagePage({ load, onClose }) {
               {t.saved_usd > 0 && (
                 <span className="text-zinc-500"> About {formatCost(t.saved_usd)} saved compared with Claude Sonnet.</span>
               )}
+              {t.escalated > 0 && (
+                <span data-testid="usage-escalated" className="text-zinc-500">
+                  {' '}
+                  {t.escalated} {t.escalated === 1 ? 'task was' : 'tasks were'} escalated to a paid model after the free answer
+                  failed its checks.
+                </span>
+              )}
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Tile label="Tasks" value={t.tasks} />
@@ -215,7 +222,14 @@ export default function UsagePage({ load, onClose }) {
                       {r.source === 'mcp' && <span className="mr-1 text-amber-300/80">Claude Code ·</span>}
                       {r.prompt || '(no prompt)'}
                     </span>
-                    <span className="shrink-0 text-zinc-400">{r.model}</span>
+                    <span className="shrink-0 text-zinc-400">
+                      {r.model}
+                      {r.escalated && (
+                        <span className="ml-1 text-amber-300/80" title="escalated: the free answer failed its checks">
+                          ↑
+                        </span>
+                      )}
+                    </span>
                     {r.checks_ok !== null && (
                       <span className={`shrink-0 ${r.checks_ok ? 'text-zinc-500' : 'text-red-300'}`}>
                         {r.checks_ok ? '✓' : '✗'}

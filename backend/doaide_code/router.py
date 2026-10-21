@@ -3,13 +3,16 @@
 Tiers: 0 = Ollama fast model, 1 = Ollama coder model (Claude Haiku if Ollama is down), 2 = Claude
 Sonnet / Codex, 3 = Claude Opus. All run on the laptop; the CLIs use the user's subscription logins.
 Classification is the local task classifier (classify.py), or Jev only when one is passed in.
+
+Try, then escalate (see `plan` and runner.py): every task first goes to a free Ollama model, and
+only an answer that fails validation goes on to Claude Sonnet. The classifier is a hint that skips
+the local attempt for obviously complex work.
 """
 
 from __future__ import annotations
 
 import copy
 import logging
-import re
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -22,6 +25,12 @@ log = logging.getLogger(__name__)
 
 MAX_TIER = 3
 JEV_MIN_CONFIDENCE = 0.55
+# Tasks scoring this high (or Opus-tier ones) skip the free local attempt: it would only cost time.
+LOCAL_FIRST_MAX_SCORE = 10
+
+
+def is_local(executor: Executor) -> bool:
+    return executor.tool == "ollama"
 
 @dataclass(frozen=True)
 class RouteDecision:
@@ -138,3 +147,20 @@ class RouterBrain:
         # Premium executors (Opus, Codex) only for tasks of their tier; for simpler ones they are a
         # last resort when nothing cheaper is available at all.
         return [e for e in usable if e.min_task_tier <= tier] or usable
+
+    async def plan(self, decision: RouteDecision) -> tuple[list[Executor], str | None]:
+        """Try-then-escalate order: one free local attempt (the fast model for simple tasks, the
+        coder model otherwise), then the paid executors with Sonnet first, then the other local
+        model as a last resort. Obviously complex tasks start on the paid executors instead.
+        Returns the order and, when the local attempt was skipped, why."""
+        pool = await self.candidates(decision.tier)
+        local = [e for e in pool if is_local(e)]
+        paid = [e for e in pool if not is_local(e)]
+        if not local or not paid:
+            return pool, None
+        if decision.tier >= MAX_TIER or decision.complexity >= LOCAL_FIRST_MAX_SCORE:
+            return paid + local, f"local model skipped: complex task (score {decision.complexity:g})"
+        first = next((e for e in local if e.tier == min(decision.tier, 1)), local[0])
+        # Escalate to Sonnet-class first; Haiku (tier 1) only if none of those is available.
+        paid.sort(key=lambda e: (e.tier < 2, e.tier))
+        return [first, *paid, *(e for e in local if e is not first)], None

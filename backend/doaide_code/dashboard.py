@@ -15,9 +15,7 @@ from collections import defaultdict
 from typing import Any
 
 from .db import Store
-
-# Claude Sonnet list price per 1M tokens (input, output): the comparison for "saved".
-SONNET_RATES = (3.00, 15.00)
+from .usage import sonnet_equivalent
 RECENT_TASKS = 40
 
 
@@ -46,7 +44,7 @@ def usage_report(store: Store, user_email: str, *, days: int = 7, tz_offset_min:
     models: dict[str, dict[str, Any]] = defaultdict(
         lambda: {"tasks": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0, "free": True}
     )
-    totals = {"tasks": 0, "free_tasks": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0, "saved_usd": 0.0}
+    totals = {"tasks": 0, "free_tasks": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0, "saved_usd": 0.0, "escalated": 0}
     recent: list[dict[str, Any]] = []
 
     for row in store.replies_since(user_email, since):
@@ -70,7 +68,9 @@ def usage_report(store: Store, user_email: str, *, days: int = 7, tz_offset_min:
         totals["cost_usd"] += cost
         if free:
             totals["free_tasks"] += 1
-            totals["saved_usd"] += (tokens_in * SONNET_RATES[0] + tokens_out * SONNET_RATES[1]) / 1e6
+            totals["saved_usd"] += sonnet_equivalent(tokens_in, tokens_out)
+        escalated = isinstance(route.get("escalated_from"), dict)
+        totals["escalated"] += int(escalated)
         m = models[label]
         m["tasks"] += 1
         m["tokens_in"] += tokens_in
@@ -96,6 +96,7 @@ def usage_report(store: Store, user_email: str, *, days: int = 7, tz_offset_min:
                 "tokens": tokens_in + tokens_out,
                 "cost_usd": round(cost, 6),
                 "free": free,
+                "escalated": escalated,
                 "checks_ok": all(c.get("ok") for c in checks) if checks else None,
                 "status": row["status"],
             }

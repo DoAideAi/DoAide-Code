@@ -51,12 +51,29 @@ export function usageLabel(usage) {
   return `${formatTokens(usage.tokens_in)} in · ${formatTokens(usage.tokens_out)} out · ${formatCost(usage.cost_usd)}`
 }
 
-// Which model answered: "qwen2.5-coder:32b (free)", "claude-sonnet", "no model".
+function modelName(route) {
+  return route.model && !route.executor.includes(route.model) ? route.model : route.executor
+}
+
+// Which model answered: "qwen2.5-coder:32b (free)", "claude-sonnet", "no model", and
+// "claude-sonnet (escalated from qwen2.5-coder:32b)" when the free answer failed its checks.
 export function routeLabel(route) {
   if (!route) return null
   if (route.executor === 'direct') return 'no model'
-  const name = route.model && !route.executor.includes(route.model) ? route.model : route.executor
+  const name = modelName(route)
+  if (route.escalated_from) return `${name} (escalated from ${modelName(route.escalated_from)})`
   return route.free ? `${name} (free)` : name
+}
+
+// Why this model: the escalation reason first, then the classifier's reasons.
+export function routeTitle(route) {
+  const parts = [...(route?.escalated_from ? [`escalated: ${route.escalated_from.reason}`] : []), ...(route?.reasons ?? [])]
+  return parts.join(', ') || undefined
+}
+
+// What a free answer would have cost on Claude Sonnet.
+export function savingsLabel(route) {
+  return route?.free && route.would_cost_usd > 0 ? `saved ${formatCost(route.would_cost_usd)} vs Sonnet` : null
 }
 
 // Validation results under a reply: completeness, code syntax, proposed edits.
@@ -253,6 +270,7 @@ function Message({ message, onSend }) {
   }
   const usage = usageLabel(message.meta?.usage)
   const model = routeLabel(message.meta?.route)
+  const saved = savingsLabel(message.meta?.route)
   const changes = message.meta?.changes
   return (
     <div className={`leading-relaxed ${message.status === 'error' ? 'text-red-300' : 'text-zinc-200'}`}>
@@ -271,12 +289,22 @@ function Message({ message, onSend }) {
       {(usage || model) && !streaming && (
         <div data-testid="usage" className="mt-1.5 font-mono text-[11px] text-zinc-600">
           {model && (
-            <span data-testid="route" title={message.meta.route.reasons?.join(', ') || undefined}>
+            <span data-testid="route" title={routeTitle(message.meta.route)}>
               {model}
               {usage ? ' · ' : ''}
             </span>
           )}
           {usage}
+          {saved && (
+            <span
+              data-testid="saved"
+              className="text-emerald-400/70"
+              title={`Handled by ${modelName(message.meta.route)} for free. Claude Sonnet would have cost about ${formatCost(message.meta.route.would_cost_usd)}.`}
+            >
+              {' · '}
+              {saved}
+            </span>
+          )}
         </div>
       )}
       {!streaming && <Checks checks={message.meta?.checks} />}

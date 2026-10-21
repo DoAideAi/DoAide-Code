@@ -1,5 +1,11 @@
 """Run one prompt through the router's executors with fallback. Shared by the local chat
-service and the laptop agent, so the "no executor" check only ever runs on the laptop."""
+service and the laptop agent, so the "no executor" check only ever runs on the laptop.
+
+Try, then escalate: a free Ollama model answers first, out of sight. Its answer is checked
+(complete, code parses, edits apply, on topic); one that fails goes to Claude Sonnet with more
+context, and the user only ever sees the answer that passed. The route meta says which model
+answered, whether it was escalated and why, and what a free answer would have cost on Sonnet.
+"""
 
 from __future__ import annotations
 
@@ -19,9 +25,9 @@ from .detect import ModelDetector, answer_meta, meta_question, pin_problem
 from .executors import Executor, ExecutorError, Job, Turn, build_executors
 from .fastpath import direct_answer, math_answer
 from .prompts import PROMPT_VERSION
-from .router import RouteDecision, RouterBrain, heuristic_tier
-from .usage import Usage
-from .validate import check_code_blocks, edit_checks, incomplete_reason
+from .router import RouteDecision, RouterBrain, heuristic_tier, is_local
+from .usage import Usage, sonnet_equivalent
+from .validate import check_code_blocks, edit_checks, incomplete_reason, off_topic_reason
 
 log = logging.getLogger(__name__)
 
@@ -148,6 +154,7 @@ async def run_job(
 
     # 3a. A model the user picked runs alone: no routing, no fallback to other models.
     decision: RouteDecision
+    skipped: str | None = None
     if pin:
         decision = heuristic_tier(job.prompt)
         outcome.tier = decision.tier
@@ -160,8 +167,8 @@ async def run_job(
             return outcome
         candidates: list[Executor] = [executor]
     else:
-        # 3b. Classify, then try executors cheapest-first with fallback.
-        decision, candidates = await _routed(router, store, job, outcome, project)
+        # 3b. Classify, then try a free local model first and escalate if its answer fails checks.
+        decision, candidates, skipped = await _routed(router, store, job, outcome, project)
     job = replace(job, kind=decision.kind)
 
     # Extra context the task asks for: the recent diff for "review my changes"-style requests.
@@ -176,8 +183,14 @@ async def run_job(
     errors: list[str] = []
     retries = 0
     retry_note: str | None = None
+    # The free local attempt that failed checks (or broke), and why: shown on the paid answer.
+    escalated: dict | None = None
+    # That attempt's answer, shown after all (with its failed check) if every paid executor fails.
+    held: tuple[str, str, dict, list[dict]] | None = None
     for executor in candidates:
-        more = retry_note is not None
+        more = retry_note is not None or escalated is not None
+        # A local first attempt is buffered: shown only if it passes, else silently escalated.
+        trial = not pin and executor is candidates[0] and is_local(executor) and _escalation(candidates) is not None
         run = job
         context, files = await _context_for(executor, ranking, diff, more=more)
         if context:
@@ -188,11 +201,15 @@ async def run_job(
         previous = outcome.content
         outcome.content = ""
         try:
-            used = await _drain(executor, run, outcome, store, source, streamed, on_delta)
+            used = await _drain(executor, run, outcome, store, source, streamed, _hold if trial else on_delta)
         except ExecutorError as exc:
             store.record_executor(executor.name, ok=False, elapsed_ms=_ms(started))
             log.warning("%s failed: %s", executor.name, exc)
             errors.append(f"{executor.name}: {exc}")
+            if trial:
+                escalated = _escalated_from(executor, None, f"it failed: {exc}")
+                outcome.content = previous
+                continue
             if streamed:
                 outcome.content += f"\n\n[stopped: {exc}]"
                 outcome.executor = executor.name
@@ -201,7 +218,18 @@ async def run_job(
             continue
         store.record_executor(executor.name, ok=True, elapsed_ms=_ms(started))
         outcome.executor, outcome.status = executor.name, "done"
-        outcome.route = _route(executor, decision, used)
+        outcome.route = _route(executor, decision, used, escalated=escalated, skipped=skipped)
+
+        code_checks: list[dict] | None = None
+        if trial:
+            problem, code_checks = await _vet(job, outcome.content, decision.kind)
+            if problem:
+                log.info("escalating from %s: %s", executor.name, problem)
+                escalated = _escalated_from(executor, used, problem)
+                held = (outcome.content, executor.name, outcome.route, code_checks)
+                outcome.content, outcome.status = previous, "error"
+                continue
+            await on_delta(outcome.content)
 
         # Incomplete? Retry once on the next executor up, with more context.
         reason = incomplete_reason(outcome.content, decision.kind)
@@ -212,18 +240,51 @@ async def run_job(
             await on_delta(f"\n\n---\n_The answer looked incomplete ({reason}); retrying on {nxt.name} with more context…_\n\n")
             outcome.status = "error"
             continue
-        outcome.checks.append(
-            {"name": "complete", "ok": reason is None, "detail": reason or retry_note or "looks complete"}
-        )
+        detail = reason or retry_note or (f"escalated from {escalated['executor']}: {escalated['reason']}" if escalated else None)
+        outcome.checks.append({"name": "complete", "ok": reason is None, "detail": detail or "looks complete"})
         if key is not None and executor.cacheable and reason is None and outcome.content.strip():
             store.cache_put(key, outcome.content, executor.name)
-        outcome.checks += await check_code_blocks(outcome.content)
+        outcome.checks += code_checks if code_checks is not None else await check_code_blocks(outcome.content)
         await _preview_changes(store, job, outcome, executor, run, on_delta, source)
         outcome.checks += edit_checks(outcome.changes)
         break
+    if outcome.status != "done" and not outcome.content and held is not None:
+        outcome.content, outcome.executor, outcome.route, code_checks = held
+        outcome.status = "done"
+        outcome.checks += [{"name": "complete", "ok": False, "detail": escalated["reason"]}, *code_checks]
+        await on_delta(outcome.content)
     if outcome.status != "done" and not outcome.content and errors:
         outcome.content = "All executors failed.\n" + "\n".join(errors)
     return outcome
+
+
+async def _hold(_chunk: str) -> None:
+    """Delta sink for a buffered local attempt: nothing reaches the user until it passes."""
+
+
+def _escalation(candidates: list[Executor]) -> Executor | None:
+    """The paid executor a failed local first attempt goes to (Sonnet when it is available)."""
+    return next((e for e in candidates[1:] if not is_local(e)), None)
+
+
+async def _vet(job: Job, answer: str, kind: str) -> tuple[str | None, list[dict]]:
+    """Whether a local answer is good enough to show: complete, its code parses, its edits apply
+    and it is on topic. Returns the first problem (None when it passes) and the code checks."""
+    code_checks = await check_code_blocks(answer)
+    if reason := incomplete_reason(answer, kind):
+        return reason, code_checks
+    if bad := next((c for c in code_checks if not c["ok"]), None):
+        return f"{bad['name']} does not parse ({bad['detail']})", code_checks
+    if job.cwd is not None and (changeset := await propose(job.cwd, answer)) is not None and changeset.all_problems:
+        return f"its edit failed checks ({changeset.all_problems[0]})", code_checks
+    if reason := off_topic_reason(job.prompt, answer):
+        return reason, code_checks
+    return None, code_checks
+
+
+def _escalated_from(executor: Executor, used: Usage | None, reason: str) -> dict:
+    model = (used.model if used else "") or getattr(executor, "model", "") or None
+    return {"executor": executor.name, "model": model, "reason": reason}
 
 
 def _next_up(candidates: list[Executor], current: Executor, task_tier: int) -> Executor | None:
@@ -250,23 +311,38 @@ async def _context_for(
     return ranking.render_map(budget, extra=diff)
 
 
-def _route(executor: Executor, decision: RouteDecision, used: Usage | None) -> dict:
+def _route(
+    executor: Executor,
+    decision: RouteDecision,
+    used: Usage | None,
+    *,
+    escalated: dict | None = None,
+    skipped: str | None = None,
+) -> dict:
     # The model this executor reported (not the sum of earlier attempts), else its configured one.
     model = (used.model if used else "") or getattr(executor, "model", "") or None
-    return {
+    route = {
         "executor": executor.name,
         "model": model,
         "tier": decision.tier,
         "kind": decision.kind,
         "score": decision.complexity,
         "reasons": list(decision.reasons[:4]),
-        "free": executor.tool == "ollama",
+        "free": is_local(executor),
     }
+    if escalated:
+        route["escalated_from"] = escalated
+    if skipped:
+        route["reasons"].append(skipped)
+    if route["free"] and used is not None and (used.input_tokens or used.output_tokens):
+        # What this free answer would have cost on Claude Sonnet: shown as the saving.
+        route["would_cost_usd"] = round(sonnet_equivalent(used.input_tokens, used.output_tokens), 6)
+    return route
 
 
 async def _routed(
     router: RouterBrain, store: Store, job: Job, outcome: Outcome, project: str | None
-) -> tuple[RouteDecision, list[Executor]]:
+) -> tuple[RouteDecision, list[Executor], str | None]:
     decision = await router.classify(job.prompt, project=project)
     outcome.tier = decision.tier
     if decision.usage is not None:
@@ -275,10 +351,10 @@ async def _routed(
             "router", None, decision.usage.model, decision.usage.input_tokens, decision.usage.output_tokens,
             decision.usage.cost_usd,
         )
-    candidates = await router.candidates(decision.tier)
+    candidates, skipped = await router.plan(decision)
     if not candidates:
         outcome.content = NO_EXECUTOR
-    return decision, candidates
+    return decision, candidates, skipped
 
 
 async def _drain(

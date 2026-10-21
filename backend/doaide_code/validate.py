@@ -3,6 +3,9 @@
 - Completeness: empty or cut-off answers, unbalanced code fences, "I can't see the file"
   replies, and edit requests answered without any code. An incomplete answer is retried once
   with more context on the next executor up (see runner.py).
+- Relevance: the answer must mention what the request names (files, functions, backticked
+  identifiers) and share some of its words; canned refusals count as off topic. Used to decide
+  whether a free local answer is good enough or the task goes to Claude (runner.py).
 - Code: fenced Python / JSON / JavaScript blocks must parse (syntax only: snippets often use
   names defined elsewhere). Proposed edits are checked separately by changes.py: the file must
   exist, the SEARCH text must match, and the result must pass syntax and ruff checks.
@@ -29,6 +32,17 @@ _NEEDS_FILES = re.compile(
     r"i (?:would )?need (?:to see|more (?:context|information|details))|not (?:provided|included) in the context)",
     re.I,
 )
+# What a request names: a file, a call, a backticked identifier, a snake_case or camelCase name.
+_NAMED = re.compile(r"`([^`\s]{2,60})`|\b([\w-]+\.[a-z]{1,5})\b|\b(\w{2,})\(\)|\b([a-z]+_[a-z0-9_]+|[a-z]+[A-Z]\w*|[A-Z][a-z0-9]+[A-Z]\w*)\b")
+_WORD = re.compile(r"[A-Za-z][A-Za-z']{3,}")
+_STOPWORDS = frozenset(
+    "about above after again also another back been before being below between both cannot could does doing down "
+    "during each even ever every from have having here how into just know like make many more most much must need "
+    "only other over please same should show some such tell than that their them then there these they thing this "
+    "those through under until upon very want were what when where which while will with within without would your "
+    "code file files using use used help write give find".split()
+)
+_REFUSAL = re.compile(r"\b(?:as an ai(?: language model)?|i'?m (?:sorry|afraid),? (?:but )?i (?:can'?t|cannot))\b", re.I)
 _EDIT_KINDS = {"edit", "test", "debug"}
 _LANGS = {"python": ".py", "py": ".py", "json": ".json", "javascript": ".js", "js": ".js", "mjs": ".js"}
 
@@ -48,6 +62,23 @@ def incomplete_reason(answer: str, kind: str) -> str | None:
         return "no code or edit was proposed"
     if kind not in {"math", "question"} and len(text) < 25:
         return "answer too short"
+    return None
+
+
+def off_topic_reason(prompt: str, answer: str) -> str | None:
+    """Why the answer does not seem to address the request, or None when it does."""
+    text = answer.lower()
+    if _REFUSAL.search(answer[:300]):
+        return "the model declined to answer"
+    words = {w.lower() for w in _WORD.findall(prompt)} - _STOPWORDS
+    # Prefix match, so "sorting" in the request meets "sorted" in the answer.
+    shared = sum(w[:5] in text for w in words)
+    named = {next(g for g in m.groups() if g) for m in _NAMED.finditer(prompt)}
+    stems = {n.rsplit("/", 1)[-1].lower() for n in named}
+    if stems and shared < 2 and not any(s in text or s.rsplit(".", 1)[0] in text for s in stems):
+        return f"the answer never mentions {sorted(named)[0]}"
+    if len(words) >= 3 and not shared:
+        return "the answer shares no words with the request"
     return None
 
 

@@ -86,6 +86,15 @@ Everything runs on the laptop, on your own subscription logins; no API keys are 
 "traceback", files named, length) into a tier and a task kind, and keeps the reasons, which
 the UI shows on hover.
 
+**Try, then escalate.** Every task goes to a free Ollama model first (the fast model for simple
+questions, the coder model otherwise), out of sight. Its answer is checked: complete (not empty
+or cut off), fenced code parses, edit blocks apply, and it is on topic (mentions what the request
+names, no canned refusals). One that passes is shown; one that fails goes to Claude Sonnet with
+twice the context, and the user only sees Sonnet's answer, labelled "escalated from …" with the
+reason on hover. Free answers show what Sonnet would have cost. The classifier is only a hint
+here: Opus-tier work and scores of 10 or more skip the local attempt. Without a paid CLI the
+local answer streams as before.
+
 **Context per executor.** Ollama gets the 2-3 most relevant files (large ones as excerpts
 around the matching lines) and an explicit `num_ctx`, since Ollama's default window silently
 truncates; general-knowledge questions get no files at all. Claude and Codex read files
@@ -96,9 +105,9 @@ changes include `git diff HEAD` (or the last commit); traceback paths become nam
 tasks; the full instructions for Claude; code-first wording for Codex. Each kind of task
 (explain, edit, debug, test, review, design) adds its own guidance.
 
-**Checks.** Every answer is checked before it is final: incomplete answers (empty, cut off,
-"please provide the code", an edit request without code) are retried once on the next tier up
-with twice the context; fenced Python/JSON/JS must parse; proposed edits must target existing
+**Checks.** Every answer is checked before it is final: an incomplete paid answer (empty, cut
+off, "please provide the code", an edit request without code) is retried once on the next
+executor up with twice the context; fenced Python/JSON/JS must parse; proposed edits must target existing
 text and pass syntax and ruff. Results show under each reply with the model that answered.
 
 **Usage dashboard.** *Usage* in the top bar: tasks, tokens and API-equivalent cost per day and

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { routeLabel, splitFences, usageLabel } from './components/MessageList.jsx'
+import { routeLabel, routeTitle, savingsLabel, splitFences, usageLabel } from './components/MessageList.jsx'
 import { applyEvent, initialChat, statusColor, usableTools } from './store.js'
 
 const msg = (id, role, content, status = 'done') => ({ id, role, content, status, created_at: 0 })
@@ -151,5 +151,23 @@ describe('routeLabel', () => {
     expect(routeLabel({ executor: 'claude-sonnet', model: 'sonnet', free: false })).toBe('claude-sonnet')
     expect(routeLabel({ executor: 'direct', free: true })).toBe('no model')
     expect(routeLabel(undefined)).toBeNull()
+  })
+
+  it('says when a free answer failed its checks and Sonnet answered instead', () => {
+    const route = {
+      executor: 'claude-sonnet',
+      model: 'sonnet',
+      free: false,
+      reasons: ['fix (+3)'],
+      escalated_from: { executor: 'ollama-coder', model: 'qwen2.5-coder:32b', reason: 'python block does not parse' },
+    }
+    expect(routeLabel(route)).toBe('claude-sonnet (escalated from qwen2.5-coder:32b)')
+    expect(routeTitle(route)).toBe('escalated: python block does not parse, fix (+3)')
+    expect(savingsLabel(route)).toBeNull()
+  })
+
+  it('prices a free answer at Sonnet rates', () => {
+    expect(savingsLabel({ executor: 'ollama', free: true, would_cost_usd: 0.006 })).toBe('saved $0.0060 vs Sonnet')
+    expect(savingsLabel({ executor: 'ollama', free: true })).toBeNull()
   })
 })
