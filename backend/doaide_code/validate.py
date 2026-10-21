@@ -31,7 +31,12 @@ _NEEDS_FILES = re.compile(
     r"\b(?:i (?:don't|do not|cannot|can't|am unable to) (?:see|access|view|read|find) (?:the|your|this|that) "
     r"(?:file|code|project|repo|source|function|implementation)|"
     r"(?:please|could you) (?:provide|share|paste|send) (?:the|your|me|more)|without (?:seeing|access to) the (?:code|file)|"
-    r"i (?:would )?need (?:to see|more (?:context|information|details))|not (?:provided|included) in the context)",
+    r"i (?:would )?need (?:to see|more (?:context|information|details))|not (?:provided|included) in the context|"
+    # Live (qwen2.5-coder:7b, "what files are in frontend/src/components/?"): three of ten files,
+    # then "Other files not shown in the provided snippet."
+    r"not (?:shown|visible|included) in the (?:provided |given |shared )?(?:snippet|excerpt|context|code|files?)|"
+    r"other (?:files?|parts?|code) (?:are |is )?not (?:shown|visible|included)|i can only see|"
+    r"(?:limited|partial) view of (?:the|your|this)|only (?:part|some) of the (?:file|code|project|director(?:y|ies)) (?:is|was) (?:shown|provided|visible))",
     re.I,
 )
 # What a request names: a file, a call, a backticked identifier, a snake_case or camelCase name.
@@ -131,11 +136,39 @@ _OPENER = re.compile(r"^\s*(?:(?:sure|certainly|of course|absolutely)[,!.]?\s+)?
 _HEADING = re.compile(r"^(?:#{1,6}\s|\*\*[^*\n]+\*\*:?\s*$)")
 
 
+# Preamble and sign-offs non-technical users read as noise ("Great question! Based on the provided
+# code, ..." / "Let me know if you have any other questions!").
+_LEAD_IN = re.compile(
+    r"^\s*(?:(?:great|good) question|sure( thing)?|certainly|of course|absolutely|okay|ok|alright)[!.,]\s*|"
+    r"^\s*(?:to answer your question|based on the (?:provided |given |shown )?(?:code|files?|context|project)|"
+    r"looking at the (?:provided |given )?(?:code|files?|project)|after (?:reviewing|looking at) the (?:code|files?)),\s*",
+    re.I,
+)
+_SIGN_OFF = re.compile(
+    r"(?:^|(?<=[.!?:)`]))\s*(?:let me know if|i hope (?:this|that) helps|hope (?:this|that) helps|feel free to|happy to help|"
+    r"if you (?:have|need) (?:any )?(?:other|more|further|additional) )[^\n]*$",
+    re.I,
+)
+
+
+def _without_filler(text: str) -> str:
+    """The reply without a lead-in ("Sure! Here is...", "Based on the code, ...") or a closing offer
+    of more help; unchanged when nothing else would remain."""
+    out = text
+    for _ in range(3):
+        m = _LEAD_IN.match(out) or _OPENER.match(out)
+        if not m or not out[m.end() :].strip():
+            break
+        out = out[m.end()].upper() + out[m.end() + 1 :]
+    if "```" not in out[-200:]:
+        out = _SIGN_OFF.sub("", out).rstrip()
+    return out if out.strip() else text
+
+
 def trim_reply(text: str) -> str:
-    """The reply without filler: the opener, and explanation-style sections (their heading up to
-    the next heading or code fence). A "## File: path" heading line alone is dropped."""
-    if (m := _OPENER.match(text)) and text[m.end() :]:
-        text = text[m.end()].upper() + text[m.end() + 1 :]
+    """The reply without filler: the lead-in and sign-off, and explanation-style sections (their
+    heading up to the next heading or code fence). A "## File: path" heading line alone is dropped."""
+    text = _without_filler(text)
     out: list[str] = []
     skipping = False
     for line in text.splitlines():

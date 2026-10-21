@@ -156,8 +156,12 @@ async def run_task(name: str, router: RouterBrain, task: Task, store: Store, *, 
 def contenders(settings: Settings) -> dict[str, RouterBrain]:
     """One router per model (that model alone), plus DoAide's real routing as "auto"."""
     executors = build_executors(settings)
-    extra = OllamaExecutor(settings.ollama_url, "deepseek-coder-v2:16b", name="deepseek-coder-v2", tier=1, context_chars=14_000)
-    alone: dict[str, Executor] = {e.name: e for e in [*executors, extra] if e.name != "claude-haiku"}
+    # Candidates for the coder tier, measured against qwen2.5-coder (set DOAIDE_OLLAMA_CODER_MODEL to switch).
+    extras = [
+        OllamaExecutor(settings.ollama_url, "deepseek-coder-v2:16b", name="deepseek-coder-v2", tier=1, context_chars=14_000),
+        OllamaExecutor(settings.ollama_url, "codestral:22b", name="codestral", tier=1, context_chars=14_000),
+    ]
+    alone: dict[str, Executor] = {e.name: e for e in [*executors, *extras] if e.name != "claude-haiku"}
     routers = {name: RouterBrain([e], offline=True) for name, e in alone.items()}
     routers["auto"] = RouterBrain(executors, offline=True)
     return routers

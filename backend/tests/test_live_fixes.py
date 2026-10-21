@@ -16,7 +16,7 @@ from doaide_code.prompts import system_prompt
 from doaide_code.router import RouterBrain
 from doaide_code.runner import RESUME_MAX_CONTEXT, Outcome, answer_anchor, find_resume, run_job
 from doaide_code.usage import Usage
-from doaide_code.validate import NO_ACCESS_REASON, capability_claim, incomplete_reason
+from doaide_code.validate import NEEDS_FILES_REASON, NO_ACCESS_REASON, capability_claim, incomplete_reason
 
 from .conftest import FakeExecutor
 
@@ -174,6 +174,53 @@ async def test_a_local_refusal_to_a_project_question_escalates(store):
     outcome = await run_job(RouterBrain([ollama, sonnet], offline=True), store, job, Outcome(), nop)
     assert outcome.executor == "claude-sonnet"
     assert outcome.meta()["route"]["escalated_from"]["reason"] == NO_ACCESS_REASON
+
+
+PARTIAL = (
+    "The `frontend/src/components/` directory contains the following files:\n\n- `LaptopBanner.jsx`\n"
+    "- `Composer.jsx`\n- `SignIn.jsx`\n- Other files not shown in the provided snippet."
+)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        PARTIAL,  # live, qwen2.5-coder:7b over the Tasks API
+        "Other files are not shown, but `app.py` imports `pager`.",
+        "I can only see `pager.py`, so the caller may live elsewhere.",
+        "With a limited view of the project, the entry point appears to be `main.py`.",
+        "Only part of the file was shown; `render()` starts at line 40.",
+        "The helper is not included in the given context.",
+    ],
+)
+def test_answers_from_a_partial_view_of_the_project_are_incomplete(answer):
+    assert incomplete_reason(answer, "question") == NEEDS_FILES_REASON
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "The spinner is not shown in the UI until the first chunk arrives.",
+        "Errors are not visible to the user; they go to agent.log.",
+        "`render()` returns only part of the list: the first 20 rows.",
+    ],
+)
+def test_answers_that_merely_say_not_shown_are_complete(answer):
+    assert incomplete_reason(answer, "question") is None
+
+
+async def test_a_local_answer_from_a_partial_view_escalates(store):
+    ollama = executor("ollama", 0, [PARTIAL], tool="ollama")
+    sonnet = executor("claude-sonnet", 2, ["Ten files: `Composer.jsx`, `HowItWorksPage.jsx`, `LaptopBanner.jsx`, ..."])
+    job = Job("what files are in the frontend/src/components/ directory?")
+    outcome = await run_job(RouterBrain([ollama, sonnet], offline=True), store, job, Outcome(), nop)
+    assert outcome.executor == "claude-sonnet"
+    assert outcome.meta()["route"]["escalated_from"]["reason"] == NEEDS_FILES_REASON
+
+
+def test_claude_reading_files_itself_may_say_it_only_sees_some():
+    # Claude and Codex search the project themselves: what they report is a finding, not missing context.
+    assert incomplete_reason("I can only see one caller of `paginate`, in pages.py.", "question", reads_files=True) is None
 
 
 async def test_a_paid_answer_claiming_no_file_access_fails_its_checks(store):

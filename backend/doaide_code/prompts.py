@@ -58,10 +58,9 @@ IDENTITY = (
 # Small local models answer "can you access my files?" from training data ("No, I can't access
 # your local files"). DoAide does: it reads the project and puts the relevant files in the prompt.
 LOCAL_ACCESS = (
-    "DoAide Code runs on the user's laptop and has access to their local files: it works in the "
-    "active project folder, reads its files and includes the relevant ones in this conversation. "
-    "Never say you cannot access the user's files, folders or code. If a file you need is not "
-    "shown, name it and DoAide will include it."
+    "DoAide Code runs on the user's laptop in their project folder and includes the relevant files "
+    "in this conversation. Never say you cannot access the user's files, folders or code. Use only "
+    "the files shown; if you need another, name it instead of guessing."
 )
 AGENT_ACCESS = (
     "You run on the user's laptop inside their project folder and can read any file in it with your "
@@ -75,12 +74,22 @@ exact lines from the file
 new lines
 >>>>>>> REPLACE
 SEARCH must be copied exactly from the file shown; leave it empty only to create a new file.
-Never say you applied or ran anything."""
+Never say you ran anything."""
+
+# Local replies go to people who may not code: short, plain, no preamble. Local prompts stay
+# under 500 tokens; every token is prompt-processing time on the laptop.
+BRIEF = (
+    "Reply in 1-2 sentences. For edits: say 'Done — updated [file]'. For questions: give the direct "
+    "answer. No preamble, no explanation of what you're about to do. Write for someone who does not "
+    "code: plain everyday words, no technical terms."
+)
+
+# Repeated after the request for answers without edits: a 7b model reading 3k tokens of files
+# forgets the system prompt's length rule (live: three long sentences on "what does router.py do?").
+LOCAL_REMINDER = "(Answer in 1-2 short sentences, in plain words for someone who does not code.)"
 
 LOCAL_BASE = f"""{IDENTITY}
 {LOCAL_ACCESS}
-You are a concise senior engineer. Use only the project files shown; if something you need is
-not shown, say which file you need instead of guessing.
 {STYLE}"""
 
 KIND_GUIDANCE = {
@@ -95,6 +104,14 @@ KIND_GUIDANCE = {
     "design": "Give a recommendation first, then the main trade-off and the first steps, as short bullets.",
 }
 EDIT_KINDS = {"edit", "test", "debug"}
+# Local models answer in plain words: no line numbers or step-by-step walk-throughs.
+LOCAL_GUIDANCE = {
+    "question": "Give the direct answer.",
+    "explain": "Say in plain words what it does and what it is for. Do not paste the code.",
+    "edit": "Change only what was asked.",
+    "debug": "Name the cause in a few plain words, then the fix as edit blocks.",
+    "design": "Give your recommendation and the main reason.",
+}
 
 CODEX_BASE = f"""{IDENTITY}
 {AGENT_ACCESS}
@@ -106,7 +123,7 @@ Work as a precise coding agent in the user's repository (read-only). Prefer code
 FEW_SHOT_EDIT = (
     "## File: app/util.py\n```python\ndef add(a, b):\n    return a - b\n```\n\n# Request\nfix add, it subtracts",
     # Says the change, not the bug: small models copy this line's shape ("X returns a float").
-    "Make `add` add instead of subtract.\n\napp/util.py\n<<<<<<< SEARCH\n    return a - b\n=======\n"
+    "Done — updated app/util.py so `add` adds instead of subtracting.\n\napp/util.py\n<<<<<<< SEARCH\n    return a - b\n=======\n"
     "    return a + b\n>>>>>>> REPLACE",
 )
 
@@ -115,10 +132,11 @@ FEW_SHOT_EDIT = (
 def system_prompt(style: str, kind: str = "question") -> str:
     guidance = KIND_GUIDANCE.get(kind, KIND_GUIDANCE["question"])
     if style == "local":
-        parts = [LOCAL_BASE, guidance]
+        parts = [LOCAL_BASE, LOCAL_GUIDANCE.get(kind, guidance)]
         if kind in EDIT_KINDS:
             parts.append(EDIT_FORMAT)
-        return "\n\n".join(parts)
+        # Last: small models follow the end of the prompt most closely.
+        return "\n\n".join([*parts, BRIEF])
     if style == "codex":
         return f"{CODEX_BASE}\n\n{guidance}"
     return f"{CODER_SYSTEM_PROMPT}\n\nFor this request: {guidance}"
@@ -131,7 +149,7 @@ def few_shot(style: str, kind: str) -> list[tuple[str, str]]:
 
 def _version() -> str:
     styles = [system_prompt(s, k) for s in ("local", "claude", "codex") for k in KIND_GUIDANCE]
-    return hashlib.sha256("\n".join([*styles, *FEW_SHOT_EDIT]).encode()).hexdigest()[:12]
+    return hashlib.sha256("\n".join([*styles, *FEW_SHOT_EDIT, LOCAL_REMINDER]).encode()).hexdigest()[:12]
 
 
 PROMPT_VERSION = _version()

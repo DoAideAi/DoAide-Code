@@ -765,7 +765,7 @@ async def _preview_changes(
         ):
             outcome.checks.append({"name": "tests", "ok": False, "detail": failure})
             notes.append(f"Warning: {failure} after this edit; /undo reverts it.")
-        outcome.content = "\n\n".join(p for p in [summary or f"Updated {files}.", *notes] if p)
+        outcome.content = "\n\n".join(p for p in [summary or f"Done — updated {files}.", *notes] if p)
         return
     if changeset.all_problems:
         note = f"Not written: {changeset.all_problems[0]} (type /apply to write it anyway)."

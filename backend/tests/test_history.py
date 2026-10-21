@@ -147,4 +147,4 @@ async def test_ollama_gets_the_summary_as_a_system_message():
     job = Job("now", history=[Turn("user", "a"), Turn("assistant", "b")], summary="Earlier in this conversation (summary):\n- User: x")
     [_ async for _ in ex.stream(job)]
     roles = [(m["role"], m["content"][:12]) for m in seen[0]["messages"]]
-    assert roles[1] == ("system", "Earlier in t") and roles[-1] == ("user", "now")
+    assert roles[1] == ("system", "Earlier in t") and roles[-1][0] == "user" and roles[-1][1].startswith("now")
