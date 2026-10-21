@@ -261,7 +261,7 @@ def create_app(
         return JSONResponse(answer, status_code=200 if answer["status"] == "done" else status.HTTP_502_BAD_GATEWAY)
 
     @app.get("/api/v1/tasks/history")
-    async def task_history(limit: int = 50, user: User = Depends(current_user)) -> dict:
+    async def task_history(limit: int = 20, user: User = Depends(current_user)) -> dict:
         """Recent dispatch task results: model, cost, time, and status for monitoring."""
         limit = max(1, min(int(limit), 200))
         rows = store.task_history(user.email, limit)
@@ -274,9 +274,11 @@ def create_app(
             route = meta.get("route") or {}
             task = metrics_summary(meta)
             items.append({
+                "task_id": row["id"],
                 "id": row["id"],
+                "timestamp": row["created_at"],
                 "created_at": row["created_at"],
-                "prompt": (row["prompt"] or "")[:120],
+                "prompt": (row["prompt"] or "")[:100],
                 **task,
                 "executor": row["executor"],
                 "free": bool(route.get("free")),

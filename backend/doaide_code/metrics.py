@@ -43,7 +43,7 @@ def summary(meta: dict[str, Any]) -> dict[str, Any]:
 def log_task(prompt: str, meta: dict[str, Any], *, status: str, source: str) -> None:
     """Append one task's line; a disk problem is logged, never raised into the task."""
     row = {
-        "ts": datetime.datetime.now(datetime.UTC).isoformat(),
+        "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
         "prompt": prompt[:PROMPT_CHARS],
         **summary(meta),
         "status": status,

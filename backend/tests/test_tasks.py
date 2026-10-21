@@ -256,6 +256,45 @@ def test_task_history_lists_recent_tasks_newest_first(settings, project, auth):
     assert [t["id"] for t in limited] == [second["message_id"]]
 
 
+def test_task_history_includes_task_id_and_timestamp_aliases(settings, project, auth):
+    ollama = executor("ollama", 0, ["`GREETING` in app.py is 'hi'."], tool="ollama")
+    with app_with(settings, project, ollama) as client:
+        result = post(client, auth, prompt="what is GREETING in app.py?", project="proj").json()
+        task = client.get("/api/v1/tasks/history", headers=auth).json()["tasks"][0]
+    # task_id and timestamp are aliases for id and created_at
+    assert task["task_id"] == task["id"] == result["message_id"]
+    assert task["timestamp"] == task["created_at"]
+    assert isinstance(task["timestamp"], float)
+
+
+def test_task_history_default_limit_is_20(settings, project, auth):
+    ollama = executor("ollama", 0, ["answer"], tool="ollama")
+    with app_with(settings, project, ollama) as client:
+        for i in range(25):
+            post(client, auth, prompt=f"task {i}", project="proj")
+        history = client.get("/api/v1/tasks/history", headers=auth).json()["tasks"]
+    assert len(history) == 20
+
+
+def test_task_history_truncates_prompt_to_100_chars(settings, project, auth):
+    ollama = executor("ollama", 0, ["answer"], tool="ollama")
+    long_prompt = "x" * 150
+    with app_with(settings, project, ollama) as client:
+        post(client, auth, prompt=long_prompt, project="proj")
+        task = client.get("/api/v1/tasks/history", headers=auth).json()["tasks"][0]
+    assert len(task["prompt"]) == 100
+    assert task["prompt"] == "x" * 100
+
+
+def test_task_history_returns_all_required_fields(settings, project, auth):
+    ollama = executor("ollama", 0, ["`GREETING` in app.py is 'hi'."], tool="ollama")
+    with app_with(settings, project, ollama) as client:
+        post(client, auth, prompt="what is GREETING in app.py?", project="proj")
+        task = client.get("/api/v1/tasks/history", headers=auth).json()["tasks"][0]
+    required = {"task_id", "status", "prompt", "model", "executor", "cost_usd", "response_time_seconds", "timestamp"}
+    assert required.issubset(set(task.keys()))
+
+
 def test_task_history_says_whether_checks_passed_and_the_task_escalated(settings, project, auth):
     ollama = executor("ollama", 0, ["I cannot see the file, please paste it."], tool="ollama")
     sonnet = executor("claude-sonnet", 2, ["`GREETING` in app.py is 'hi'."])
@@ -275,7 +314,7 @@ def test_every_task_appends_one_metrics_line(settings, project, auth, tmp_path):
     assert len(lines) == 1
     row = json.loads(lines[0])
     assert set(row) == {
-        "ts", "prompt", "executor", "model", "cost_usd", "response_time_seconds",
+        "timestamp", "prompt", "executor", "model", "cost_usd", "response_time_seconds",
         "validation_result", "escalated", "status", "source",
     }
     assert row["prompt"].startswith("what is GREETING") and len(row["prompt"]) == 100
