@@ -144,3 +144,17 @@ async def test_a_local_edit_next_to_an_already_red_test_is_not_escalated(project
     assert outcome.executor == "ollama-coder" and not sonnet.jobs
     assert (project / "app" / "calc.py").read_text().startswith("# Calculator\n")
     assert not any(c["name"] == "tests" for c in outcome.meta()["checks"]["items"])
+
+
+async def test_only_the_files_that_failed_run_again_without_the_edit(project):
+    # A test file that logs each time it is collected: it must run with the edit, not again.
+    log = project / "collected.log"
+    (project / "tests" / "test_engines.py").write_text(
+        f"{PATH}open({str(log)!r}, 'a').write('x')\nfrom app.engines import FastEngine\n\n\ndef test_it():\n    assert FastEngine\n"
+    )
+    unused = project / "app" / "unused.py"
+    unused.write_text("X = 2\n")
+    # app/unused.py is referenced by no test, so the whole suite runs; test_other is red already.
+    reason = await failing_tests(project, ["app/unused.py"], without_edit=taken_out(unused, "X = 1\n"), request="set X")
+    assert reason is None
+    assert log.read_text() == "x"

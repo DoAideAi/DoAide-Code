@@ -109,9 +109,15 @@ async def failing_tests(
     failed = await _pytest(folder, python, selected, timeout)
     if not failed or without_edit is None or failed == ["?"]:
         return _reason(failed)
+    if wanted := [t for t in failed if about(request, t)]:
+        # They count whatever the baseline says.
+        return _reason(wanted)
+    # Only the files that failed run again (live: 15 s for the 293 tests touching router.py, ~1 s
+    # for the one file with the red test).
+    files = sorted({t.split("::")[0] for t in failed})
     try:
         async with without_edit():
-            before = await _pytest(folder, python, selected, timeout)
+            before = await _pytest(folder, python, files, timeout)
     except (ValueError, OSError):
         # The edit could not be taken out: no baseline, so every failure counts.
         return _reason(failed)
