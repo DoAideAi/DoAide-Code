@@ -26,10 +26,30 @@ export function codeLines(value) {
 
 function Code({ value }) {
   return (
-    <pre className="my-2 overflow-x-auto rounded-md border border-zinc-800 bg-black/40 p-3 font-mono text-[13px] leading-relaxed text-zinc-200">
+    <pre className="my-2 overflow-x-auto rounded-xl bg-black/40 p-3 font-mono text-[13px] leading-relaxed text-zinc-200">
       <code>{value}</code>
     </pre>
   )
+}
+
+// `code` and **bold** in prose; everything else stays plain text.
+const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*)/g
+
+function Inline({ text }) {
+  return text.split(INLINE).map((piece, i) => {
+    if (i % 2 === 0) return piece
+    if (piece.startsWith('`'))
+      return (
+        <code key={i} className="rounded-md bg-black/30 px-1.5 py-0.5 font-mono text-[0.88em] text-sky-200">
+          {piece.slice(1, -1)}
+        </code>
+      )
+    return (
+      <strong key={i} className="font-semibold text-zinc-50">
+        {piece.slice(2, -2)}
+      </strong>
+    )
+  })
 }
 
 // SEARCH/REPLACE edit blocks (complete, or still streaming in) shown as one line each: DoAide
@@ -46,16 +66,16 @@ function Body({ content }) {
       codeLines(part.value) <= SHOWN_CODE_LINES ? (
         <Code key={i} value={part.value} />
       ) : (
-        <details key={i} data-testid="collapsed-code" className="my-1 text-xs text-zinc-500">
-          <summary className="cursor-pointer select-none hover:text-zinc-300">
+        <details key={i} data-testid="collapsed-code" className="my-1.5 text-xs text-zinc-400">
+          <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-full bg-black/25 px-2.5 py-1 hover:text-zinc-200">
             Show code ({codeLines(part.value)} lines{part.lang ? `, ${part.lang}` : ''})
           </summary>
           <Code value={part.value} />
         </details>
       )
     ) : (
-      <span key={i} className="whitespace-pre-wrap">
-        {part.value}
+      <span key={i} className="whitespace-pre-wrap break-words">
+        <Inline text={part.value} />
       </span>
     ),
   )
@@ -109,9 +129,9 @@ function Checks({ checks }) {
   const failed = (checks?.items ?? []).filter((c) => !c.ok)
   if (!failed.length) return null
   return (
-    <ul data-testid="checks" className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+    <ul data-testid="checks" className="mt-1 flex max-w-full flex-col gap-0.5 break-words px-1 text-[11px] [overflow-wrap:anywhere]">
       {failed.map((c, i) => (
-        <li key={i} className="text-red-300/90">
+        <li key={i} className="text-amber-300/90">
           ✗ {c.name}: {c.detail}
         </li>
       ))}
@@ -134,7 +154,7 @@ const TOOL_LABELS = {
 
 function ClaudeBadge({ tool, label = 'Claude Code' }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
       {label}
       {tool && <span className="text-amber-300/60">· {TOOL_LABELS[tool] ?? tool}</span>}
     </span>
@@ -143,7 +163,7 @@ function ClaudeBadge({ tool, label = 'Claude Code' }) {
 
 function Diff({ text }) {
   return (
-    <pre className="overflow-x-auto bg-black/40 p-2 font-mono text-[12px] leading-snug">
+    <pre className="max-h-80 overflow-auto bg-black/40 p-2 font-mono text-[12px] leading-snug">
       {text.split('\n').map((line, i) => {
         let color = 'text-zinc-400'
         if (line.startsWith('+++') || line.startsWith('---')) color = 'text-zinc-500'
@@ -177,8 +197,17 @@ export function changeHeadline(changes) {
   return `${files} discarded`
 }
 
-// Edits under a reply: chat edits are written at once, with no confirmation step and no Undo
-// button (`/undo` in the chat still restores the files). Diffs are one click away, collapsed by default.
+function Chevron({ open }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform ${open ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  )
+}
+
+// Edits under a reply, as a compact card inside the bubble: one line per file with its +/- counts,
+// the diff one tap away. Chat edits are written at once, with no confirmation step and no Undo
+// button (`/undo` in the chat still restores the files).
 export function ChangeSet({ changes }) {
   // Diffs start collapsed: the reply is the summary, the code is in the files.
   const [open, setOpen] = useState(() => new Set())
@@ -189,30 +218,33 @@ export function ChangeSet({ changes }) {
       return next
     })
   return (
-    <div data-testid="changeset" className="mt-3 overflow-hidden rounded-md border border-zinc-800">
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/60 px-3 py-1.5 text-xs">
-        <span data-testid="changeset-status" className={CHANGE_STATUS[changes.status] ?? 'text-zinc-400'}>
+    <div data-testid="changeset" className="mt-2.5 overflow-hidden rounded-xl bg-black/25 text-xs">
+      <div className="flex items-center gap-1.5 px-3 pb-1 pt-2">
+        <svg viewBox="0 0 24 24" aria-hidden="true" className={`h-3.5 w-3.5 ${CHANGE_STATUS[changes.status] ?? 'text-zinc-400'}`} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 20h4L19 9l-4-4L4 16v4z" />
+        </svg>
+        <span data-testid="changeset-status" className={`font-medium ${CHANGE_STATUS[changes.status] ?? 'text-zinc-400'}`}>
           {changeHeadline(changes)}
         </span>
       </div>
       {changes.files.map((file) => (
-        <div key={file.path} className="border-b border-zinc-800/60 last:border-b-0">
+        <div key={file.path}>
           <button
             type="button"
             onClick={() => toggle(file.path)}
-            className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left font-mono text-xs hover:bg-zinc-900"
+            aria-expanded={open.has(file.path)}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-white/[0.04]"
           >
-            <span className="truncate text-zinc-200">
-              {file.path}
-              {file.new_file && <span className="ml-2 text-zinc-500">new</span>}
-            </span>
-            <span className="shrink-0">
+            <Chevron open={open.has(file.path)} />
+            <span className="min-w-0 flex-1 truncate font-mono text-zinc-200">{file.path}</span>
+            {file.new_file && <span className="shrink-0 rounded bg-sky-500/15 px-1.5 text-[10px] text-sky-300">new</span>}
+            <span className="shrink-0 font-mono">
               <span className="text-emerald-400">+{file.additions}</span>{' '}
               <span className="text-red-400">-{file.deletions}</span>
             </span>
           </button>
           {file.problems?.length > 0 && (
-            <ul className="px-3 pb-1.5 text-xs text-amber-300">
+            <ul className="px-3 pb-1.5 pl-8 text-amber-300">
               {file.problems.map((p, i) => (
                 <li key={i}>⚠ {p}</li>
               ))}
@@ -222,12 +254,13 @@ export function ChangeSet({ changes }) {
         </div>
       ))}
       {changes.problems?.length > 0 && (
-        <ul className="border-t border-zinc-800 px-3 py-1.5 text-xs text-amber-300">
+        <ul className="border-t border-white/[0.06] px-3 py-1.5 text-amber-300">
           {changes.problems.map((p, i) => (
             <li key={i}>⚠ {p}</li>
           ))}
         </ul>
       )}
+      <div className="h-1" />
     </div>
   )
 }
@@ -243,18 +276,94 @@ function Elapsed({ since }) {
   return seconds === null ? null : <span className="tabular-nums"> {seconds}s</span>
 }
 
+// Three bouncing dots, as in a messaging app while the other side types.
+function TypingDots() {
+  return (
+    <span aria-hidden="true" className="inline-flex items-center gap-1 py-1">
+      {[0, 1, 2].map((i) => (
+        <span key={i} className="typing-dot h-2 w-2 rounded-full bg-zinc-400" style={{ animationDelay: `${i * 0.16}s` }} />
+      ))}
+    </span>
+  )
+}
+
+function Avatar() {
+  return (
+    <div aria-hidden="true" className="mb-5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-xs font-semibold text-white">
+      D
+    </div>
+  )
+}
+
+// The reply's progress in a few words: working, done, stopped or failed; failed checks say "needs a look".
+export function replyStatus(message) {
+  if (message.status === 'streaming') return { label: message.content ? 'Writing…' : 'Working…', tone: 'text-sky-300' }
+  if (message.status === 'error') return { label: 'Couldn’t finish', tone: 'text-red-300' }
+  if (message.status === 'stopped') return { label: 'Stopped', tone: 'text-zinc-400' }
+  if ((message.meta?.checks?.items ?? []).some((c) => !c.ok)) return { label: 'Needs a look', tone: 'text-amber-300' }
+  return { label: 'Done', tone: 'text-emerald-300/90' }
+}
+
+function Reply({ message }) {
+  const streaming = message.status === 'streaming'
+  const foot = footer(message.meta)
+  const changes = message.meta?.changes
+  const status = replyStatus(message)
+  const error = message.status === 'error'
+  return (
+    <div className="flex items-end gap-2">
+      <Avatar />
+      <div className="flex min-w-0 max-w-[88%] flex-col items-start sm:max-w-[80%]">
+        <div
+          className={`min-w-0 max-w-full rounded-[20px] rounded-bl-md px-4 py-2.5 leading-relaxed ${
+            error ? 'bg-red-500/10 text-red-200' : 'bg-zinc-800/80 text-zinc-100'
+          }`}
+        >
+          {streaming && !message.content && (
+            <div className="flex flex-col gap-0.5">
+              <TypingDots />
+              <div data-testid="working" className="text-xs text-zinc-400">
+                Working on your laptop…
+                <Elapsed since={message.created_at} />
+              </div>
+            </div>
+          )}
+          {message.content ? <Body content={message.content} /> : null}
+          {streaming && message.content && (
+            <span className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-zinc-400 align-middle" />
+          )}
+          {changes?.files?.length > 0 && <ChangeSet changes={changes} />}
+        </div>
+        <div className="mt-1 flex max-w-full flex-wrap items-center gap-x-1.5 px-1 text-[11px] text-zinc-500 [overflow-wrap:anywhere]">
+          <span data-testid="reply-status" className={status.tone}>
+            {status.label}
+          </span>
+          {foot && !streaming && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span data-testid="usage" title={foot.title}>
+                {foot.text}
+              </span>
+            </>
+          )}
+        </div>
+        {!streaming && <Checks checks={message.meta?.checks} />}
+      </div>
+    </div>
+  )
+}
+
 function Message({ message }) {
   const via = message.meta?.via === 'mcp'
   // A task Dispatch sent through the Tasks API: labelled like a Claude Code call; the reply is a normal one.
   const dispatch = message.meta?.via === 'dispatch'
   if ((via || dispatch) && message.role === 'user') {
     return (
-      <div
-        data-testid={dispatch ? 'dispatch-instruction' : 'mcp-instruction'}
-        className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2"
-      >
+      <div data-testid={dispatch ? 'dispatch-instruction' : 'mcp-instruction'} className="flex flex-col items-end gap-1">
         {dispatch ? <ClaudeBadge label="Dispatch" /> : <ClaudeBadge tool={message.meta.tool} />}
-        <div className="mt-1.5 whitespace-pre-wrap text-zinc-100">{message.content}</div>
+        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-[20px] rounded-br-md bg-amber-500/15 px-4 py-2.5 text-zinc-100 sm:max-w-[75%]">
+          {message.content}
+        </div>
       </div>
     )
   }
@@ -262,11 +371,11 @@ function Message({ message }) {
     // Tool output (file reads, commands): kept, but folded away.
     const first = message.content.split('\n')[0] || '(no output)'
     return (
-      <details className="-mt-3 rounded-md border border-zinc-800/80 text-xs">
+      <details className="ml-9 max-w-[85%] self-start rounded-xl bg-zinc-900/80 text-xs">
         <summary className={`cursor-pointer truncate px-3 py-1.5 font-mono ${message.status === 'error' ? 'text-red-300' : 'text-zinc-400'}`}>
           {first}
         </summary>
-        <pre className="max-h-80 overflow-auto border-t border-zinc-800 bg-black/40 p-2 font-mono text-[12px] text-zinc-300">
+        <pre className="max-h-80 overflow-auto rounded-b-xl bg-black/40 p-2 font-mono text-[12px] text-zinc-300">
           {message.content}
         </pre>
       </details>
@@ -275,50 +384,62 @@ function Message({ message }) {
   if (message.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-zinc-800 px-4 py-2 text-zinc-100">
+        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-[20px] rounded-br-md bg-sky-600 px-4 py-2.5 text-white sm:max-w-[75%]">
           {message.content}
         </div>
       </div>
     )
   }
   if (message.role === 'system') {
+    // Command output and notices: a quiet note in the middle of the conversation.
     return (
-      <div className="whitespace-pre-wrap border-l-2 border-zinc-700 pl-3 font-mono text-xs text-zinc-400">
+      <div className="mx-auto w-full max-w-[92%] whitespace-pre-wrap break-words rounded-2xl bg-zinc-900/70 px-4 py-2.5 font-mono text-xs leading-relaxed text-zinc-400">
         {message.content}
       </div>
     )
   }
-  const streaming = message.status === 'streaming'
   if (message.status === 'queued') {
-    return <div className="text-sm text-zinc-500">Queued for your laptop…</div>
+    return (
+      <div className="flex items-end gap-2">
+        <Avatar />
+        <div className="rounded-[20px] rounded-bl-md bg-zinc-800/50 px-4 py-2.5 text-sm text-zinc-400">Queued for your laptop…</div>
+      </div>
+    )
   }
-  const foot = footer(message.meta)
-  const changes = message.meta?.changes
+  return <Reply message={message} />
+}
+
+const SUGGESTIONS = ['What does this project do?', 'Explain the main file in simple words', 'Find bugs in my latest changes']
+
+function Welcome({ onSend }) {
   return (
-    <div className={`leading-relaxed ${message.status === 'error' ? 'text-red-300' : 'text-zinc-200'}`}>
-      {streaming && !message.content && (
-        <div data-testid="working" className="text-sm text-zinc-500">
-          Working on your laptop…
-          <Elapsed since={message.created_at} />
+    <div className="mt-[12vh] flex flex-col items-center gap-4 px-2 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-xl font-semibold text-white">
+        D
+      </div>
+      <div>
+        <p className="text-lg font-medium text-zinc-100">What can I help with?</p>
+        <p className="mt-1 text-sm text-zinc-500">Ask anything about your code. Type /help for commands.</p>
+      </div>
+      {onSend && (
+        <div className="flex flex-wrap justify-center gap-2">
+          {SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onSend(s)}
+              className="rounded-full border border-white/[0.08] bg-zinc-900 px-3.5 py-2 text-sm text-zinc-300 hover:border-sky-500/40 hover:text-zinc-100"
+            >
+              {s}
+            </button>
+          ))}
         </div>
       )}
-      {message.content ? <Body content={message.content} /> : null}
-      {streaming && message.content && (
-        <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-zinc-400 align-middle" />
-      )}
-      {changes?.files?.length > 0 && <ChangeSet changes={changes} />}
-      {message.status === 'stopped' && <div className="mt-1 text-xs text-zinc-500">stopped</div>}
-      {foot && !streaming && (
-        <div data-testid="usage" title={foot.title} className="mt-1.5 text-[11px] text-zinc-600">
-          {foot.text}
-        </div>
-      )}
-      {!streaming && <Checks checks={message.meta?.checks} />}
     </div>
   )
 }
 
-export default function MessageList({ messages }) {
+export default function MessageList({ messages, onSend = null }) {
   const end = useRef(null)
   const last = messages[messages.length - 1]
   useEffect(() => {
@@ -326,13 +447,9 @@ export default function MessageList({ messages }) {
   }, [messages.length, last?.content])
 
   return (
-    <main className="flex-1 overflow-y-auto">
-      <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6 text-[15px]">
-        {messages.length === 0 && (
-          <p className="mt-24 text-center text-sm text-zinc-500">
-            Ask anything about your code. Type /help for commands.
-          </p>
-        )}
+    <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-3 py-5 text-[15px] sm:px-4">
+        {messages.length === 0 && <Welcome onSend={onSend} />}
         {messages.map((m) => (
           <Message key={m.id} message={m} />
         ))}

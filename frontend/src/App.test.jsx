@@ -384,6 +384,41 @@ describe('Claude Code activity and diff previews', () => {
     expect(screen.getByTestId('working').textContent).toContain('Working on your laptop')
   })
 
+  it('shows each reply as a bubble with its progress in a few words', async () => {
+    await boot(false, {
+      messages: [
+        { id: 'u', role: 'user', content: 'what does router.py do?', status: 'done' },
+        { id: 'a', role: 'assistant', content: 'It picks the model.', status: 'done' },
+        { id: 'b', role: 'assistant', content: 'Half', status: 'streaming' },
+        { id: 'c', role: 'assistant', content: 'Edited.', status: 'done', meta: { checks: { items: [{ name: 'tests', ok: false, detail: '1 failed' }] } } },
+        { id: 'd', role: 'assistant', content: 'Partial.', status: 'stopped' },
+      ],
+    })
+    const labels = screen.getAllByTestId('reply-status').map((s) => s.textContent)
+    expect(labels).toEqual(['Done', 'Writing…', 'Needs a look', 'Stopped'])
+  })
+
+  it('shows inline code and bold in replies without the markup', async () => {
+    await boot(false, { messages: [{ id: 'r', role: 'assistant', content: 'Call `route()` **first**.', status: 'done' }] })
+    expect(screen.getByText('route()', { selector: 'code' })).toBeTruthy()
+    expect(screen.getByText('first', { selector: 'strong' })).toBeTruthy()
+    expect(document.body.textContent).not.toContain('`route()`')
+  })
+
+  it('an empty chat offers suggestions that send in one tap', async () => {
+    const ws = await boot(false, { messages: [] })
+    expect(screen.getByText('What can I help with?')).toBeTruthy()
+    await act(async () => fireEvent.click(screen.getByText('What does this project do?')))
+    expect(ws.sent.at(-1)).toEqual({ type: 'send', text: 'What does this project do?' })
+  })
+
+  it('sends with the round send button', async () => {
+    const ws = await boot(false)
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'hello' } })
+    await act(async () => fireEvent.click(screen.getByLabelText('Send')))
+    expect(ws.sent.at(-1)).toEqual({ type: 'send', text: 'hello' })
+  })
+
 })
 
 describe('laptop setup (hub)', () => {

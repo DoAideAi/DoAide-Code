@@ -9,6 +9,31 @@ body,
 }
 
 body {
-  background: #0b0d10;
+  background: #0f1013;
   color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The "typing" dots under a reply that has no text yet. */
+@keyframes typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.typing-dot {
+  animation: typing 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot {
+    animation: none;
+  }
 }
