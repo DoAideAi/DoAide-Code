@@ -90,6 +90,11 @@ def transcript_prompt(job: Job) -> str:
     return "\n".join(lines)
 
 
+def user_message(job: Job) -> str:
+    """The request as a chat model receives it: the project files first, then the request."""
+    return f"{job.context}\n\n# Request\n{job.prompt}" if job.context else job.prompt
+
+
 def with_context(job: Job) -> str:
     """The transcript prompt, preceded by the project map when there is one."""
     prompt = transcript_prompt(job)

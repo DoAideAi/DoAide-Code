@@ -30,6 +30,7 @@ from .context import Ranking, git_context, mentioned_paths, rank_files
 from .db import Store
 from .detect import ModelDetector, answer_access, answer_meta, meta_question
 from .executors import Executor, ExecutorError, Job, Turn, build_executors
+from .executors.base import user_message
 from .fastpath import direct_answer, math_answer
 from .history import fit_history
 from .prompts import PROMPT_VERSION
@@ -42,6 +43,7 @@ from .validate import (
     trim_reply,
     early_problem,
     edit_checks,
+    FORMAT_SLIPS,
     incomplete_reason,
     off_topic_reason,
 )
@@ -485,7 +487,7 @@ async def _local_repair(
     executor: Executor, run: Job, job: Job, first: str, fix: str, store: Store, source: str
 ) -> Outcome | None:
     """The same local model, asked once to fix its own answer (buffered, never streamed)."""
-    retry = replace(run, prompt=fix, history=[*run.history, Turn("user", job.prompt), Turn("assistant", first)])
+    retry = _repair_job(run, fix, first)
     repaired = Outcome()
 
     async def hold(_chunk: str) -> None:
@@ -499,6 +501,13 @@ async def _local_repair(
     return repaired if repaired.content.strip() else None
 
 
+def _repair_job(run: Job, fix: str, first: str) -> Job:
+    """The first request replayed word for word (files included), its answer, then the fix: the
+    same prefix, so a local model reuses its prompt cache and reads only the new turn."""
+    history = [*run.history, Turn("user", user_message(run)), Turn("assistant", first)]
+    return replace(run, prompt=fix, context="", history=history)
+
+
 def _escalation(candidates: list[Executor]) -> Executor | None:
     """The paid executor a failed local first attempt goes to (Sonnet when it is available)."""
     return next((e for e in candidates[1:] if not is_local(e)), None)
@@ -510,7 +519,11 @@ async def _vet(job: Job, answer: str, kind: str) -> tuple[str | None, list[dict]
     for problems the model can fix itself, the prompt asking it to."""
     code_checks = await check_code_blocks(answer)
     if reason := incomplete_reason(answer, kind):
-        return reason, code_checks, None
+        # A malformed edit block (a finished answer, not a truncated one) is a format slip the
+        # model fixes when told; anything else incomplete goes up.
+        slip = f"{reason}: each block is <<<<<<< SEARCH, the exact current lines, =======, the new lines, >>>>>>> REPLACE"
+        fix = repair_prompt(job.prompt, [slip]) if reason in FORMAT_SLIPS else None
+        return reason, code_checks, fix
     if bad := next((c for c in code_checks if not c["ok"]), None):
         fix = (
             f"{job.prompt}\n\nIn your previous answer, the {bad['name']} does not parse: {bad['detail']}.\n"
@@ -652,11 +665,7 @@ async def _preview_changes(
     # One repair round, with the same executor, when checks fail (never on fallback executors).
     if changeset.all_problems and executor is not None and run is not None and not executor.fallback:
         first_answer = outcome.content
-        retry = replace(
-            run,
-            prompt=repair_prompt(job.prompt, changeset.all_problems),
-            history=[*run.history, Turn("user", job.prompt), Turn("assistant", first_answer)],
-        )
+        retry = _repair_job(run, repair_prompt(job.prompt, changeset.all_problems), first_answer)
         repaired = Outcome()
 
         async def hold(_chunk: str) -> None:

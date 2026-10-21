@@ -55,6 +55,9 @@ _NO_ACCESS = re.compile(
 )
 NO_ACCESS_REASON = "the answer says DoAide cannot access your files, but it can"
 NEEDS_FILES_REASON = "the model said it could not see the code it needed"
+CUT_OFF_EDIT = "an edit block was cut off"
+# Incomplete answers a model fixes when told what was wrong (not missing context or a refusal).
+FORMAT_SLIPS = {CUT_OFF_EDIT}
 _EDIT_KINDS = {"edit", "test", "debug"}
 _LANGS = {"python": ".py", "py": ".py", "json": ".json", "javascript": ".js", "js": ".js", "mjs": ".js"}
 
@@ -75,7 +78,7 @@ def incomplete_reason(answer: str, kind: str, *, reads_files: bool = False) -> s
     if text.count("```") % 2:
         return "a code block was left open"
     if text.count("<<<<<<< SEARCH") != text.count(">>>>>>> REPLACE"):
-        return "an edit block was cut off"
+        return CUT_OFF_EDIT
     if not reads_files and _NEEDS_FILES.search(text[:600]):
         return NEEDS_FILES_REASON
     if kind in _EDIT_KINDS and "```" not in text and not parse_edits(text) and len(text) < 400:

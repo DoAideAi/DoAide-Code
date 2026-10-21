@@ -290,6 +290,10 @@ def build_changeset(root: Path, edits: list[Edit]) -> Changeset:
         if not edit.search.strip():
             if change.original is None or not change.new.strip():
                 change.new = edit.replace
+            elif _is_new_code(change.new, edit.replace):
+                # Models add a function with an empty SEARCH: new code, so it goes at the end.
+                gap = "\n\n\n" if rel.endswith(".py") else "\n\n"
+                change.new = change.new.rstrip("\n") + gap + edit.replace
             else:
                 change.problems.append(f"{rel}: empty SEARCH for an existing file; edit skipped")
             continue
@@ -396,6 +400,14 @@ async def propose(root: Path, answer: str) -> Changeset | None:
     changeset = await asyncio.to_thread(build_changeset, root, edits)
     await validate(changeset)
     return changeset
+
+
+def _is_new_code(current: str, addition: str) -> bool:
+    """Whether code written for an empty SEARCH is an addition (almost none of its lines are in the
+    file yet) rather than a rewrite of the whole file."""
+    lines = {line.strip() for line in addition.splitlines() if len(line.strip()) > 3}
+    have = {line.strip() for line in current.splitlines()}
+    return bool(lines) and len(lines & have) <= len(lines) // 5
 
 
 def repair_prompt(request: str, problems: list[str]) -> str:

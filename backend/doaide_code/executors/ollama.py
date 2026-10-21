@@ -20,7 +20,7 @@ import httpx
 
 from ..usage import Usage
 from ..prompts import few_shot, system_prompt
-from .base import Executor, ExecutorError, Job
+from .base import Executor, ExecutorError, Job, user_message
 
 # Tokens kept free for the answer, and the window bounds (qwen2.5-coder supports 32k).
 ANSWER_RESERVE = 3072
@@ -175,8 +175,7 @@ class OllamaExecutor(Executor):
         if job.summary:
             messages.append({"role": "system", "content": job.summary})
         messages += [{"role": t.role, "content": t.content} for t in job.history]
-        prompt = f"{job.context}\n\n# Request\n{job.prompt}" if job.context else job.prompt
-        messages.append({"role": "user", "content": prompt})
+        messages.append({"role": "user", "content": user_message(job)})
         payload = {
             "model": model,
             "messages": messages,
