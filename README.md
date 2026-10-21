@@ -25,7 +25,7 @@ backend/            FastAPI harness server (Python 3.11+)
     runner.py       one prompt through the executors with fallback (laptop only)
     mcp_server.py   `doaide-code mcp`: MCP server (stdio) exposing laptop tools to Claude
     router.py       Router Brain (local keyword heuristics)
-    changes.py      edit blocks -> diff preview, checks, /apply
+    changes.py      edit blocks -> checks, write, /undo, /apply
     chat.py         orchestration: commands, routing, fallback, persistence, fan-out
     executors/      ollama.py, claude_cli.py, codex_cli.py (all local, no API keys)
     db.py           SQLite: projects, sessions, messages, executor_stats
@@ -71,13 +71,15 @@ always answered from that report and never sent to a model: small local models a
 training data ("I am GPT-4, made by OpenAI"). Earlier exchanges like that are also left out of
 the history sent to models, and cached answers are cleared whenever the server or agent starts.
 
-## Model picker
+## Models (view only)
 
-Above the input, **Model** is either *Auto* (the router picks) or one detected model: an Ollama
-model from `ollama list`, Claude CLI `haiku` / `sonnet` / `opus`, or Codex CLI. The choice is
-stored per user on the server, so every device uses it, and it runs alone (no fallback). Codex
-uses the model from `~/.codex/config.toml` by default, because a ChatGPT login rejects most
-`--model` names; add others with `DOAIDE_CODEX_MODELS=o3,gpt-4o` if your login allows them.
+There is no model picker: routing picks the model for every task (see below). The models menu in
+the top bar lists what the laptop detected, and **Compare cost & quality** opens the Models page:
+each model's tasks, quality, cost per task, cost relative to Claude Sonnet, and median time,
+measured on your own tasks (not published benchmarks). Quality is, for local models, how often
+the first try was good enough to show without escalating; for paid ones, how often an answer
+passed every check. Codex uses the model from `~/.codex/config.toml`, because a ChatGPT login
+rejects most `--model` names.
 
 ## Routing
 
@@ -133,13 +135,16 @@ text and pass syntax and ruff. Results show under each reply with the model that
 **Usage dashboard.** *Usage* in the top bar: tasks, tokens and API-equivalent cost per day and
 per model, which model handled each task, and how much the free models saved versus Sonnet.
 
-## Code changes: preview, then apply
+## Code changes: written, with undo
 
-Models answer with SEARCH/REPLACE edit blocks and never write files. Each answer's
-blocks become a changeset: per-file diffs shown under the reply, quick checks (syntax,
-ruff) on the result, and one automatic repair round if they fail. Nothing is written
-until **Apply** in the UI, `/apply [<id>]`, or the MCP `apply_changes` tool; applying
-refuses if a file changed since the preview. Every reply also shows its tokens and cost.
+Models answer with SEARCH/REPLACE edit blocks and never write files themselves. Each answer's
+blocks become a changeset with quick checks (target text found, syntax, ruff) and one silent
+repair round if they fail. A changeset that passes every check is written to the files at once
+and the reply is a one-line summary: no code in the chat, the diff collapsed under it, and
+**Undo** (`/undo [<id>]`) to put the files back (refused if you edited them since). A changeset
+that fails its checks is held back: **Apply** / `/apply [<id>]` writes it anyway. Requests from
+Claude Code over MCP stay proposals for `apply_changes`, so DoAide never writes under another
+agent. Long code blocks in other answers are collapsed behind "Show code".
 
 ## Chat commands
 
@@ -150,7 +155,8 @@ refuses if a file changed since the preview. Every reply also shows its tokens a
 /models                      what this laptop can run, detected (not guessed)
 /remove-project <name>
 /switch-project <name>       executors run with this folder as their working dir
-/apply [<id>]   /discard [<id>]   proposed changes (latest pending if no id)
+/undo [<id>]                 put back the files DoAide changed (latest if no id)
+/apply [<id>]   /discard [<id>]   changes that were held back (latest pending if no id)
 /usage                       tokens and cost today, this week, and this month
 /projects   /new   /help
 ```

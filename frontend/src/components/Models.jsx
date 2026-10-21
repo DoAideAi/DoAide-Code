@@ -21,7 +21,7 @@ export function toolLine(tool) {
   return tool.version && tool.usable ? `${state} · v${tool.version}` : state
 }
 
-function ToolRow({ tool }) {
+export function ToolRow({ tool }) {
   return (
     <li data-testid={`model-tool-${tool.id}`} data-state={tool.state} className="px-3 py-2">
       <div className="flex items-center gap-2 text-sm">
@@ -34,8 +34,9 @@ function ToolRow({ tool }) {
   )
 }
 
-// Top bar: how many tools are usable, with the detected details in a dropdown.
-export default function ModelsMenu({ models }) {
+// Top bar: how many tools are usable, with the detected details in a dropdown and a link to the
+// cost/quality comparison. View only: routing picks the model for each task.
+export default function ModelsMenu({ models, onCompare = null }) {
   const [open, setOpen] = useState(false)
   const box = useRef(null)
 
@@ -71,6 +72,19 @@ export default function ModelsMenu({ models }) {
               <ToolRow key={t.id} tool={t} />
             ))}
           </ul>
+          {onCompare && (
+            <button
+              type="button"
+              data-testid="models-compare-open"
+              onClick={() => {
+                setOpen(false)
+                onCompare()
+              }}
+              className="w-full border-t border-zinc-800 px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-900"
+            >
+              Compare cost &amp; quality →
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -95,46 +109,5 @@ export function NoModelsBanner({ models }) {
         <p className="mt-2 text-zinc-500">This updates by itself within a minute, or type /models to check now.</p>
       </div>
     </div>
-  )
-}
-
-const AUTO = 'auto'
-const pinValue = (pin) => (pin ? `${pin.tool}/${pin.model}` : AUTO)
-
-// Which model runs the next prompts: Auto (the router picks) or one detected model. The choice
-// is stored on the server, so every device shows and uses the same one.
-export function ModelPicker({ models, pref, onChange, disabled }) {
-  const groups = (models?.tools ?? []).filter((t) => t.usable && t.choices?.length)
-  const current = pinValue(pref)
-  const listed = groups.some((t) => t.choices.some((m) => pinValue({ tool: t.id, model: m }) === current))
-  return (
-    <label className="flex items-center gap-2 text-xs text-zinc-500">
-      <span>Model</span>
-      <select
-        data-testid="model-picker"
-        aria-label="Model"
-        value={current}
-        disabled={disabled}
-        onChange={(e) => {
-          const value = e.target.value
-          if (value === AUTO) return onChange(null)
-          const [tool, ...rest] = value.split('/')
-          onChange({ tool, model: rest.join('/') })
-        }}
-        className="max-w-[60vw] rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 focus:border-zinc-600 focus:outline-none"
-      >
-        <option value={AUTO}>Auto (cheapest that can do it)</option>
-        {pref && !listed && <option value={current}>{`${pref.tool}: ${pref.model} (unavailable)`}</option>}
-        {groups.map((t) => (
-          <optgroup key={t.id} label={t.label}>
-            {t.choices.map((m) => (
-              <option key={m} value={pinValue({ tool: t.id, model: m })}>
-                {`${t.label}: ${m}`}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-    </label>
   )
 }

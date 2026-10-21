@@ -9,7 +9,7 @@ import uuid
 from typing import Any
 
 from .commands import is_command, is_models_command, run_command
-from .detect import clean_pin, format_report
+from .detect import format_report
 from .db import Store
 from .executors import Job, Turn
 from .router import RouterBrain
@@ -80,15 +80,8 @@ class ChatService:
             "project": project["name"] if project else None,
             "status": self.status(user_email),
             "mode": "local",
-            "model_pref": self.store.model_pref(user_email),
             "messages": [public_message(m) for m in self.store.list_messages(session["id"])],
         }
-
-    async def set_model(self, user_email: str, value: Any) -> None:
-        """Pick the model for this user's prompts (None: automatic routing), on every device."""
-        pref = clean_pin(value)
-        self.store.set_model_pref(user_email, pref)
-        await self.hub.publish(user_email, {"type": "model_pref", "pref": pref})
 
     async def _status(self, user_email: str) -> None:
         await self.hub.publish(user_email, {"type": "status", "state": self.status(user_email)})
@@ -179,7 +172,6 @@ class ChatService:
                 outcome,
                 on_delta,
                 project=project["name"] if project else None,
-                pin=self.store.model_pref(user_email),
             )
         except asyncio.CancelledError:
             outcome.status = "stopped"

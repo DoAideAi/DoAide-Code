@@ -86,7 +86,29 @@ def test_apply_refuses_when_the_file_changed_since_preview(repo):
     assert not (repo / "notes.txt").exists()  # nothing written
 
 
-async def test_run_job_proposes_then_apply_writes(repo, store):
+async def test_chat_edits_that_pass_are_written_and_undo_restores_them(repo, store):
+    router = RouterBrain([FakeExecutor("ollama", 0, [ANSWER])])
+    outcome = Outcome()
+
+    async def on_delta(_):
+        pass
+
+    before = (repo / "app.py").read_text()
+    await run_job(router, store, Job(prompt="rename old to new", cwd=repo), outcome, on_delta)
+    # Only the summary in the reply: the code went to the files.
+    assert outcome.content == "Rename the helper." and "<<<<<<<" not in outcome.content
+    changes = outcome.meta()["changes"]
+    assert changes["status"] == "applied" and len(changes["files"]) == 2
+    assert "def new" in (repo / "app.py").read_text() and (repo / "notes.txt").read_text() == "hello\n"
+
+    store.link_changeset(changes["id"], "reply-1")
+    result = run_command(store, "owner@example.com", "/undo")
+    assert result.text.startswith("Undid changes to 2 file(s)") and result.changes == ("reply-1", {**changes, "status": "undone"})
+    assert (repo / "app.py").read_text() == before and not (repo / "notes.txt").exists()
+    assert "No applied changes to undo" in run_command(store, "owner@example.com", "/undo").text
+
+
+async def test_undo_refuses_files_edited_since(repo, store):
     router = RouterBrain([FakeExecutor("ollama", 0, [ANSWER])])
     outcome = Outcome()
 
@@ -94,16 +116,24 @@ async def test_run_job_proposes_then_apply_writes(repo, store):
         pass
 
     await run_job(router, store, Job(prompt="rename old to new", cwd=repo), outcome, on_delta)
+    (repo / "app.py").write_text("edited by hand\n")
+    assert "changed after DoAide wrote it" in run_command(store, "owner@example.com", "/undo").text
+    assert (repo / "app.py").read_text() == "edited by hand\n" and (repo / "notes.txt").exists()
+
+
+async def test_mcp_edits_are_proposed_then_apply_writes(repo, store):
+    router = RouterBrain([FakeExecutor("ollama", 0, [ANSWER])])
+    outcome = Outcome()
+
+    async def on_delta(_):
+        pass
+
+    await run_job(router, store, Job(prompt="rename old to new", cwd=repo), outcome, on_delta, source="mcp")
     assert outcome.content == "Rename the helper."
     changes = outcome.meta()["changes"]
-    assert changes["status"] == "pending" and len(changes["files"]) == 2
-    assert "def old" in (repo / "app.py").read_text()
-
-    store.link_changeset(changes["id"], "reply-1")
+    assert changes["status"] == "pending" and "def old" in (repo / "app.py").read_text()
     result = run_command(store, "owner@example.com", "/apply")
-    assert result.text.startswith("Applied 2 file(s)")
-    assert result.changes[0] == "reply-1" and result.changes[1]["status"] == "applied"
-    assert "def new" in (repo / "app.py").read_text() and (repo / "notes.txt").read_text() == "hello\n"
+    assert result.text.startswith("Applied 2 file(s)") and "def new" in (repo / "app.py").read_text()
     assert "already applied" in run_command(store, "owner@example.com", f"/apply {changes['id']}").text
 
 

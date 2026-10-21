@@ -5,6 +5,7 @@ import {
   createAgentToken,
   downloadInstaller,
   fetchConfig,
+  fetchModelComparison,
   fetchUsage,
   googleLogin,
   loadSession,
@@ -16,7 +17,8 @@ import {
 import Composer from './components/Composer.jsx'
 import { CodeViewer, FileTree } from './components/Files.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
-import { ModelPicker, NoModelsBanner } from './components/Models.jsx'
+import { NoModelsBanner } from './components/Models.jsx'
+import ModelsPage from './components/ModelsPage.jsx'
 import MessageList from './components/MessageList.jsx'
 import SetupPage from './components/SetupPage.jsx'
 import SignIn from './components/SignIn.jsx'
@@ -160,7 +162,6 @@ export default function App() {
     mode,
     agentOnline,
     models,
-    modelPref,
     connection,
     apply,
     setConnection,
@@ -173,7 +174,9 @@ export default function App() {
   const [openFile, setOpenFile] = useState(null)
   const [setupOpen, setSetupOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
+  const [modelsOpen, setModelsOpen] = useState(false)
   const loadUsage = useCallback((days) => fetchUsage(token, days), [token])
+  const loadComparison = useCallback((days) => fetchModelComparison(token, days), [token])
 
   // Every device can read and send; on the hub, prompts are queued and run by the laptop.
   useEffect(() => {
@@ -224,7 +227,22 @@ export default function App() {
         laptop={mode === 'hub' && connection === 'open' ? agentOnline : null}
         onLaptop={() => setSetupOpen(true)}
         models={connection === 'open' ? models : null}
-        onUsage={token ? () => setUsageOpen((v) => !v) : null}
+        onUsage={
+          token
+            ? () => {
+                setModelsOpen(false)
+                setUsageOpen((v) => !v)
+              }
+            : null
+        }
+        onModels={
+          token
+            ? () => {
+                setUsageOpen(false)
+                setModelsOpen(true)
+              }
+            : null
+        }
         sessions={
           token && {
             token,
@@ -236,7 +254,13 @@ export default function App() {
           }
         }
       />
-      {usageOpen && token ? (
+      {modelsOpen && token ? (
+        <ModelsPage
+          load={loadComparison}
+          models={connection === 'open' ? models : null}
+          onClose={() => setModelsOpen(false)}
+        />
+      ) : usageOpen && token ? (
         <UsagePage load={loadUsage} onClose={() => setUsageOpen(false)} />
       ) : setupOpen && token ? (
         <SetupPage
@@ -263,16 +287,6 @@ export default function App() {
                 disabled={connection !== 'open'}
                 onSend={send}
                 onStop={() => socket.current?.send({ type: 'stop' })}
-                toolbar={
-                  connection === 'open' && (models || modelPref) ? (
-                    <ModelPicker
-                      models={models}
-                      pref={modelPref}
-                      disabled={busy}
-                      onChange={(model) => socket.current?.send({ type: 'set_model', model })}
-                    />
-                  ) : null
-                }
               />
             </section>
           </div>

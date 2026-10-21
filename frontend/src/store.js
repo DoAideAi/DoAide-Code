@@ -13,7 +13,6 @@ export const initialChat = {
   // `codex login status`; null until the laptop (or local server) reports it.
   models: null,
   // The model picked in the UI ({ tool, model }), or null for automatic routing.
-  modelPref: null,
 }
 
 // Pure reducer for server events, kept separate from the store so it is easy to test.
@@ -32,7 +31,6 @@ export function applyEvent(state, event) {
         agentOnline: Boolean(event.agent_online),
         // Local snapshots leave models to a separate event; keep what we have.
         models: 'models' in event ? event.models : state.models,
-        modelPref: event.model_pref ?? null,
       }
     case 'message': {
       const exists = state.messages.some((m) => m.id === event.message.id)
@@ -76,8 +74,6 @@ export function applyEvent(state, event) {
     case 'agent':
       // A disconnected laptop's report is stale: nothing runs until it reconnects.
       return { ...state, agentOnline: event.online, models: event.online ? state.models : null }
-    case 'model_pref':
-      return { ...state, modelPref: event.pref ?? null }
     case 'models':
       return { ...state, models: event.models ?? null }
     case 'project':

@@ -10,7 +10,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-from .changes import apply_record
+from .changes import apply_record, undo_record
 from .db import Store
 from .files import FileAccessError
 from .workspace import DEFAULT_WORKSPACE, set_workspace, workspace_path
@@ -24,7 +24,8 @@ HELP = """Commands:
 /switch-project <name>       make a project active for this chat
 /projects                    list registered projects
 /workspace [<path>|reset]    show or change the default workspace folder
-/apply [<id>]                write the proposed changes (latest if no id)
+/undo [<id>]                 restore files DoAide changed (latest change if no id)
+/apply [<id>]                write changes that were held back (latest if no id)
 /discard [<id>]              drop proposed changes
 /models                      which models and CLIs this laptop can use (detected, not guessed)
 /usage                       tokens and cost today, this week, and this month
@@ -41,11 +42,13 @@ class CommandResult:
     changes: tuple[str | None, dict] | None = None
 
 
-def resolve_changeset(store: Store, changeset_id: str | None, verb: str) -> tuple[dict | None, str | None]:
-    row = store.get_changeset(changeset_id) if changeset_id else store.latest_changeset("pending")
+def resolve_changeset(
+    store: Store, changeset_id: str | None, verb: str, status: str = "pending"
+) -> tuple[dict | None, str | None]:
+    row = store.get_changeset(changeset_id) if changeset_id else store.latest_changeset(status)
     if row is None:
-        return None, f"No changes with id {changeset_id}." if changeset_id else f"No pending changes to {verb}."
-    if row["status"] != "pending":
+        return None, f"No changes with id {changeset_id}." if changeset_id else f"No {status} changes to {verb}."
+    if row["status"] != status:
         return None, f"Changes {row['id']} were already {row['status']}."
     return row, None
 
@@ -60,6 +63,19 @@ def apply_changes(store: Store, changeset_id: str | None = None) -> CommandResul
         return CommandResult(f"Not applied: {exc}")
     summary = store.set_changeset_status(row["id"], "applied")
     return CommandResult(f"Applied {len(paths)} file(s): {', '.join(paths)}", changes=(row["message_id"], summary))
+
+
+def undo_changes(store: Store, changeset_id: str | None = None) -> CommandResult:
+    """Restore the files an applied changeset wrote (the latest if no id)."""
+    row, error = resolve_changeset(store, changeset_id, "undo", status="applied")
+    if row is None:
+        return CommandResult(error or "")
+    try:
+        paths = undo_record(json.loads(row["record"]))
+    except (ValueError, FileAccessError, OSError) as exc:
+        return CommandResult(f"Not undone: {exc}")
+    summary = store.set_changeset_status(row["id"], "undone")
+    return CommandResult(f"Undid changes to {len(paths)} file(s): {', '.join(paths)}", changes=(row["message_id"], summary))
 
 
 def discard_changes(store: Store, changeset_id: str | None = None) -> CommandResult:
@@ -123,6 +139,8 @@ def run_command(store: Store, user_email: str, text: str, *, workspace: str = DE
         return CommandResult(HELP)
     if cmd == "/projects":
         return CommandResult(_format_projects(store, active["id"] if active else None))
+    if cmd == "/undo":
+        return undo_changes(store, args[0] if args else None)
     if cmd in {"/apply", "/discard"}:
         if len(args) > 1:
             return CommandResult(f"Usage: {cmd} [<id>]")

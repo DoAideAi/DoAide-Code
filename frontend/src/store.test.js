@@ -136,15 +136,6 @@ describe('models report', () => {
   })
 })
 
-describe('model preference', () => {
-  it('comes from snapshots and model_pref events', () => {
-    let s = applyEvent(initialChat, { type: 'snapshot', messages: [], model_pref: { tool: 'claude', model: 'opus' } })
-    expect(s.modelPref).toEqual({ tool: 'claude', model: 'opus' })
-    s = applyEvent(s, { type: 'model_pref', pref: null })
-    expect(s.modelPref).toBeNull()
-  })
-})
-
 describe('routeLabel', () => {
   it('names the model, marks free ones, and says when no model ran', () => {
     expect(routeLabel({ executor: 'ollama', model: 'qwen2.5-coder:7b', free: true })).toBe('qwen2.5-coder:7b (free)')

@@ -106,6 +106,8 @@ function mockFetch() {
             })
       case '/api/file':
         return reply({ path: decodeURIComponent(query.slice(5)), content: 'line one\nline two\n', binary: false })
+      case '/api/models/compare':
+        return reply(COMPARE)
       case '/api/usage': {
         const days = Number(new URLSearchParams(query).get('days'))
         return reply({ ...USAGE, days, daily: USAGE.daily.slice(0, days) })
@@ -148,7 +150,6 @@ beforeEach(() => {
     mode: 'local',
     agentOnline: false,
     models: null,
-    modelPref: null,
     connection: 'closed',
   })
   localStorage.clear()
@@ -318,7 +319,7 @@ describe('Claude Code activity and diff previews', () => {
     files: [{ path: 'app.py', new_file: false, additions: 1, deletions: 1, diff: '@@ -1 +1 @@\n-a\n+b\n', problems: [] }],
   }
 
-  it('shows the instruction, the diff, usage, and applies via /apply', async () => {
+  it('shows the instruction, a collapsed diff, usage, and applies via /apply', async () => {
     const ws = await boot(true, {
       title: 'Claude Code: rename it',
       source: 'mcp',
@@ -336,13 +337,43 @@ describe('Claude Code activity and diff previews', () => {
     expect(screen.getByTestId('mcp-instruction').textContent).toContain('Claude Code')
     expect(screen.getByTestId('mcp-instruction').textContent).toContain('rename it')
     expect(screen.getByTestId('sessions-toggle').textContent).toContain('Claude Code: rename it')
+    // Held back (an MCP proposal): a summary line, the diff one click away.
+    expect(screen.getByTestId('changeset-status').textContent).toBe('1 file not written')
+    expect(screen.getByTestId('changeset').textContent).not.toContain('+b')
+    fireEvent.click(screen.getByText('app.py'))
     expect(screen.getByTestId('changeset').textContent).toContain('+b')
     expect(screen.getByTestId('usage').textContent).toBe('10 in · 2 out · $0')
     fireEvent.click(screen.getByText('Apply'))
     expect(ws.sent.at(-1)).toEqual({ type: 'send', text: '/apply c1' })
     await act(async () => ws.emit({ type: 'changes', id: 'r', changes: { ...changes, status: 'applied' } }))
     expect(screen.queryByText('Apply')).toBeNull()
-    expect(screen.getByTestId('changeset').textContent).toContain('applied')
+    expect(screen.getByTestId('changeset-status').textContent).toBe('Wrote 1 file')
+  })
+
+  it('written changes show a summary and an Undo button, not the code', async () => {
+    const ws = await boot(true, {
+      messages: [
+        { id: 'r', role: 'assistant', content: 'Renamed old to new.', status: 'done', meta: { changes: { ...changes, status: 'applied' } } },
+      ],
+    })
+    expect(screen.getByTestId('changeset-status').textContent).toBe('Wrote 1 file')
+    expect(screen.getByTestId('changeset').textContent).not.toContain('+b')
+    fireEvent.click(screen.getByText('Undo'))
+    expect(ws.sent.at(-1)).toEqual({ type: 'send', text: '/undo c1' })
+    await act(async () => ws.emit({ type: 'changes', id: 'r', changes: { ...changes, status: 'undone' } }))
+    expect(screen.getByTestId('changeset-status').textContent).toBe('Undid 1 file')
+    expect(screen.queryByText('Undo')).toBeNull()
+  })
+
+  it('collapses long code blocks in replies and keeps short ones', async () => {
+    const long = '```python\na = 1\nb = 2\nc = 3\nd = 4\n```'
+    await boot(true, {
+      messages: [{ id: 'r', role: 'assistant', content: `Use \`x[::-1]\`.\n\`\`\`python\nx[::-1]\n\`\`\`\n${long}`, status: 'done' }],
+    })
+    const collapsed = screen.getAllByTestId('collapsed-code')
+    expect(collapsed).toHaveLength(1)
+    expect(collapsed[0].querySelector('summary').textContent).toBe('Show code (4 lines, python)')
+    expect(collapsed[0].open).toBe(false)
   })
 
   it('shows progress while a reply has no text yet', async () => {
@@ -501,37 +532,42 @@ describe('detected models', () => {
   })
 })
 
-describe('model picker', () => {
-  it('offers Auto plus every detected model, and sends the choice to the server', async () => {
-    const ws = await boot(true, { models: REPORT })
-    const picker = screen.getByTestId('model-picker')
-    expect(picker.value).toBe('auto')
-    const options = [...picker.querySelectorAll('option')].map((o) => o.textContent)
-    expect(options).toEqual([
-      'Auto (cheapest that can do it)',
-      'Ollama: llama3:latest',
-      'Ollama: codellama:7b',
-      'Claude CLI: haiku',
-      'Claude CLI: sonnet',
-      'Claude CLI: opus',
-    ])
-    // Codex was not found, so none of its models are offered.
-    expect(options.some((o) => o.startsWith('Codex'))).toBe(false)
+const COMPARE = {
+  days: 30,
+  baseline: 'claude-sonnet',
+  models: [
+    { model: 'ollama-coder · qwen2.5-coder:32b', kind: 'local', tasks: 8, escalated: 2, quality: 0.8, cost_per_task: 0,
+      tokens_per_task: 3000, median_seconds: 20, saved_usd: 0.08, enough_data: true, cost_vs_sonnet: 0 },
+    { model: 'claude-sonnet', kind: 'paid', tasks: 5, escalated: 0, quality: 0.8, cost_per_task: 0.4,
+      tokens_per_task: 80000, median_seconds: 30, saved_usd: 0, enough_data: true, cost_vs_sonnet: 1 },
+    { model: 'claude-opus', kind: 'paid', tasks: 1, escalated: 0, quality: 1, cost_per_task: 1.2,
+      tokens_per_task: 400000, median_seconds: 60, saved_usd: 0, enough_data: false, cost_vs_sonnet: 3 },
+  ],
+}
 
-    await act(async () => fireEvent.change(picker, { target: { value: 'claude/opus' } }))
-    expect(ws.sent.at(-1)).toEqual({ type: 'set_model', model: { tool: 'claude', model: 'opus' } })
-    await act(async () => ws.emit({ type: 'model_pref', pref: { tool: 'claude', model: 'opus' } }))
-    expect(screen.getByTestId('model-picker').value).toBe('claude/opus')
-
-    await act(async () => fireEvent.change(picker, { target: { value: 'auto' } }))
-    expect(ws.sent.at(-1)).toEqual({ type: 'set_model', model: null })
+describe('models are view only', () => {
+  it('offers no way to pick a model', async () => {
+    await boot(true, { models: REPORT })
+    expect(screen.queryByTestId('model-picker')).toBeNull()
+    expect(screen.queryByRole('combobox')).toBeNull()
   })
 
-  it('shows a saved choice from the snapshot, even when it is not installed now', async () => {
-    await boot(true, { models: REPORT, model_pref: { tool: 'codex', model: 'o3' } })
-    const picker = screen.getByTestId('model-picker')
-    expect(picker.value).toBe('codex/o3')
-    expect(picker.querySelector('option[value="codex/o3"]').textContent).toBe('codex: o3 (unavailable)')
+  it('compares cost and quality on the Models page, opened from the models menu', async () => {
+    await boot(true, { models: REPORT })
+    await act(async () => fireEvent.click(screen.getByTestId('models-toggle')))
+    await act(async () => fireEvent.click(screen.getByTestId('models-compare-open')))
+    await flush()
+    expect(screen.getByTestId('models-page')).toBeTruthy()
+    expect(globalThis.fetch.mock.calls.some(([url]) => url === '/api/models/compare?days=30')).toBe(true)
+    expect(screen.getByTestId('models-detected').textContent).toContain('Claude CLI')
+    const rows = [...screen.getByTestId('models-compare').querySelectorAll('tbody tr')].map((r) =>
+      [...r.querySelectorAll('td')].map((td) => td.textContent),
+    )
+    expect(rows[0]).toEqual(['ollama-coder · qwen2.5-coder:32bfree', '8 (+2 escalated)', '80%', '$0', 'free', '20s'])
+    expect(rows[1]).toEqual(['claude-sonnet', '5', '80%', '$0.40', '1×', '30s'])
+    expect(rows[2]).toEqual(['claude-opusfew tasks', '1', '100%', '$1.20', '3×', '60s'])
+    fireEvent.click(screen.getByText('Close'))
+    expect(screen.queryByTestId('models-page')).toBeNull()
   })
 })
 

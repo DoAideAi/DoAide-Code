@@ -33,7 +33,7 @@ from .files import FileAccessError, list_dir, read_file
 from .installer import PLATFORMS, agent_package, build_installer, package_filename
 from .relay import LaptopOffline, RelayService
 from .config import Settings
-from .dashboard import usage_report
+from .dashboard import model_comparison, usage_report
 from .db import Store
 from .executors import Executor
 from .router import RouterBrain
@@ -203,6 +203,11 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
         """Usage dashboard: tokens and cost by day and model, and which model handled each task."""
         return usage_report(store, user.email, days=days, tz_offset_min=tz)
 
+    @app.get("/api/models/compare")
+    async def models_compare(days: int = 30, user: User = Depends(current_user)) -> dict:
+        """Cost and quality of each model on this user's own tasks (view only: routing picks)."""
+        return model_comparison(store, user.email, days=days)
+
     @app.get("/api/stats")
     async def stats(user: User = Depends(current_user)) -> dict:
         return {"executors": store.executor_stats()}
@@ -297,8 +302,6 @@ def create_app(settings: Settings | None = None, *, executors: list[Executor] | 
                     await chat.stop(user.email)
                 elif kind == "open" and isinstance(data.get("session_id"), str):
                     await chat.open_session(user.email, data["session_id"])
-                elif kind == "set_model":
-                    await chat.set_model(user.email, data.get("model"))
                 elif kind == "ping":
                     await ws.send_json({"type": "pong"})
         except (WebSocketDisconnect, RuntimeError, ValueError):

@@ -106,6 +106,10 @@ export function socketUrl(path, token) {
 }
 
 // Usage dashboard: tokens and cost by day and model, and which model handled each task.
+export function fetchModelComparison(token, days = 30) {
+  return get(`/api/models/compare?days=${days}`, token)
+}
+
 export function fetchUsage(token, days = 7) {
   return get(`/api/usage?days=${days}&tz=${new Date().getTimezoneOffset()}`, token)
 }

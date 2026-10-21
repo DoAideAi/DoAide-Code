@@ -17,7 +17,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .commands import is_command, is_models_command, run_command
-from .detect import clean_pin, format_report, same_report
+from .detect import format_report, same_report
 from .config import Settings
 from .db import Store
 from .executors import Job, Turn
@@ -168,7 +168,6 @@ class LaptopAgent:
                 outcome,
                 on_delta,
                 project=project["name"] if project else None,
-                pin=clean_pin(message.get("model")),
             )
         except asyncio.CancelledError:
             outcome.status = "stopped"

@@ -84,6 +84,7 @@ async def test_route_meta_names_the_model_and_why(store):
     ex.tool, ex.model = "ollama", "qwen2.5-coder:32b"
     outcome = await run_job(RouterBrain([ex], offline=True), store, Job("explain add()"), Outcome(), nop)
     route = outcome.meta()["route"]
+    assert isinstance(route.pop("elapsed_ms"), int)
     assert route == {
         "executor": "ollama-coder", "model": "qwen2.5-coder:32b", "tier": 1, "kind": "explain",
         "score": 3.0, "reasons": ["explain (+3)"], "free": True,

@@ -16,15 +16,35 @@ export function splitFences(text) {
   return parts
 }
 
+// Code blocks longer than this many lines are collapsed: replies are summaries, and the code
+// itself is in the files (or one click away).
+export const SHOWN_CODE_LINES = 3
+
+export function codeLines(value) {
+  return value.replace(/\n$/, '').split('\n').length
+}
+
+function Code({ value }) {
+  return (
+    <pre className="my-2 overflow-x-auto rounded-md border border-zinc-800 bg-black/40 p-3 font-mono text-[13px] leading-relaxed text-zinc-200">
+      <code>{value}</code>
+    </pre>
+  )
+}
+
 function Body({ content }) {
   return splitFences(content).map((part, i) =>
     part.kind === 'code' ? (
-      <pre
-        key={i}
-        className="my-2 overflow-x-auto rounded-md border border-zinc-800 bg-black/40 p-3 font-mono text-[13px] leading-relaxed text-zinc-200"
-      >
-        <code>{part.value}</code>
-      </pre>
+      codeLines(part.value) <= SHOWN_CODE_LINES ? (
+        <Code key={i} value={part.value} />
+      ) : (
+        <details key={i} data-testid="collapsed-code" className="my-1 text-xs text-zinc-500">
+          <summary className="cursor-pointer select-none hover:text-zinc-300">
+            Show code ({codeLines(part.value)} lines{part.lang ? `, ${part.lang}` : ''})
+          </summary>
+          <Code value={part.value} />
+        </details>
+      )
     ) : (
       <span key={i} className="whitespace-pre-wrap">
         {part.value}
@@ -138,11 +158,24 @@ const CHANGE_STATUS = {
   pending: 'text-amber-300',
   applied: 'text-emerald-300',
   discarded: 'text-zinc-500',
+  undone: 'text-zinc-500',
 }
 
-// Diff preview of proposed edits. Nothing is written until Apply (/apply <id>) on the laptop.
+// "Wrote 2 files", "1 file not written", "Undid 1 file".
+export function changeHeadline(changes) {
+  const n = changes.files.length
+  const files = `${n} file${n === 1 ? '' : 's'}`
+  if (changes.status === 'applied') return `Wrote ${files}`
+  if (changes.status === 'pending') return `${files} not written`
+  if (changes.status === 'undone') return `Undid ${files}`
+  return `${files} discarded`
+}
+
+// Edits under a reply: written at once when every check passed (Undo restores the files), else
+// held back with Apply / Discard. Diffs are one click away, collapsed by default.
 export function ChangeSet({ changes, onSend }) {
-  const [open, setOpen] = useState(() => new Set(changes.files.length === 1 ? [changes.files[0].path] : []))
+  // Diffs start collapsed: the reply is the summary, the code is in the files.
+  const [open, setOpen] = useState(() => new Set())
   const toggle = (path) =>
     setOpen((prev) => {
       const next = new Set(prev)
@@ -153,10 +186,18 @@ export function ChangeSet({ changes, onSend }) {
   return (
     <div data-testid="changeset" className="mt-3 overflow-hidden rounded-md border border-zinc-800">
       <div className="flex items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/60 px-3 py-1.5 text-xs">
-        <span className="text-zinc-300">
-          {changes.files.length} file{changes.files.length === 1 ? '' : 's'} changed
-          <span className={`ml-2 ${CHANGE_STATUS[changes.status] ?? 'text-zinc-400'}`}>{changes.status}</span>
+        <span data-testid="changeset-status" className={CHANGE_STATUS[changes.status] ?? 'text-zinc-400'}>
+          {changeHeadline(changes)}
         </span>
+        {changes.status === 'applied' && onSend && (
+          <button
+            type="button"
+            onClick={() => onSend(`/undo ${changes.id}`)}
+            className="rounded border border-zinc-700 px-2 py-0.5 text-zinc-300 hover:bg-zinc-800"
+          >
+            Undo
+          </button>
+        )}
         {pending && onSend && (
           <span className="flex gap-2">
             <button

@@ -22,16 +22,16 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 
-from .changes import propose, repair_prompt, strip_edits
+from .changes import apply_record, propose, repair_prompt, strip_edits
 from .config import Settings
 from .context import Ranking, git_context, rank_files
 from .db import Store
-from .detect import ModelDetector, answer_access, answer_meta, meta_question, pin_problem
+from .detect import ModelDetector, answer_access, answer_meta, meta_question
 from .executors import Executor, ExecutorError, Job, Turn, build_executors
 from .fastpath import direct_answer, math_answer
 from .history import fit_history
 from .prompts import PROMPT_VERSION
-from .router import RouteDecision, RouterBrain, heuristic_tier, is_local
+from .router import RouteDecision, RouterBrain, is_local
 from .usage import Usage, sonnet_equivalent
 from .validate import (
     capability_claim,
@@ -45,6 +45,9 @@ from .validate import (
 log = logging.getLogger(__name__)
 
 NO_EXECUTOR = "No model is available on this laptop. Type /models to see what was detected and how to set one up."
+# Jobs whose passing edits are written to the files right away. MCP callers (Claude Code) are
+# agents with their own edit tools: they get proposals to apply, never writes underneath them.
+AUTO_APPLY_SOURCES = {"chat"}
 # Incomplete answers are retried this many times, each on the next executor up with more context.
 MAX_RETRIES = 1
 # Claude Code sessions are resumed for follow-ups this recent: past the prompt cache's lifetime
@@ -141,11 +144,11 @@ def find_resume(store: Store, job: Job) -> Resume | None:
     return Resume(row["session_id"], row["created_at"], tuple(history[anchors[anchor] + 1 :]))
 
 
-def cache_key(job: Job, ranking: Ranking | None, pin: dict[str, str] | None = None) -> str:
+def cache_key(job: Job, ranking: Ranking | None) -> str:
     history = [(t.role, t.content) for t in list(job.history)[-6:]]
     prompt = " ".join(job.prompt.split())
     fingerprint = ranking.fingerprint if ranking else str(job.cwd)
-    payload = json.dumps([PROMPT_VERSION, prompt, history, fingerprint, pin or None], sort_keys=True)
+    payload = json.dumps([PROMPT_VERSION, prompt, history, fingerprint], sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -158,9 +161,27 @@ async def run_job(
     *,
     project: str | None = None,
     source: str = "chat",
-    pin: dict[str, str] | None = None,
 ) -> Outcome:
-    """`pin` ({"tool", "model"}) runs one model the user chose instead of routing."""
+    """Answer one prompt; models are always chosen by routing (try free first, then escalate).
+    The route records how long the whole task took, for the model comparison (dashboard.py)."""
+    started = time.monotonic()
+    try:
+        return await _run_job(router, store, job, outcome, on_delta, project=project, source=source)
+    finally:
+        if outcome.route is not None:
+            outcome.route["elapsed_ms"] = _ms(started)
+
+
+async def _run_job(
+    router: RouterBrain,
+    store: Store,
+    job: Job,
+    outcome: Outcome,
+    on_delta: Callable[[str], Awaitable[None]],
+    *,
+    project: str | None,
+    source: str,
+) -> Outcome:
     # 1. Reading a file or listing a folder needs no model at all, and questions about DoAide
     # itself (who it is, what it can do, whether it can read your files, which models it has) are
     # answered from detection: small local models answer those from training data ("I am GPT-4,
@@ -194,7 +215,7 @@ async def run_job(
             ranking = await asyncio.to_thread(rank_files, job.cwd, f"{job.prompt}\n{recent}")
         except OSError as exc:
             log.warning("context selection failed: %s", exc)
-    key = cache_key(job, ranking, pin) if router.cache_ttl > 0 else None
+    key = cache_key(job, ranking) if router.cache_ttl > 0 else None
     if key is not None and (hit := store.cache_get(key, router.cache_ttl)) is not None:
         outcome.content, outcome.status, outcome.executor, outcome.cached = hit["answer"], "done", hit["executor"], True
         outcome.route = {"executor": hit["executor"], "model": None, "free": True, "reasons": ["cached answer"]}
@@ -203,23 +224,8 @@ async def run_job(
         await _preview_changes(store, job, outcome, None, None, on_delta, source)
         return outcome
 
-    # 3a. A model the user picked runs alone: no routing, no fallback to other models.
-    decision: RouteDecision
-    skipped: str | None = None
-    if pin:
-        decision = heuristic_tier(job.prompt)
-        outcome.tier = decision.tier
-        if problem := pin_problem(pin, await router.models()):
-            outcome.content = f"Cannot use the selected model: {problem} Pick another model or Auto."
-            return outcome
-        executor = router.pinned(pin["tool"], pin["model"])
-        if executor is None:
-            outcome.content = f"Cannot use the selected model: {pin['tool']} is not set up on this laptop."
-            return outcome
-        candidates: list[Executor] = [executor]
-    else:
-        # 3b. Classify, then try a free local model first and escalate if its answer fails checks.
-        decision, candidates, skipped = await _routed(router, store, job, outcome, project)
+    # 3. Classify, then try a free local model first and escalate if its answer fails checks.
+    decision, candidates, skipped = await _routed(router, store, job, outcome, project)
     job = replace(job, kind=decision.kind)
 
     # Extra context the task asks for: the recent diff for "review my changes"-style requests.
@@ -243,7 +249,7 @@ async def run_job(
     for executor in candidates:
         more = retry_note is not None or escalated is not None
         # A local first attempt is buffered: shown only if it passes, else silently escalated.
-        trial = not pin and executor is candidates[0] and is_local(executor) and _escalation(candidates) is not None
+        trial = executor is candidates[0] and is_local(executor) and _escalation(candidates) is not None
         # History sized for this executor's window (history.py), and its own context.
         fitted = fit_history(job.history, executor.history_tokens, max_turns=executor.history_turns)
         run = replace(job, history=fitted.turns, summary=fitted.summary)
@@ -319,7 +325,7 @@ async def run_job(
         # context) search the project themselves: "I can't find X" from them is a finding.
         reason = incomplete_reason(outcome.content, decision.kind, reads_files=executor.context_mode == "map")
         nxt = _next_up(candidates, executor, decision.tier)
-        if reason and not pin and retries < MAX_RETRIES and nxt is not None:
+        if reason and retries < MAX_RETRIES and nxt is not None:
             retries += 1
             retry_note = f"retried on {nxt.name} with more context ({reason} from {executor.name})"
             await on_delta(f"\n\n---\n_The answer looked incomplete ({reason}); retrying on {nxt.name} with more context…_\n\n")
@@ -560,7 +566,10 @@ async def _preview_changes(
     on_delta: Callable[[str], Awaitable[None]],
     source: str,
 ) -> None:
-    """Turn edit blocks in the answer into a validated changeset; repair once if they fail."""
+    """Turn edit blocks in the answer into a validated changeset, repairing it once (silently) if
+    it fails. A changeset that passes every check is written to the files at once for chat jobs
+    (/undo restores them); one that does not, or one asked for over MCP, waits for /apply. The
+    reply keeps only the summary: the code itself is in the files and in the collapsed diff."""
     if job.cwd is None:
         return
     changeset = await propose(job.cwd, outcome.content)
@@ -568,8 +577,6 @@ async def _preview_changes(
         return
     # One repair round, with the same executor, when checks fail (never on fallback executors).
     if changeset.all_problems and executor is not None and run is not None and not executor.fallback:
-        notes = "\n".join(f"- {p}" for p in changeset.all_problems)
-        await on_delta(f"\n\n---\n_The proposed edit did not pass checks; asking for a fix:_\n{notes}\n\n")
         first_answer = outcome.content
         retry = replace(
             run,
@@ -577,8 +584,12 @@ async def _preview_changes(
             history=[*run.history, Turn("user", job.prompt), Turn("assistant", first_answer)],
         )
         repaired = Outcome()
+
+        async def hold(_chunk: str) -> None:
+            pass
+
         try:
-            await _drain(executor, retry, repaired, store, source, [], on_delta)
+            await _drain(executor, retry, repaired, store, source, [], hold)
         except ExecutorError as exc:
             log.warning("repair with %s failed: %s", executor.name, exc)
         if repaired.usage is not None:
@@ -592,9 +603,26 @@ async def _preview_changes(
                 {"name": "edits", "ok": False, "detail": f"no edit could be applied: {changeset.all_problems[0]}"}
             )
         return
-    store.add_changeset(changeset.id, changeset.record(), changeset.summary())
+    record = changeset.record()
+    store.add_changeset(changeset.id, record, changeset.summary())
     outcome.changes = changeset.summary()
-    outcome.content = strip_edits(outcome.content) or "Proposed changes:"
+    files = ", ".join(f.path for f in changeset.changed)
+    summary = strip_edits(outcome.content)
+    if source in AUTO_APPLY_SOURCES and not changeset.all_problems:
+        try:
+            await asyncio.to_thread(apply_record, record)
+        except (ValueError, OSError) as exc:
+            log.warning("could not write changes %s: %s", changeset.id, exc)
+            outcome.content = f"{summary}\n\nNot written: {exc}".strip()
+            return
+        outcome.changes = store.set_changeset_status(changeset.id, "applied")
+        outcome.content = summary or f"Updated {files}."
+        return
+    if changeset.all_problems:
+        note = f"Not written: {changeset.all_problems[0]} (type /apply to write it anyway)."
+        outcome.content = f"{summary or f'Proposed changes to {files}.'}\n\n{note}"
+    else:
+        outcome.content = summary or "Proposed changes:"
 
 
 def _ms(started: float) -> int:

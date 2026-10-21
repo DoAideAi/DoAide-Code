@@ -92,11 +92,12 @@ class Changeset:
         }
 
     def record(self) -> dict[str, Any]:
-        """What is stored to apply later: target contents plus hashes of what they replace."""
+        """What is stored to apply (and undo) later: target contents, what they replace, and its hash."""
         return {
             "root": str(self.root),
             "files": [
-                {"path": f.path, "original_hash": _hash(f.original), "new": f.new} for f in self.changed
+                {"path": f.path, "original_hash": _hash(f.original), "original": f.original, "new": f.new}
+                for f in self.changed
             ],
         }
 
@@ -340,4 +341,25 @@ def apply_record(record: dict[str, Any]) -> list[str]:
     for target, content in plan:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
+    return [item["path"] for item in record["files"]]
+
+
+def undo_record(record: dict[str, Any]) -> list[str]:
+    """Put back what an applied changeset replaced (new files are removed). Raises ValueError
+    (nothing changed) if any file was edited since DoAide wrote it, or the record predates undo."""
+    root = Path(record["root"])
+    plan: list[tuple[Path, str | None]] = []
+    for item in record["files"]:
+        if "original" not in item:
+            raise ValueError("these changes were made before undo was available")
+        target = resolve_in_root(root, item["path"])
+        current = target.read_text(encoding="utf-8") if target.is_file() else None
+        if _hash(current) != _hash(item["new"]):
+            raise ValueError(f"{item['path']} changed after DoAide wrote it; not undone")
+        plan.append((target, item["original"]))
+    for target, original in plan:
+        if original is None:
+            target.unlink(missing_ok=True)
+        else:
+            target.write_text(original, encoding="utf-8")
     return [item["path"] for item in record["files"]]

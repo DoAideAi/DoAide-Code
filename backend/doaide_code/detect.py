@@ -102,31 +102,6 @@ def _unique(items: list[str]) -> list[str]:
     return list(dict.fromkeys(i for i in items if i))
 
 
-TOOLS = ("ollama", "claude", "codex")
-_MODEL_NAME = re.compile(r"^[\w.:/@+-]{1,100}$")
-
-
-def clean_pin(value: Any) -> dict[str, str] | None:
-    """A well-formed {"tool", "model"} choice, or None (automatic routing)."""
-    if not isinstance(value, dict):
-        return None
-    tool, model = value.get("tool"), value.get("model")
-    if tool not in TOOLS or not isinstance(model, str) or not _MODEL_NAME.match(model):
-        return None
-    return {"tool": tool, "model": model}
-
-
-def pin_problem(pin: dict[str, str], report: dict[str, Any]) -> str | None:
-    """Why a chosen model cannot run now (None when it can)."""
-    tool = next((t for t in report["tools"] if t["id"] == pin.get("tool")), None)
-    if tool is None:
-        return f"Unknown tool {pin.get('tool')!r}."
-    if not tool["usable"]:
-        hint = f" {tool['setup']}" if tool.get("setup") else ""
-        return f"{tool['label']} is {STATE_TEXT.get(tool['state'], tool['state'])}.{hint}"
-    if pin.get("model") not in tool.get("choices", []):
-        return f"{tool['label']} has no model {pin.get('model')!r}. Type /models to see what is installed."
-    return None
 
 
 def _tail(text: str, limit: int = 200) -> str:
@@ -366,13 +341,13 @@ def asks_about_models(prompt: str) -> bool:
 IDENTITY = (
     "I'm **DoAide Code**, a coding assistant that runs on your own laptop. I'm not ChatGPT or GPT-4, "
     "and I'm not made by OpenAI. Each request is handled by one of the tools installed on this laptop "
-    "(local Ollama models, the Claude CLI, or the Codex CLI), picked automatically or by you in the "
-    "model picker."
+    "(local Ollama models, the Claude CLI, or the Codex CLI), picked automatically: a free local model "
+    "first, Claude Sonnet when its answer fails a check."
 )
 CAPABILITIES = (
     "I'm **DoAide Code**. I can answer coding questions about your project, read and list its files, "
-    "and propose code changes as diffs that are only written when you press **Apply** (or type `/apply`). "
-    "Commands: `/models`, `/projects`, `/add-project`, `/switch-project`, `/workspace`, `/usage`, `/new`, `/help`."
+    "and change its code: changes that pass every check are written to the files, and `/undo` puts them back. "
+    "Commands: `/models`, `/undo`, `/projects`, `/add-project`, `/switch-project`, `/workspace`, `/usage`, `/new`, `/help`."
 )
 
 
@@ -380,7 +355,7 @@ def answer_access(folder: Path | None) -> str:
     """The zero-token answer to "can you access my files?": yes, and which folder."""
     where = (
         f"Right now I'm working in `{folder}`: I can list its folders, open and search its files, and "
-        "propose code changes as diffs that are only written when you press **Apply** (or type `/apply`)."
+        "change its code (changes that pass every check are written; `/undo` puts them back)."
         if folder is not None
         else "No project folder is selected yet."
     )

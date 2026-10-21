@@ -19,6 +19,7 @@ export default function TopBar({
   onLaptop,
   models = null,
   onUsage = null,
+  onModels = null,
 }) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4">
@@ -52,7 +53,7 @@ export default function TopBar({
             Usage
           </button>
         )}
-        <ModelsMenu models={models} />
+        <ModelsMenu models={models} onCompare={onModels} />
         {laptop !== null && (
           <button
             type="button"

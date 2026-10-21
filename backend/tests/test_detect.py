@@ -13,16 +13,14 @@ from doaide_code.commands import is_models_command
 from doaide_code.detect import (
     ModelDetector,
     asks_about_models,
-    clean_pin,
     format_report,
     meta_question,
     parse_ollama_list,
-    pin_problem,
     same_report,
 )
 from doaide_code.executors import Turn
 from doaide_code.executors.base import CODER_SYSTEM_PROMPT
-from doaide_code.runner import cache_key, strip_meta_turns
+from doaide_code.runner import strip_meta_turns
 from doaide_code.executors import Job
 from doaide_code.router import RouterBrain
 from doaide_code.runner import Outcome, run_job
@@ -333,12 +331,10 @@ async def test_hallucinated_history_is_not_fed_back(settings, store):
     assert [t.content for t in executor.jobs[0].history] == ["explain decorators", "A decorator wraps a function."]
 
 
-def test_cache_clear_and_pin_in_cache_key(store):
+def test_cache_clear(store):
     store.cache_put("k1", "As an AI developed by OpenAI...", "ollama")
     store.cache_put("k2", "x", "ollama")
     assert store.cache_clear() == 2 and store.cache_get("k1", 3600) is None
-    job = Job("explain x")
-    assert cache_key(job, None) != cache_key(job, None, {"tool": "claude", "model": "opus"})
 
 
 class ModelEcho(FakeExecutor):
@@ -353,67 +349,23 @@ class ModelEcho(FakeExecutor):
         yield f"ran {self.tool} --model {self.model}"
 
 
-async def test_pinned_model_runs_alone(settings, store):
-    ollama = ModelEcho("ollama", 0, "ollama", "qwen2.5-coder:7b")
-    claude = ModelEcho("claude-haiku", 1, "claude", "haiku")
-    router = RouterBrain([ollama, claude], offline=True, detector=ModelDetector(settings, run=fake_run(ALL_READY)))
-
-    async def on_delta(chunk: str) -> None:
-        pass
-
-    outcome = await run_job(router, store, Job("explain x"), Outcome(), on_delta, pin={"tool": "claude", "model": "opus"})
-    assert outcome.status == "done" and outcome.content == "ran claude --model opus"
-    assert outcome.executor == "claude:opus" and claude.model == "haiku"  # the template is untouched
-    outcome = await run_job(
-        router, store, Job("explain y"), Outcome(), on_delta, pin={"tool": "ollama", "model": "llama3.2:latest"}
-    )
-    assert outcome.content == "ran ollama --model llama3.2:latest"
-
-    # Not installed, or the tool is signed out: a clear error, never a silent switch to another model.
-    outcome = await run_job(router, store, Job("explain z"), Outcome(), on_delta, pin={"tool": "ollama", "model": "gpt-4"})
-    assert outcome.status == "error" and "has no model 'gpt-4'" in outcome.content
-    assert ollama.jobs[-1].prompt == "explain y"
+# Models are never chosen by the user: routing (try free first, then escalate) picks them.
 
 
-def test_pin_validation():
-    assert clean_pin({"tool": "claude", "model": "opus"}) == {"tool": "claude", "model": "opus"}
-    assert clean_pin({"tool": "openai", "model": "gpt-4"}) is None
-    assert clean_pin({"tool": "ollama", "model": "x; rm -rf /"}) is None
-    assert clean_pin(None) is None
-    report = {"tools": [{"id": "codex", "label": "Codex CLI", "state": "signed_out", "usable": False,
-                         "setup": "Sign in: `codex login`."}]}
-    assert pin_problem({"tool": "codex", "model": "o3"}, report) == "Codex CLI is not signed in. Sign in: `codex login`."
-
-
-def test_hub_stores_model_choice_and_sends_it_with_jobs(hub, token, agent_token):  # noqa: F811
+def test_the_hub_offers_no_model_choice_and_sends_none_with_jobs(hub, token, agent_token):  # noqa: F811
     with hub.websocket_connect(f"/ws?token={token}") as browser:
-        assert browser.receive_json()["model_pref"] is None
+        assert "model_pref" not in browser.receive_json()
+        # An old client asking for a model is ignored.
         browser.send_json({"type": "set_model", "model": {"tool": "claude", "model": "opus"}})
-        assert drain_until(browser, "model_pref")[-1]["pref"] == {"tool": "claude", "model": "opus"}
         browser.send_json({"type": "send", "text": "explain this"})
         drain_until(browser, "status")
         with hub.websocket_connect(f"/agent?token={agent_token}") as laptop:
             job = laptop.receive_json()
-            assert job["model"] == {"tool": "claude", "model": "opus"}
-        # Invalid choices reset to automatic routing.
-        browser.send_json({"type": "set_model", "model": {"tool": "openai", "model": "gpt-4"}})
-        assert drain_until(browser, "model_pref")[-1]["pref"] is None
-    # Remembered across reconnects (and devices).
-    browser_snapshot = hub.get("/api/session", headers={"Authorization": f"Bearer {token}"}).json()
-    assert browser_snapshot["model_pref"] is None
+            assert job["type"] == "job" and "model" not in job
 
 
-def test_local_model_choice_persists(client, token):
-    with client.websocket_connect(f"/ws?token={token}") as ws:
-        assert ws.receive_json()["model_pref"] is None
-        ws.send_json({"type": "set_model", "model": {"tool": "ollama", "model": "llama3:latest"}})
-        assert drain_until(ws, "model_pref")[-1]["pref"] == {"tool": "ollama", "model": "llama3:latest"}
-    with client.websocket_connect(f"/ws?token={token}") as ws:
-        assert ws.receive_json()["model_pref"] == {"tool": "ollama", "model": "llama3:latest"}
-
-
-async def test_agent_runs_the_model_sent_by_the_hub(settings, store, tmp_path):
-    codex = ModelEcho("codex", 1, "codex", "o4-mini")
+async def test_the_agent_ignores_a_model_sent_by_an_old_hub(settings, store, tmp_path):
+    codex = ModelEcho("codex", 2, "codex", "o4-mini")
     router = RouterBrain([codex], offline=True, detector=ModelDetector(settings, run=fake_run(ALL_READY)))
     agent = LaptopAgent(store, router, "owner@example.com", workspace=str(tmp_path / "ws"))
     events: list[dict] = []
@@ -423,7 +375,7 @@ async def test_agent_runs_the_model_sent_by_the_hub(settings, store, tmp_path):
 
     await agent.on_message({"type": "job", "id": "j", "text": "explain x", "model": {"tool": "codex", "model": "default"}}, send)
     await agent._task
-    assert events[-1]["content"] == "ran codex --model default"
+    assert events[-1]["content"] == "ran codex --model o4-mini"
 
 
 async def test_codex_without_config_offers_its_default(settings):

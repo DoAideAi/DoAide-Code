@@ -218,7 +218,7 @@ def test_code_tasks_are_never_meta_questions(prompt, kind):
 @pytest.mark.parametrize("kind", ["question", "edit", "design"])
 def test_every_prompt_asks_for_short_autonomous_answers(style, kind):
     prompt = system_prompt(style, kind)
-    assert "Keep responses concise. Show code changes as diffs with a one-line summary." in prompt
+    assert "Keep responses concise. Do not print code blocks in your reply" in prompt
     assert "Work autonomously. Make decisions without asking the user. Only ask when truly ambiguous." in prompt
 
 
