@@ -72,5 +72,7 @@ def test_a_why_question_is_answered_not_debugged():
     # Live: classed as debug, the right two-sentence answer was "no code proposed" and went to Sonnet.
     asking = classify_task("In backend/doaide_code/executors/ollama.py, why is FIXED_CTX a constant instead of computed per request? Two sentences.")
     assert asking.kind == "question" and asking.about_project
+    # Answered by the 32b model: the 7b one guessed a plausible, wrong reason.
+    assert asking.tier == 1 and classify_task("why is the sky blue").tier == 0
     assert classify_task("why does test_charge fail").kind == "debug"
     assert classify_task("why is add in util.py wrong").kind == "debug"

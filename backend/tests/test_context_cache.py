@@ -114,6 +114,25 @@ def test_direct_answers_for_reads_and_listings(repo):
     assert "app/auth/" in direct_answer(repo, "ls in app")
 
 
+def test_usage_questions_are_answered_by_searching_the_project(repo):
+    # Live: the 7b model, shown a few files, named the wrong caller; a search is exact and free.
+    (repo / "app" / "api.py").write_text("from app.billing import charge\n\ndef pay():\n    return charge(5)\n")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_billing.py").write_text("from app.billing import charge\nassert charge(1) == 100\n")
+    answer = direct_answer(repo, "In app/billing.py, which files call `charge`?")
+    assert answer.splitlines() == [
+        "`charge` is defined in:",
+        "- `app/billing.py:1` `def charge(amount):`",
+        "Used 2 times in 2 files:",
+        "- `app/api.py:4` `return charge(5)`",
+        "- `tests/test_billing.py:2` `assert charge(1) == 100`",
+    ]
+    assert direct_answer(repo, "where is refresh_session used?").endswith("It is not used anywhere else.")
+    assert direct_answer(repo, "who calls missing_name") == "`missing_name` does not appear in the project."
+    # A plain word with no definition may be a concept: left to a model.
+    assert direct_answer(repo, "where is caching used?") is None
+
+
 @pytest.mark.parametrize(
     "prompt",
     [

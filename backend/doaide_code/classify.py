@@ -40,6 +40,7 @@ _SIGNALS: list[tuple[float, str, re.Pattern[str]]] = [
 ]
 # Pure questions with no project work in them (also after "In app/x.py, ...").
 _QUESTION = re.compile(r"^\s*(?:in [^,?]+,\s*)?(what|how|why|when|is|are|can|does|do|which|who|define|difference between)\b", re.I)
+_WHY = re.compile(r"^\s*(?:in [^,?]+,\s*)?why\b", re.I)
 # "calculate"/"compute" only with a number in the request: "what does charge() compute" is code.
 _MATH = re.compile(r"^[\s\d+\-*/%^().,=?x×÷]+$|\b(?:calculate|compute)\b(?=.*\d)|\b(convert \d|how much is|what is \d)", re.I)
 _FILE_REF = re.compile(r"[\w./-]+\.(?:py|js|jsx|ts|tsx|go|rs|java|kt|swift|rb|php|c|h|cpp|cs|vue|svelte|sql|sh)\b")
@@ -113,6 +114,13 @@ def classify_task(prompt: str) -> TaskProfile:
         kind = "edit"
         reasons.append("instruction (+3)")
 
+    about_project = kind not in {"question", "math"} or bool(_PROJECT.search(text))
+    if kind == "question" and about_project and _WHY.search(text):
+        # "Why is X like this?" needs the reason behind the code: the 7b model guessed plausible,
+        # wrong ones live; the 32b read them from the comments.
+        score += 3
+        reasons.append("why, about the code (+3)")
+
     tier = sum(score >= t for t in TIER_THRESHOLDS)
     if tier == 3 and kinds.get("design", 0) < 9:
         # Opus is for the hardest work: architecture, security, concurrency. A big refactor,
@@ -125,5 +133,5 @@ def classify_task(prompt: str) -> TaskProfile:
         reasons=tuple(reasons),
         wants_diff=bool(_DIFF_REQUEST.search(text)),
         has_error=has_error,
-        about_project=kind not in {"question", "math"} or bool(_PROJECT.search(text)),
+        about_project=about_project,
     )
