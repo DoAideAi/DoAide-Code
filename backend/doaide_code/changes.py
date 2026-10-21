@@ -126,6 +126,9 @@ def _path_before(lines: list[str], index: int) -> str | None:
         stripped = line.strip()
         if not stripped or FENCE_RE.match(stripped):
             continue
+        # Live (Sonnet): "`backend/doaide_code/validate.py`, line 116 — why", a backticked path then prose.
+        if quoted := re.match(r"^(?:#+\s*|File:\s*|\*\*)*`([^`\s]+\.[^`\s]+)`", stripped):
+            return quoted.group(1)
         candidate = re.sub(r"^(#+\s*|File:\s*|\*\*|`)+|(\*\*|`|:)+$", "", stripped).strip()
         return candidate if candidate and " " not in candidate else None
     return None

@@ -24,9 +24,9 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from .changes import apply_record, parse_edits, propose, repair_prompt, strip_edits, undo_record
+from .changes import SEARCH_RE, apply_record, parse_edits, propose, repair_prompt, strip_edits, undo_record
 from .config import Settings
-from .context import Ranking, git_context, mentioned_paths, rank_files
+from .context import HOST, Ranking, git_context, mentioned_paths, rank_files
 from .db import Store
 from .detect import ModelDetector, answer_access, answer_meta, meta_question
 from .executors import Executor, ExecutorError, Job, Turn, build_executors
@@ -56,6 +56,7 @@ NO_EXECUTOR = "No model is available on this laptop. Type /models to see what wa
 # agents with their own edit tools: they get proposals to apply, never writes underneath them.
 # Dispatch (tasks.py) hands over the whole task, as the chat does.
 AUTO_APPLY_SOURCES = {"chat", "dispatch"}
+UNNAMED_EDIT = "no file path was found above an edit block"
 # Incomplete answers are retried this many times, each on the next executor up with more context.
 MAX_RETRIES = 1
 # Claude Code sessions are resumed for follow-ups this recent: past the prompt cache's lifetime
@@ -134,6 +135,10 @@ def missing_paths(prompt: str, root: Path) -> list[str]:
     missing = []
     for path in sorted(mentioned_paths(prompt)):
         if "/" in path and not path.startswith(("http", "/")) and ".." not in path and not (root / path).exists():
+            host = path.split("/", 1)[0]
+            # Live: "ollama.com/install.sh" (a URL without https://) was answered as a missing file.
+            if HOST.match(host) and not (root / host).exists():
+                continue
             missing.append(path)
     return missing
 
@@ -699,6 +704,10 @@ async def _preview_changes(
         return
     changeset = await propose(job.cwd, outcome.content)
     if changeset is None:
+        if any(SEARCH_RE.match(line) for line in outcome.content.splitlines()):
+            # Edit blocks whose file could not be read: say so instead of showing them unwritten.
+            outcome.checks.append({"name": "edits", "ok": False, "detail": UNNAMED_EDIT})
+            outcome.content = f"{outcome.content}\n\nNothing written: {UNNAMED_EDIT}."
         return
     # One repair round, with the same executor, when checks fail (never on fallback executors).
     if changeset.all_problems and executor is not None and run is not None and not executor.fallback:

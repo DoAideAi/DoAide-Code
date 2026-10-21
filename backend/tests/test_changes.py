@@ -145,3 +145,35 @@ async def test_discard_keeps_files(repo, store):
     assert json.loads(store.get_changeset(changeset.id)["summary"])["status"] == "discarded"
     assert "No pending changes" in run_command(store, "owner@example.com", "/apply").text
     assert not (repo / "notes.txt").exists()
+
+
+# Live (Sonnet over the Tasks API): the path line went on with prose, so the edit was dropped.
+PATH_THEN_PROSE = """Fix: compare the whole answer.
+
+`app.py`, line 1 — `old` is the wrong name.
+
+<<<<<<< SEARCH
+def old():
+=======
+def new():
+>>>>>>> REPLACE
+"""
+
+
+def test_a_backticked_path_followed_by_prose_names_the_file():
+    assert [(e.path, e.replace) for e in parse_edits(PATH_THEN_PROSE)] == [("app.py", "def new():\n")]
+    assert parse_edits("`app.py` and `lib.py` both change.\n<<<<<<< SEARCH\nx\n=======\ny\n>>>>>>> REPLACE\n")[0].path == "app.py"
+
+
+async def test_an_edit_block_with_no_file_says_nothing_was_written(repo, store):
+    # No path, and SEARCH text that is in no file, so the edit cannot be placed.
+    unnamed = "Rename it.\n\nThe helper should change like this:\n\n<<<<<<< SEARCH\ndef older():\n=======\ndef new():\n>>>>>>> REPLACE\n"
+    outcome = Outcome()
+
+    async def on_delta(_):
+        pass
+
+    await run_job(RouterBrain([FakeExecutor("ollama", 0, [unnamed])]), store, Job(prompt="make the helper return 2", cwd=repo), outcome, on_delta)
+    assert "def old" in (repo / "app.py").read_text()
+    assert outcome.content.endswith("Nothing written: no file path was found above an edit block.")
+    assert {"name": "edits", "ok": False, "detail": "no file path was found above an edit block"} in outcome.checks

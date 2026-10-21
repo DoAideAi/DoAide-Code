@@ -11,6 +11,7 @@ from doaide_code.executors import Job
 from doaide_code.main import create_app, hub_origin
 from doaide_code.relay import RelayService
 from doaide_code.router import RouterBrain
+from doaide_code.context import mentioned_paths
 from doaide_code.runner import Outcome, missing_paths, run_job
 from doaide_code.sync import MirrorHub, SyncHub
 from doaide_code.validate import trim_reply
@@ -164,6 +165,24 @@ async def test_a_named_file_missing_from_the_project_is_answered_at_once(store, 
     assert outcome.content.startswith("`backend/doaide_code/runner.py` is not in the workspace")
     assert missing_paths("explain app/main.py", tmp_path) == []
     assert missing_paths("write tests in tests/test_new.py", tmp_path) == []
+
+
+async def test_urls_in_a_request_are_not_missing_project_files(store, tmp_path):
+    # Live, twice: a plan citing ollama.com/install.sh was answered "not in project" by no model.
+    model = FakeExecutor("ollama", 0, ["Planned."])
+    prompt = "Fix the bug where DoAide mistook ollama.com/install.sh URL for a file path"
+    outcome = await run_job(RouterBrain([model], offline=True), store, Job(prompt, cwd=tmp_path), Outcome(), nop)
+    assert model.jobs and outcome.executor != "direct"
+    assert missing_paths("run `curl -fsSL https://ollama.com/install.sh | sh`", tmp_path) == []
+    assert missing_paths("get github.com/ollama/ollama/releases/latest/download/OllamaSetup.exe", tmp_path) == []
+    # A real project path next to a URL is still checked.
+    assert missing_paths("see https://ollama.com/install.sh, then edit app/nope.py", tmp_path) == ["app/nope.py"]
+
+
+def test_a_folder_named_like_a_host_is_still_a_project_path(tmp_path):
+    (tmp_path / "docs.site").mkdir()
+    assert missing_paths("edit docs.site/missing.md", tmp_path) == ["docs.site/missing.md"]
+    assert mentioned_paths("curl https://ollama.com/install.sh and open backend/app.py") == {"backend/app.py"}
 
 
 async def test_edit_blocks_never_reach_the_reply_even_when_nothing_applies(store, tmp_path):
