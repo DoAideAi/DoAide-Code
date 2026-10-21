@@ -5,8 +5,11 @@ behaviour (a local model once "stripped filler" by calling .strip() on every str
 gluing every reply's words together). The project's own tests can. For Python projects with a
 virtualenv and pytest, the tests of the package holding the edited files run after the write
 (those that reference the edited modules, or all of them when none do): exit status 1 means the
-edit broke them. No tests, no virtualenv or no pytest: nothing runs and
-the edit stands, as before. DOAIDE_RUN_TESTS=0 turns this off.
+edit broke them. Tests that fail with the edit taken out again too were already broken and do
+not count against it (live: a red test in the repo sent every edit near it to Sonnet), unless
+the request is about them: "fix add" must make a red test_add pass. No tests,
+no virtualenv or no pytest: nothing runs and the edit stands, as before. DOAIDE_RUN_TESTS=0 turns
+this off.
 """
 
 from __future__ import annotations
@@ -14,6 +17,8 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
 
 TIMEOUT = 120
@@ -83,19 +88,70 @@ def related_tests(folder: Path, root: Path, paths: list[str]) -> list[str]:
     return sorted(found)
 
 
-async def failing_tests(root: Path, paths: list[str], *, timeout: float = TIMEOUT) -> str | None:
+async def failing_tests(
+    root: Path,
+    paths: list[str],
+    *,
+    timeout: float = TIMEOUT,
+    without_edit: Callable[[], AbstractAsyncContextManager[None]] | None = None,
+    request: str = "",
+) -> str | None:
     """Why the project's tests fail after an edit to `paths` (the first failure), or None when
-    they pass, or none could be run."""
+    they pass, or none could be run.
+
+    `without_edit`: takes the edit out of the files while it is entered. The failing tests run
+    again inside it, and those that fail there too are not the edit's doing, unless `request`
+    (what the user asked) is about them."""
     if not enabled() or (target := test_target(root, paths)) is None:
         return None
     folder, python = target
     selected = related_tests(folder, root.resolve(), paths)
+    failed = await _pytest(folder, python, selected, timeout)
+    if not failed or without_edit is None or failed == ["?"]:
+        return _reason(failed)
+    try:
+        async with without_edit():
+            before = await _pytest(folder, python, selected, timeout)
+    except (ValueError, OSError):
+        # The edit could not be taken out: no baseline, so every failure counts.
+        return _reason(failed)
+    if before is None:
+        return _reason(failed)
+    return _reason([t for t in failed if t not in before or about(request, t)])
+
+
+_FIX_TESTS = re.compile(
+    r"\b(?:fix|make)\b.*\btests?\b|\btests?\b.*\b(?:fail\w*|broken|pass\w*|red)\b|\b(?:fail\w*|broken|red)\s+tests?\b", re.I
+)
+
+
+def about(request: str, test_id: str) -> bool:
+    """Whether the request is about this (already failing) test: it names the test ("fix add"
+    for test_add) or asks to fix failing tests. Not its file: "edit calc.py" is not about a red
+    test in test_calc.py."""
+    if _FIX_TESTS.search(request):
+        return True
+    words = set(re.findall(r"\w+", request.lower()))
+    func = test_id.split("[")[0].rsplit("::", 1)[-1].lower()
+    return bool(words & ({func, func.removeprefix("test_")} - {""}))
+
+
+def _reason(failed: list[str] | None) -> str | None:
+    if not failed:
+        return None
+    return "tests fail" if failed == ["?"] else f"tests fail ({failed[0]})"
+
+
+async def _pytest(folder: Path, python: Path, selected: list[str], timeout: float) -> list[str] | None:
+    """The failing tests' ids ([] when they pass, ["?"] when pytest failed without naming one),
+    or None when nothing could be learned (no pytest, a usage error, a timeout)."""
     proc = None
     try:
         # No .pyc files: an edit that keeps a file's size within the same second as the last run
         # would otherwise be tested against the stale bytecode of the code it replaced.
         proc = await asyncio.create_subprocess_exec(
-            str(python), "-B", "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider", *selected,
+            # Not -x: a test that was already failing would hide the ones after it.
+            str(python), "-B", "-m", "pytest", "-q", "-p", "no:cacheprovider", *selected,
             cwd=folder, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
             env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         )
@@ -106,8 +162,8 @@ async def failing_tests(root: Path, paths: list[str], *, timeout: float = TIMEOU
         return None
     # 1: tests failed. 0 passed, 5 found none; anything else (no pytest, a usage error) says
     # nothing about the edit.
+    if proc.returncode in (0, 5):
+        return []
     if proc.returncode != 1:
         return None
-    text = out.decode(errors="replace")
-    failed = re.findall(r"^FAILED (\S+)", text, re.M)
-    return f"tests fail ({failed[0]})" if failed else "tests fail"
+    return re.findall(r"^(?:FAILED|ERROR) (\S+)", out.decode(errors="replace"), re.M) or ["?"]

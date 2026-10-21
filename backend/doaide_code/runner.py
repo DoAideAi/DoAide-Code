@@ -20,7 +20,7 @@ import json
 import logging
 import re
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -481,10 +481,27 @@ async def _test_edits(job: Job, answer: str) -> str | None:
     except (ValueError, OSError):
         return None
     try:
-        return await failing_tests(job.cwd, [f.path for f in changeset.changed])
+        return await failing_tests(
+            job.cwd, [f.path for f in changeset.changed], without_edit=_taken_out(record), request=job.prompt
+        )
     finally:
         with contextlib.suppress(ValueError, OSError):
             await asyncio.to_thread(undo_record, record)
+
+
+def _taken_out(record: dict) -> Callable[[], contextlib.AbstractAsyncContextManager[None]]:
+    """For failing_tests: the written changeset `record` undone while entered, then written again,
+    so tests that also fail without it are not blamed on it."""
+
+    @contextlib.asynccontextmanager
+    async def without() -> AsyncIterator[None]:
+        await asyncio.to_thread(undo_record, record)
+        try:
+            yield
+        finally:
+            await asyncio.to_thread(apply_record, record)
+
+    return without
 
 
 class _Abandoned(Exception):
@@ -728,7 +745,10 @@ async def _preview_changes(
         notes = [f"Not written: {skipped[0]}." if skipped else ""]
         # The project's tests run on it (unless they already did): a failure is reported, and the
         # edit stays for the user to keep or undo.
-        if failure := None if verified else await failing_tests(job.cwd, [f.path for f in changeset.changed]):
+        paths = [f.path for f in changeset.changed]
+        if failure := None if verified else await failing_tests(
+            job.cwd, paths, without_edit=_taken_out(record), request=job.prompt
+        ):
             outcome.checks.append({"name": "tests", "ok": False, "detail": failure})
             notes.append(f"Warning: {failure} after this edit; Undo reverts it.")
         outcome.content = "\n\n".join(p for p in [summary or f"Updated {files}.", *notes] if p)
