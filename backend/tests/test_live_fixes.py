@@ -132,6 +132,11 @@ def test_every_prompt_says_doaide_reads_local_files():
         "I don't have access to your files, so please paste them.",
         "Unfortunately I cannot read files on your computer.",
         "As an AI, I do not have direct access to your codebase.",
+        # Live, qwen2.5-coder:7b on "what python version is this project using?"
+        "I'm sorry, but I don't have access to the user's system environment or project configuration files.",
+        "I cannot access the project's pyproject.toml file.",
+        "I'm unable to access your local Python environment.",
+        "I am unable to access the repository.",
     ],
 )
 def test_claims_that_doaide_cannot_access_files_are_caught(answer):
@@ -140,7 +145,14 @@ def test_claims_that_doaide_cannot_access_files_are_caught(answer):
 
 @pytest.mark.parametrize(
     "answer",
-    ["I can't see the file you mean.", "I can't find the function in your code.", "We cannot access your production database."],
+    [
+        "I can't see the file you mean.",
+        "I can't find the function in your code.",
+        "We cannot access your production database.",
+        "I don't have access to the internet, but httpx 0.27 added this.",
+        "I don't have access to your API key; set ANTHROPIC_API_KEY in .env.",
+        "The test cannot access the file system because of the sandbox.",
+    ],
 )
 def test_other_cannots_are_not_capability_claims(answer):
     assert capability_claim(answer) is None
@@ -150,6 +162,16 @@ async def test_a_local_answer_claiming_no_file_access_escalates(store):
     ollama = executor("ollama", 0, ["I can't access your local files, but in general a pager splits rows."], tool="ollama")
     sonnet = executor("claude-sonnet", 2, ["The pager splits rows into pages of 20 in pager.py."])
     outcome = await run_job(RouterBrain([ollama, sonnet], offline=True), store, Job("explain how the pager works"), Outcome(), nop)
+    assert outcome.executor == "claude-sonnet"
+    assert outcome.meta()["route"]["escalated_from"]["reason"] == NO_ACCESS_REASON
+
+
+async def test_a_local_refusal_to_a_project_question_escalates(store):
+    refusal = "I'm sorry, but I don't have access to the user's system environment or project configuration files."
+    ollama = executor("ollama", 0, [refusal], tool="ollama")
+    sonnet = executor("claude-sonnet", 2, ["Python 3.11 or newer (`requires-python` in backend/pyproject.toml)."])
+    job = Job("what python version is this project using?")
+    outcome = await run_job(RouterBrain([ollama, sonnet], offline=True), store, job, Outcome(), nop)
     assert outcome.executor == "claude-sonnet"
     assert outcome.meta()["route"]["escalated_from"]["reason"] == NO_ACCESS_REASON
 

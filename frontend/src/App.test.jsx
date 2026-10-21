@@ -642,3 +642,38 @@ describe('reply footer', () => {
     expect(checks.map((c) => c.textContent)).toEqual(['✗ python block: line 1: invalid syntax'])
   })
 })
+
+describe('how it works', () => {
+  it('opens from the top bar, explains routing, edits and models, and closes back to the chat', async () => {
+    await boot(true)
+    expect(screen.getByTestId('how-toggle').textContent).toBe('How it works')
+    await act(async () => fireEvent.click(screen.getByTestId('how-toggle')))
+    const page = screen.getByTestId('how-page')
+    expect(screen.queryByTestId('composer')).toBeNull()
+    const steps = [...screen.getByTestId('how-steps').querySelectorAll('li')].map((li) => li.textContent)
+    expect(steps[0]).toContain('Ollama')
+    expect(steps[0]).toContain('free')
+    expect(steps[2]).toContain('Claude Sonnet')
+    for (const text of ['Undo', 'no Apply or Discard', 'summarized', 'relays your phone', '$20 a month']) {
+      expect(page.textContent.replace(/\s+/g, ' ')).toContain(text.replace(/\s+/g, ' '))
+    }
+    const models = [...screen.getByTestId('how-models').querySelectorAll('tbody tr')].map((r) => r.firstChild.textContent)
+    expect(models).toEqual(['qwen2.5-coder 7b', 'qwen2.5-coder 32b', 'Claude Sonnet', 'Claude Opus', 'Codex'])
+    fireEvent.click(screen.getByText('Close'))
+    expect(screen.queryByTestId('how-page')).toBeNull()
+    expect(screen.getByTestId('composer')).toBeTruthy()
+  })
+
+  it('is one page at a time: opening Models replaces it, and its link toggles it shut', async () => {
+    await boot(true, { models: REPORT })
+    await act(async () => fireEvent.click(screen.getByTestId('how-toggle')))
+    await act(async () => fireEvent.click(screen.getByTestId('models-toggle')))
+    await flush()
+    expect(screen.queryByTestId('how-page')).toBeNull()
+    expect(screen.getByTestId('models-page')).toBeTruthy()
+    await act(async () => fireEvent.click(screen.getByTestId('how-toggle')))
+    expect(screen.queryByTestId('models-page')).toBeNull()
+    await act(async () => fireEvent.click(screen.getByTestId('how-toggle')))
+    expect(screen.queryByTestId('how-page')).toBeNull()
+  })
+})

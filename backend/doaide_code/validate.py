@@ -53,6 +53,16 @@ _NO_ACCESS = re.compile(
     r"|\b(?:can(?:no|['’])?t|cannot|unable\s+to)\s+(?:access|read|open|see)\s+(?:any\s+)?files\s+(?:on|in|from)\s+your\b",
     re.I,
 )
+# Live (qwen2.5-coder:7b): "I'm sorry, but I don't have access to the user's system environment or
+# project configuration files". A few words may sit between "access to your" and what is named.
+_NO_ACCESS_TO = re.compile(
+    r"\b(?:i['’]m\s+(?:not\s+able|unable)\s+to|(?:i|we)\s+(?:do(?:n['’]t|\s+not)\s+have|have\s+no|can(?:no|['’])?t|cannot"
+    r"|am\s+(?:not\s+able|unable)\s+to))"
+    r"\s+(?:direct\s+)?access\s+(?:to\s+)?(?:your|the\s+user['’]?s|this|the|local)\s+(?:[\w-]+\s+){0,4}?"
+    r"(?:files?|folders?|director(?:y|ies)|code(?:base)?|projects?|repo(?:sitory)?|environment|system|config(?:uration)?s?"
+    r"|computer|machine|laptop|file\s*system|disk)\b",
+    re.I,
+)
 NO_ACCESS_REASON = "the answer says DoAide cannot access your files, but it can"
 NEEDS_FILES_REASON = "the model said it could not see the code it needed"
 _CLAIMS_CHANGE = re.compile(
@@ -70,7 +80,8 @@ _LANGS = {"python": ".py", "py": ".py", "json": ".json", "javascript": ".js", "j
 
 def capability_claim(answer: str) -> str | None:
     """Why the answer misstates what DoAide can do, or None."""
-    return NO_ACCESS_REASON if _NO_ACCESS.search(answer[:1500]) else None
+    head = answer[:1500]
+    return NO_ACCESS_REASON if _NO_ACCESS.search(head) or _NO_ACCESS_TO.search(head) else None
 
 
 def incomplete_reason(answer: str, kind: str, *, reads_files: bool = False) -> str | None:

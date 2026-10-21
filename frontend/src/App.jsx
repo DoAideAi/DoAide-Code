@@ -16,6 +16,7 @@ import {
   setupStatus,
 } from './api.js'
 import Composer from './components/Composer.jsx'
+import HowItWorksPage from './components/HowItWorksPage.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
 import { NoModelsBanner } from './components/Models.jsx'
 import ModelsPage from './components/ModelsPage.jsx'
@@ -131,8 +132,9 @@ export default function App() {
   } = useChat()
   const socket = useRef(null)
   const [setupOpen, setSetupOpen] = useState(false)
-  const [usageOpen, setUsageOpen] = useState(false)
-  const [modelsOpen, setModelsOpen] = useState(false)
+  // The page shown instead of the chat: 'models', 'usage', 'how' or null.
+  const [page, setPage] = useState(null)
+  const toggle = (name) => () => setPage((p) => (p === name ? null : name))
   const loadUsage = useCallback((days) => fetchUsage(token, days), [token])
   const loadComparison = useCallback((days) => fetchModelComparison(token, days), [token])
 
@@ -189,31 +191,20 @@ export default function App() {
         busy={busy}
         models={connection === 'open' ? models : null}
         localUrl={mode === 'hub' ? localUrl : null}
-        onUsage={
-          token
-            ? () => {
-                setModelsOpen(false)
-                setUsageOpen((v) => !v)
-              }
-            : null
-        }
-        onModels={
-          token
-            ? () => {
-                setUsageOpen(false)
-                setModelsOpen((v) => !v)
-              }
-            : null
-        }
+        onUsage={token ? toggle('usage') : null}
+        onModels={token ? toggle('models') : null}
+        onHow={toggle('how')}
       />
-      {modelsOpen && token ? (
+      {page === 'models' && token ? (
         <ModelsPage
           load={loadComparison}
           models={connection === 'open' ? models : null}
-          onClose={() => setModelsOpen(false)}
+          onClose={() => setPage(null)}
         />
-      ) : usageOpen && token ? (
-        <UsagePage load={loadUsage} onClose={() => setUsageOpen(false)} />
+      ) : page === 'usage' && token ? (
+        <UsagePage load={loadUsage} onClose={() => setPage(null)} />
+      ) : page === 'how' ? (
+        <HowItWorksPage onClose={() => setPage(null)} />
       ) : setupOpen && token ? (
         <SetupPage
           agentOnline={agentOnline}
