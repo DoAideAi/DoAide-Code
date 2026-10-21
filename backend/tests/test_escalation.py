@@ -11,7 +11,6 @@ import pytest
 
 from doaide_code.dashboard import usage_report
 from doaide_code.executors import ExecutorError, Job, Turn
-from doaide_code.executors.base import transcript_prompt
 from doaide_code.router import RouterBrain, heuristic_tier
 from doaide_code.runner import Outcome, answer_anchor, run_job
 from doaide_code.usage import Usage
@@ -164,7 +163,7 @@ def test_dashboard_counts_escalations(store):
     assert report["totals"]["escalated"] == 1 and report["recent"][0]["escalated"] is True
 
 
-# Fewer paid tokens: a free repair round, early stops, resumed Claude sessions, shorter transcripts.
+# Fewer paid tokens: a free repair round, early stops, resumed Claude sessions.
 
 
 class Scripted(FakeExecutor):
@@ -247,19 +246,6 @@ async def test_a_failed_resume_starts_a_fresh_session(tmp_path, store):
     outcome = await run_job(RouterBrain([sonnet], offline=True), store, Job("what does charge return in app.py", history=history, cwd=tmp_path), Outcome(), nop)
     assert outcome.content == "charge returns 2 in app.py now." and [j.resume for j in sonnet.jobs] == ["gone", ""]
     assert [t.content for t in sonnet.jobs[1].history] == ["q", "old answer"]
-
-
-def test_long_transcripts_shorten_old_replies_but_keep_recent_turns():
-
-    code = "```python\n" + "x = 1\n" * 2000 + "```"
-    history = [Turn("user", "write it"), Turn("assistant", f"Here it is:\n{code}"), Turn("user", "a"), Turn("assistant", "b"),
-               Turn("user", "c"), Turn("assistant", f"Latest:\n{code}")]
-    prompt = transcript_prompt(Job("next", history=history))
-    assert "[python block, 2000 lines, omitted]" in prompt
-    # The newest reply is kept whole, however long.
-    assert prompt.count("x = 1") == 2000
-    short = [Turn("user", "q"), Turn("assistant", "```python\nx = 1\n```")]
-    assert "x = 1" in transcript_prompt(Job("next", history=short))
 
 
 def test_compute_in_a_code_question_is_not_math():

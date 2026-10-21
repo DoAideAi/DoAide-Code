@@ -29,6 +29,7 @@ from .db import Store
 from .detect import ModelDetector, answer_access, answer_meta, meta_question, pin_problem
 from .executors import Executor, ExecutorError, Job, Turn, build_executors
 from .fastpath import direct_answer, math_answer
+from .history import fit_history
 from .prompts import PROMPT_VERSION
 from .router import RouteDecision, RouterBrain, heuristic_tier, is_local
 from .usage import Usage, sonnet_equivalent
@@ -243,15 +244,20 @@ async def run_job(
         more = retry_note is not None or escalated is not None
         # A local first attempt is buffered: shown only if it passes, else silently escalated.
         trial = not pin and executor is candidates[0] and is_local(executor) and _escalation(candidates) is not None
-        run = job
+        # History sized for this executor's window (history.py), and its own context.
+        fitted = fit_history(job.history, executor.history_tokens, max_turns=executor.history_turns)
+        run = replace(job, history=fitted.turns, summary=fitted.summary)
         context, files = await _context_for(executor, ranking, diff, more=more)
         if context:
-            run = replace(job, context=context)
+            run = replace(run, context=context)
             outcome.context_files = files
         fresh = run
         resumed = None
+        missed = fitted
         if resume is not None and executor.tool == "claude":
             run, resumed = _resumed(job, resume, ranking, diff)
+            missed = fit_history(run.history, executor.history_tokens, max_turns=executor.history_turns)
+            run = replace(run, history=missed.turns, summary=missed.summary)
         started = time.monotonic()
         streamed: list[str] = []
         previous = outcome.content
@@ -285,6 +291,8 @@ async def run_job(
         outcome.route = _route(executor, decision, used, escalated=escalated, skipped=skipped)
         if run.resume and resumed:
             outcome.route["reasons"].append(resumed)
+        if note := (missed if run.resume else fitted).note():
+            outcome.route["reasons"].append(note)
 
         code_checks: list[dict] | None = None
         if trial:

@@ -104,9 +104,16 @@ straight to Sonnet.
 (`claude --resume`), found by a hash of that answer in the history. The session already holds
 the project map and the files it read, so only the turns it missed and a list of files changed
 since are sent; if the session is gone, a fresh one starts. In a measured follow-up this cost
-$0.040 against $0.092 for a fresh session. Without a session to resume, long transcripts are
-shortened deterministically: older assistant replies lose their code blocks (the agent can
-re-read the files) once the transcript passes 12k characters; the last four turns stay verbatim.
+$0.040 against $0.092 for a fresh session.
+
+**History per model** (`history.py`). Each job carries the last 40 messages
+(`DOAIDE_HISTORY_MESSAGES`); each executor then gets its own window: 8 messages and ~4k tokens
+for a 7B Ollama model, 12 and ~8k for 14B and up, 20 and ~32k for the Claude and Codex CLIs.
+To fit, older assistant replies are shortened first (code blocks become placeholders), then the
+oldest turns move into a one-line-per-message summary at the top of the history, then older user
+messages are shortened. The last two user instructions are never changed; the system prompt and
+the current request are not history. The summary is extractive (request, the answer's first
+sentence, files edited), so it costs nothing and cannot invent anything.
 
 **Context per executor.** Ollama gets the 2-3 most relevant files (large ones as excerpts
 around the matching lines) and an explicit `num_ctx`, since Ollama's default window silently

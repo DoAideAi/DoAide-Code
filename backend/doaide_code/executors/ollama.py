@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from collections.abc import AsyncIterator
 
@@ -122,6 +123,17 @@ class OllamaExecutor(Executor):
     async def available(self) -> bool:
         return await self.resolve_model() is not None
 
+    @property
+    def history_tokens(self) -> int:  # type: ignore[override]
+        """~4k tokens of history for small models, ~8k for 14B and larger (or the coder tier)."""
+        size = re.search(r"(\d+(?:\.\d+)?)b\b", (self._resolved or self.model).lower())
+        large = float(size.group(1)) >= 14 if size else self.prefer_large
+        return 8_000 if large else 4_000
+
+    @property
+    def history_turns(self) -> int:  # type: ignore[override]
+        return 12 if self.history_tokens > 4_000 else 8
+
     async def stream(self, job: Job) -> AsyncIterator[str | Usage]:
         model = await self.resolve_model()
         if not model:
@@ -129,6 +141,8 @@ class OllamaExecutor(Executor):
         messages = [{"role": "system", "content": system_prompt("local", job.kind)}]
         for example_user, example_answer in few_shot("local", job.kind):
             messages += [{"role": "user", "content": example_user}, {"role": "assistant", "content": example_answer}]
+        if job.summary:
+            messages.append({"role": "system", "content": job.summary})
         messages += [{"role": t.role, "content": t.content} for t in job.history]
         prompt = f"{job.context}\n\n# Request\n{job.prompt}" if job.context else job.prompt
         messages.append({"role": "user", "content": prompt})

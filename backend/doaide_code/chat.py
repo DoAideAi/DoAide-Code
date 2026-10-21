@@ -13,11 +13,13 @@ from .detect import clean_pin, format_report
 from .db import Store
 from .executors import Job, Turn
 from .router import RouterBrain
+from .history import HISTORY_MESSAGES
 from .runner import Outcome, run_job
 from .sync import SyncHub
 from .workspace import DEFAULT_WORKSPACE, working_root
 
-HISTORY_TURNS = 12
+# Messages sent with each job; runner.py fits them to each model (history.py).
+HISTORY_TURNS = HISTORY_MESSAGES
 
 
 def public_message(row: dict[str, Any]) -> dict[str, Any]:

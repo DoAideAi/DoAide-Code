@@ -6,7 +6,6 @@ import asyncio
 import json
 import logging
 import os
-import re
 import shutil
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Sequence
@@ -43,6 +42,8 @@ class Job:
     # A Claude Code session to continue: it already holds the earlier turns and the files it
     # read, so `history` is only the turns it missed and `context` only what changed since.
     resume: str = ""
+    # Digest of the earlier conversation that did not fit this executor's window (history.py).
+    summary: str = ""
 
 
 class Executor(ABC):
@@ -62,6 +63,10 @@ class Executor(ABC):
     min_task_tier: int = 0
     # Answers that depend only on the prompt and context, so they are safe to cache.
     cacheable: bool = False
+    # Conversation history this executor gets (see history.py): at most this many messages and
+    # about this many tokens; older messages are shortened or summarized to fit.
+    history_turns: int = 20
+    history_tokens: int = 32_000
 
     @abstractmethod
     async def available(self) -> bool: ...
@@ -71,43 +76,17 @@ class Executor(ABC):
         """Yield answer text chunks as they arrive, optionally ending with one Usage."""
 
 
-# Paid CLI runs pay for every character of the transcript. Over this budget, older assistant
-# replies are shortened (their code blocks become one-line placeholders: the agent can re-read
-# the files), oldest first; the last few turns are always kept verbatim.
-TRANSCRIPT_CHARS = 12_000
-VERBATIM_TURNS = 4
-BRIEF_CHARS = 600
-_FENCED = re.compile(r"^```(\w*)[^\n]*\n(.*?)^```[^\n]*$", re.M | re.S)
-
-
-def brief(text: str) -> str:
-    """An older reply, shortened: code blocks as placeholders, then cut to BRIEF_CHARS."""
-
-    def placeholder(m: re.Match[str]) -> str:
-        lines = m.group(2).count("\n")
-        return f"[{m.group(1) or 'code'} block, {lines} lines, omitted]"
-
-    short = _FENCED.sub(placeholder, text).strip()
-    return short if len(short) <= BRIEF_CHARS else short[:BRIEF_CHARS].rstrip() + " [...]"
-
-
-def transcript_prompt(job: Job, max_turns: int = 12) -> str:
-    """Fold recent history into one prompt for one-shot CLI agents."""
-    turns = [(t.role, t.content) for t in list(job.history)[-max_turns:]]
-    if not turns:
+def transcript_prompt(job: Job) -> str:
+    """Fold the history (already fitted to this executor by history.py) into one prompt for
+    one-shot CLI agents, after the summary of anything older."""
+    if not job.history and not job.summary:
         return job.prompt
-    size = sum(len(c) for _, c in turns)
-    for i in range(len(turns) - VERBATIM_TURNS):
-        if size <= TRANSCRIPT_CHARS:
-            break
-        role, content = turns[i]
-        if role == "assistant":
-            shorter = brief(content)
-            size -= len(content) - len(shorter)
-            turns[i] = (role, shorter)
-    lines = ["Conversation so far:"]
-    lines += [f"{role.upper()}: {content}" for role, content in turns]
-    lines += ["", "Current request:", job.prompt]
+    lines = [job.summary, ""] if job.summary else []
+    if job.history:
+        lines.append("Conversation so far:")
+        lines += [f"{t.role.upper()}: {t.content}" for t in job.history]
+        lines.append("")
+    lines += ["Current request:", job.prompt]
     return "\n".join(lines)
 
 
