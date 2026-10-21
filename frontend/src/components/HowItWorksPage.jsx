@@ -76,8 +76,8 @@ export default function HowItWorksPage({ onClose }) {
 
         <Section title="Edits apply themselves">
           <p>
-            Code changes are written to your files right away and shown as a short summary. There is no Apply or
-            Discard step: if you don't want a change, press Undo under the reply to restore the files.
+            Code changes are written to your files right away and shown as a short summary, with the diff one click
+            away. There is no Apply or Discard step and no Undo button; type /undo in the chat to restore the files.
           </p>
         </Section>
 

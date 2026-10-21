@@ -142,13 +142,13 @@ text and pass syntax and ruff. Results show under each reply with the model that
 **Usage dashboard.** *Usage* in the top bar: tasks, tokens and API-equivalent cost per day and
 per model, which model handled each task, and how much the free models saved versus Sonnet.
 
-## Code changes: written, with undo
+## Code changes: written, no confirmation
 
 Models answer with SEARCH/REPLACE edit blocks and never write files themselves. Each answer's
 blocks become a changeset with quick checks (target text found, syntax, ruff) and one silent
 repair round if they fail. A changeset that passes every check is written to the files at once
-and the reply is a one-line summary: no code in the chat, the diff collapsed under it, and
-**Undo** (`/undo [<id>]`) to put the files back (refused if you edited them since). For Python projects with a `.venv` and tests,
+and the reply is a one-line summary: no code in the chat and the diff collapsed under it. There
+is no Undo button; `/undo [<id>]` in the chat puts the files back (refused if you edited them since). For Python projects with a `.venv` and tests,
 the project's tests then run (`verify.py`; off with `DOAIDE_RUN_TESTS=0`): an edit that parses and
 lints but breaks them is undone, and a free model's attempt escalates instead. A changeset
 that fails its checks is held back: **Apply** / `/apply [<id>]` writes it anyway. Requests from
@@ -185,7 +185,7 @@ writes the same value.
 Kept minimal, like a dispatch: one conversation (no sessions to switch; `/new` clears it), a
 top bar (project, **Models**, **Usage**, one status dot), and the input box. Replies are short:
 a one-line footer gives the model, the cost (or "free, saved $X") and the time; only failed
-checks are shown; written changes collapse to a summary with Undo.
+checks are shown; written changes collapse to a summary.
 
 ## Sign-in
 

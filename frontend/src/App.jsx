@@ -218,7 +218,7 @@ export default function App() {
             <LaptopBanner onSetup={() => setSetupOpen(true)} />
           )}
           {connection === 'open' && <NoModelsBanner models={models} />}
-          <MessageList messages={messages} onSend={send} />
+          <MessageList messages={messages} />
           <Composer
             busy={busy}
             disabled={connection !== 'open'}

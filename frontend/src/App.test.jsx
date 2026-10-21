@@ -346,13 +346,13 @@ describe('Claude Code activity and diff previews', () => {
     expect(screen.getByTestId('usage').textContent).toBe('cost not reported')
     expect(screen.queryByText('Apply')).toBeNull()
     expect(screen.queryByText('Discard')).toBeNull()
-    // Applied by the caller (or another device): it shows as written, with Undo.
+    // Applied by the caller (or another device): it shows as written, with no Undo button.
     await act(async () => ws.emit({ type: 'changes', id: 'r', changes: { ...changes, status: 'applied' } }))
     expect(screen.getByTestId('changeset-status').textContent).toBe('Wrote 1 file')
-    expect(screen.getByText('Undo')).toBeTruthy()
+    expect(screen.queryByText('Undo')).toBeNull()
   })
 
-  it('written changes show a summary and an Undo button, not the code', async () => {
+  it('written changes show a summary, not the code, and no Undo button', async () => {
     const ws = await boot(true, {
       messages: [
         { id: 'r', role: 'assistant', content: 'Renamed old to new.', status: 'done', meta: { changes: { ...changes, status: 'applied' } } },
@@ -360,8 +360,9 @@ describe('Claude Code activity and diff previews', () => {
     })
     expect(screen.getByTestId('changeset-status').textContent).toBe('Wrote 1 file')
     expect(screen.getByTestId('changeset').textContent).not.toContain('+b')
-    fireEvent.click(screen.getByText('Undo'))
-    expect(ws.sent.at(-1)).toEqual({ type: 'send', text: '/undo c1' })
+    expect(screen.queryByText('Undo')).toBeNull()
+    expect(screen.queryByRole('button', { name: /undo/i })).toBeNull()
+    // A /undo typed in the chat still shows on the changeset.
     await act(async () => ws.emit({ type: 'changes', id: 'r', changes: { ...changes, status: 'undone' } }))
     expect(screen.getByTestId('changeset-status').textContent).toBe('Undid 1 file')
     expect(screen.queryByText('Undo')).toBeNull()
@@ -654,7 +655,7 @@ describe('how it works', () => {
     expect(steps[0]).toContain('Ollama')
     expect(steps[0]).toContain('free')
     expect(steps[2]).toContain('Claude Sonnet')
-    for (const text of ['Undo', 'no Apply or Discard', 'summarized', 'relays your phone', '$20 a month']) {
+    for (const text of ['no Undo button', 'no Apply or Discard', 'summarized', 'relays your phone', '$20 a month']) {
       expect(page.textContent.replace(/\s+/g, ' ')).toContain(text.replace(/\s+/g, ' '))
     }
     const models = [...screen.getByTestId('how-models').querySelectorAll('tbody tr')].map((r) => r.firstChild.textContent)

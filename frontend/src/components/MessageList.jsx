@@ -177,9 +177,9 @@ export function changeHeadline(changes) {
   return `${files} discarded`
 }
 
-// Edits under a reply: chat edits are written at once, with Undo to restore the files (no
-// confirmation step). Diffs are one click away, collapsed by default.
-export function ChangeSet({ changes, onSend }) {
+// Edits under a reply: chat edits are written at once, with no confirmation step and no Undo
+// button (`/undo` in the chat still restores the files). Diffs are one click away, collapsed by default.
+export function ChangeSet({ changes }) {
   // Diffs start collapsed: the reply is the summary, the code is in the files.
   const [open, setOpen] = useState(() => new Set())
   const toggle = (path) =>
@@ -194,15 +194,6 @@ export function ChangeSet({ changes, onSend }) {
         <span data-testid="changeset-status" className={CHANGE_STATUS[changes.status] ?? 'text-zinc-400'}>
           {changeHeadline(changes)}
         </span>
-        {changes.status === 'applied' && onSend && (
-          <button
-            type="button"
-            onClick={() => onSend(`/undo ${changes.id}`)}
-            className="rounded border border-zinc-700 px-2 py-0.5 text-zinc-300 hover:bg-zinc-800"
-          >
-            Undo
-          </button>
-        )}
       </div>
       {changes.files.map((file) => (
         <div key={file.path} className="border-b border-zinc-800/60 last:border-b-0">
@@ -252,7 +243,7 @@ function Elapsed({ since }) {
   return seconds === null ? null : <span className="tabular-nums"> {seconds}s</span>
 }
 
-function Message({ message, onSend }) {
+function Message({ message }) {
   const via = message.meta?.via === 'mcp'
   if (via && message.role === 'user') {
     return (
@@ -310,7 +301,7 @@ function Message({ message, onSend }) {
       {streaming && message.content && (
         <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-zinc-400 align-middle" />
       )}
-      {changes?.files?.length > 0 && <ChangeSet changes={changes} onSend={onSend} />}
+      {changes?.files?.length > 0 && <ChangeSet changes={changes} />}
       {message.status === 'stopped' && <div className="mt-1 text-xs text-zinc-500">stopped</div>}
       {foot && !streaming && (
         <div data-testid="usage" title={foot.title} className="mt-1.5 text-[11px] text-zinc-600">
@@ -322,7 +313,7 @@ function Message({ message, onSend }) {
   )
 }
 
-export default function MessageList({ messages, onSend }) {
+export default function MessageList({ messages }) {
   const end = useRef(null)
   const last = messages[messages.length - 1]
   useEffect(() => {
@@ -338,7 +329,7 @@ export default function MessageList({ messages, onSend }) {
           </p>
         )}
         {messages.map((m) => (
-          <Message key={m.id} message={m} onSend={onSend} />
+          <Message key={m.id} message={m} />
         ))}
         <div ref={end} />
       </div>

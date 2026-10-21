@@ -249,9 +249,9 @@ async def test_a_free_edit_that_breaks_the_tests_escalates_and_the_paid_fix_is_k
 async def test_an_edit_that_breaks_the_tests_is_kept_with_a_warning_and_undo(project, store):
     sonnet = FakeExecutor("claude-sonnet", 2, [WRONG])
     outcome = await run_job(RouterBrain([sonnet], offline=True), store, Job("fix add in calc.py", cwd=project), Outcome(), nop)
-    # Written without asking; the reply warns, and Undo reverts it.
+    # Written without asking; the reply warns, and /undo reverts it.
     assert (project / "calc.py").read_text() == "def add(a, b):\n    return a * b\n"
-    assert "Warning: tests fail (tests/test_calc.py::test_add) after this edit; Undo reverts it." in outcome.content
+    assert "Warning: tests fail (tests/test_calc.py::test_add) after this edit; /undo reverts it." in outcome.content
     assert outcome.meta()["changes"]["status"] == "applied"
     tests = next(c for c in outcome.meta()["checks"]["items"] if c["name"] == "tests")
     assert tests["ok"] is False

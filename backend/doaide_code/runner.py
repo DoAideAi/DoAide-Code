@@ -719,7 +719,7 @@ async def _preview_changes(
         if better is not None and len(better.all_problems) < len(changeset.all_problems):
             changeset, outcome.content = better, repaired.content
     auto = source in AUTO_APPLY_SOURCES
-    # Chat edits are written without asking (Undo reverts them): files whose edit did not apply
+    # Chat edits are written without asking (/undo reverts them): files whose edit did not apply
     # or does not parse are left out and named; the rest is written.
     skipped = changeset.drop_failing() + changeset.problems if auto else []
     if not changeset.changed:
@@ -750,7 +750,7 @@ async def _preview_changes(
             job.cwd, paths, without_edit=_taken_out(record), request=job.prompt
         ):
             outcome.checks.append({"name": "tests", "ok": False, "detail": failure})
-            notes.append(f"Warning: {failure} after this edit; Undo reverts it.")
+            notes.append(f"Warning: {failure} after this edit; /undo reverts it.")
         outcome.content = "\n\n".join(p for p in [summary or f"Updated {files}.", *notes] if p)
         return
     if changeset.all_problems:
