@@ -132,10 +132,10 @@ const TOOL_LABELS = {
   discard_changes: 'discard',
 }
 
-function ClaudeBadge({ tool }) {
+function ClaudeBadge({ tool, label = 'Claude Code' }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
-      Claude Code
+      {label}
       {tool && <span className="text-amber-300/60">· {TOOL_LABELS[tool] ?? tool}</span>}
     </span>
   )
@@ -245,10 +245,15 @@ function Elapsed({ since }) {
 
 function Message({ message }) {
   const via = message.meta?.via === 'mcp'
-  if (via && message.role === 'user') {
+  // A task Dispatch sent through the Tasks API: labelled like a Claude Code call; the reply is a normal one.
+  const dispatch = message.meta?.via === 'dispatch'
+  if ((via || dispatch) && message.role === 'user') {
     return (
-      <div data-testid="mcp-instruction" className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2">
-        <ClaudeBadge tool={message.meta.tool} />
+      <div
+        data-testid={dispatch ? 'dispatch-instruction' : 'mcp-instruction'}
+        className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2"
+      >
+        {dispatch ? <ClaudeBadge label="Dispatch" /> : <ClaudeBadge tool={message.meta.tool} />}
         <div className="mt-1.5 whitespace-pre-wrap text-zinc-100">{message.content}</div>
       </div>
     )

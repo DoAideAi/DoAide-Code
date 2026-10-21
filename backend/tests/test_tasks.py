@@ -8,7 +8,13 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
+from doaide_code.chat import ChatService
+from doaide_code.db import Store
 from doaide_code.main import create_app
+from doaide_code.relay import RelayService, clean_meta
+from doaide_code.router import RouterBrain
+from doaide_code.sync import MirrorHub, SyncHub
+from doaide_code.tasks import run_task
 from doaide_code.usage import Usage
 from doaide_code.validate import NO_ACCESS_REASON
 
@@ -146,3 +152,85 @@ def hub(settings) -> Iterator[TestClient]:
 
 def test_the_hub_does_not_run_tasks(hub, auth):
     assert post(hub, auth, prompt="hi").status_code == 404
+
+
+# Tasks show in the user's one conversation: the laptop UI at once, the phone through the hub
+
+
+def test_a_task_shows_in_the_laptop_chat_as_it_runs(settings, project, auth):
+    ollama = executor("ollama", 0, ["`GREETING` in app.py is 'hi'."], tool="ollama")
+    with app_with(settings, project, ollama) as client:
+        token = auth["Authorization"].removeprefix("Bearer ")
+        with client.websocket_connect(f"/ws?token={token}") as ws:
+            assert ws.receive_json()["type"] == "snapshot"
+            body = post(client, auth, prompt="what is GREETING in app.py?", project="proj").json()
+            events = []
+            while (event := ws.receive_json())["type"] != "done":
+                events.append(event)
+        snapshot = client.get("/api/session", headers=auth).json()
+    instruction, reply = (e["message"] for e in events if e["type"] == "message")
+    assert instruction["role"] == "user" and instruction["content"] == "what is GREETING in app.py?"
+    assert instruction["meta"] == {"via": "dispatch"}
+    assert reply["id"] == body["message_id"] and reply["status"] == "streaming"
+    assert event["id"] == body["message_id"] and event["content"] == body["answer"]
+    assert event["meta"]["via"] == "dispatch" and event["meta"]["route"]["executor"] == "ollama"
+    # A UI opened later loads it from the conversation, with the model and checks.
+    instruction, reply = snapshot["messages"][-2:]
+    assert instruction["meta"]["via"] == "dispatch" and reply["content"] == body["answer"]
+    assert reply["status"] == "done" and reply["meta"]["route"]["executor"] == "ollama"
+
+
+def test_a_streamed_task_also_shows_in_the_chat(settings, project, auth):
+    sonnet = executor("claude-sonnet", 2, ["`GREETING` is ", "'hi' in app.py."])
+    with app_with(settings, project, sonnet) as client:
+        with client.stream("POST", "/api/v1/tasks", headers=auth, json={"prompt": "what is GREETING?", "stream": True}) as resp:
+            resp.read()
+        messages = client.get("/api/session", headers=auth).json()["messages"]
+    assert [(m["role"], m["content"]) for m in messages[-2:]] == [
+        ("user", "what is GREETING?"),
+        ("assistant", "`GREETING` is 'hi' in app.py."),
+    ]
+
+
+class Sink:
+    def __init__(self) -> None:
+        self.events: list[dict] = []
+
+    async def send_json(self, data) -> None:
+        self.events.append(data)
+
+
+@pytest.mark.anyio
+async def test_a_task_on_the_laptop_reaches_the_phone_through_the_hub(store, project, tmp_path):
+
+    owner = "owner@example.com"
+    # The hub (its own store) with the phone connected, fed by the laptop agent's uplink.
+    hub_store, hub, phone = Store(tmp_path / "hub.db"), SyncHub(), Sink()
+    await hub.join(owner, phone)
+    relay = RelayService(hub_store, hub)
+    laptop, laptop_ui = MirrorHub(), Sink()
+    await laptop.join(owner, laptop_ui)
+
+    async def uplink(event):
+        await relay.on_agent_event(owner, event)
+
+    laptop.uplink = uplink
+    ollama = executor("ollama", 0, [EDIT], tool="ollama")
+    router = RouterBrain([ollama], offline=True)
+    chat = ChatService(store, router, laptop, workspace=str(tmp_path / "ws"))
+    body = await run_task(router, store, project, "proj", "change GREETING in app.py to 'hello'", chat=chat, user_email=owner)
+
+    assert [e["type"] for e in laptop_ui.events] == [e["type"] for e in phone.events]
+    assert phone.events[-1]["type"] == "done" and phone.events[-1]["meta"]["via"] == "dispatch"
+    assert phone.events[-1]["meta"]["changes"]["status"] == "applied"
+    instruction, reply = relay.snapshot(owner)["messages"]
+    assert instruction["content"] == "change GREETING in app.py to 'hello'" and instruction["meta"] == {"via": "dispatch"}
+    assert reply["id"] == body["message_id"] and reply["content"] == body["answer"] and reply["meta"]["via"] == "dispatch"
+    hub_store.close()
+
+
+def test_the_hub_keeps_only_the_dispatch_label_from_the_laptop():
+    assert clean_meta({"via": "dispatch", "route": {"executor": "ollama"}}) == {"via": "dispatch", "route": {"executor": "ollama"}}
+    # "mcp" marks calls the hub relayed itself; a laptop cannot claim it, or anything else.
+    assert clean_meta({"via": "mcp", "tool": "execute_code"}) == {}
+    assert clean_meta({"via": "<script>"}) == {}

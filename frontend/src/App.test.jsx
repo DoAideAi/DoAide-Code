@@ -678,3 +678,26 @@ describe('how it works', () => {
     expect(screen.queryByTestId('how-page')).toBeNull()
   })
 })
+
+describe('tasks from Dispatch', () => {
+  it('show in the conversation labelled Dispatch, with a normal reply and footer', async () => {
+    await boot(true, {
+      messages: [
+        { id: 'u', role: 'user', content: 'add a docstring to router.py', status: 'done', meta: { via: 'dispatch' } },
+        {
+          id: 'r',
+          role: 'assistant',
+          content: 'Added a module docstring.',
+          status: 'done',
+          meta: { via: 'dispatch', usage: { tokens_in: 900, tokens_out: 40, cost_usd: 0 }, route: { executor: 'ollama', free: true } },
+        },
+      ],
+    })
+    const instruction = screen.getByTestId('dispatch-instruction')
+    expect(instruction.textContent).toContain('Dispatch')
+    expect(instruction.textContent).toContain('add a docstring to router.py')
+    expect(instruction.textContent).not.toContain('Claude Code')
+    expect(screen.queryByTestId('mcp-instruction')).toBeNull()
+    expect(screen.getByText('Added a module docstring.')).toBeTruthy()
+  })
+})

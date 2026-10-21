@@ -33,6 +33,8 @@ MIRROR_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 MAX_MIRROR_CHARS = 200_000
 # Reply extras the laptop may attach (token usage, proposed changes), and a size cap for them.
 META_KEYS = {"usage", "changes", "route", "checks"}
+# The only `via` a laptop may set ("mcp" is the hub's own, for calls it relayed).
+MIRRORED_VIA = {"dispatch"}
 MAX_META_BYTES = 512_000
 
 
@@ -41,6 +43,9 @@ def clean_meta(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
     meta = {k: v for k, v in value.items() if k in META_KEYS and isinstance(v, dict)}
+    if value.get("via") in MIRRORED_VIA:
+        # Labels a task another agent sent to the laptop (tasks.py), so the phone shows it too.
+        meta["via"] = value["via"]
     return meta if len(json.dumps(meta)) <= MAX_META_BYTES else {}
 DISCONNECTED = "[laptop disconnected before finishing]"
 # The laptop's model report (a few tools and their model names) is small; cap what is kept.

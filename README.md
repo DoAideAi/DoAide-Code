@@ -350,7 +350,9 @@ get 400) or `project` (its name); with neither, the active project. The reply ha
 `"stream": true` it is server-sent events: `delta` (`{"text"}`) as the answer is shown, then
 `done` with that body (or `error`). The free local attempt is held back until it passes its
 checks, so an escalated task's deltas start with Sonnet's answer. Usage is recorded under source
-`dispatch`; tasks do not appear in the chat.
+`dispatch`. Each task also shows in the chat, labelled **Dispatch**: the prompt, then the reply
+streaming in with its footer and diff, on the laptop UI at once and on the phone through the hub
+(the agent mirrors it like any local message). The reply's id is `message_id`.
 
 ## Configuration
 

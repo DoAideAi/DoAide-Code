@@ -248,13 +248,15 @@ def create_app(
             root, label = resolve_root(store, user.email, settings.workspace, body)
         except TaskError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        # Shown in the user's conversation on every device (the laptop UI, and the phone via the hub).
+        shown = {"chat": chat if isinstance(chat, ChatService) else None, "user_email": user.email}
         if body.stream:
             return StreamingResponse(
-                stream_task(router, store, root, label, body.prompt),
+                stream_task(router, store, root, label, body.prompt, **shown),
                 media_type="text/event-stream",
                 headers={"cache-control": "no-cache"},
             )
-        answer = await run_task(router, store, root, label, body.prompt)
+        answer = await run_task(router, store, root, label, body.prompt, **shown)
         return JSONResponse(answer, status_code=200 if answer["status"] == "done" else status.HTTP_502_BAD_GATEWAY)
 
     # Files (read-only) and laptop settings
