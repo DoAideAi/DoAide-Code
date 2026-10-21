@@ -353,3 +353,27 @@ async def test_incomplete_sonnet_answer_retries_on_codex_not_opus(store):
     assert opus.jobs == [] and outcome.executor == "codex"
     # The route names the model that answered, not one from an earlier attempt.
     assert outcome.meta()["route"]["model"] == "gpt-6-astra"
+
+
+def test_opus_only_for_design_class_work():
+    big_refactor = classify_task("refactor the duplicated search-and-replace helpers across the backend")
+    assert big_refactor.tier == 2 and big_refactor.score >= 12
+    assert classify_task("design a distributed architecture and do a security audit across all services").tier == 3
+
+
+def test_saying_something_is_absent_is_not_a_missing_context_complaint():
+    assert incomplete_reason("I don't see any `sub()` helper in backend/; the only matches are submit().", "explain") is None
+    assert incomplete_reason("I can't see the file you mean. Please provide the code.", "edit") is not None
+
+
+def test_claude_messages_after_tool_calls_start_a_new_paragraph():
+    from doaide_code.executors.claude_cli import ClaudeStreamParser
+
+    parse = ClaudeStreamParser("sonnet")
+
+    def delta(text):
+        return {"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": text}}}
+
+    start = {"type": "stream_event", "event": {"type": "message_start"}}
+    out = [parse(start), parse(delta("I'll search first.")), parse(start), parse(delta("Found it")), parse(delta(" here."))]
+    assert "".join(c for c in out if c) == "I'll search first.\n\nFound it here."

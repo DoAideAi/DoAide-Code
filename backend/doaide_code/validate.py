@@ -23,8 +23,9 @@ from .changes import _run, parse_edits
 
 _FENCE = re.compile(r"^```([\w+-]*)[^\n]*\n(.*?)^```", re.M | re.S)
 _NEEDS_FILES = re.compile(
-    r"\b(?:i (?:don't|do not|cannot|can't|am unable to) (?:see|access|view|read|find)|"
-    r"(?:please|could you) (?:provide|share|paste|send)|without (?:seeing|access to) the (?:code|file)|"
+    r"\b(?:i (?:don't|do not|cannot|can't|am unable to) (?:see|access|view|read|find) (?:the|your|this|that) "
+    r"(?:file|code|project|repo|source|function|implementation)|"
+    r"(?:please|could you) (?:provide|share|paste|send) (?:the|your|me|more)|without (?:seeing|access to) the (?:code|file)|"
     r"i (?:would )?need (?:to see|more (?:context|information|details))|not (?:provided|included) in the context)",
     re.I,
 )

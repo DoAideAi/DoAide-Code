@@ -26,15 +26,26 @@ class ClaudeStreamParser:
     def __init__(self, model: str = "") -> None:
         self.saw_delta = False
         self.model = model
+        # Each assistant message after a tool call starts a new paragraph instead of running on
+        # ("first.Let me look"): set on message_start, applied to that message's first text.
+        self.message_text = False
+        self.pending_break = False
 
     def __call__(self, event: dict) -> str | Usage | None:
         kind = event.get("type")
         if kind == "stream_event":
             inner = event.get("event", {})
+            if inner.get("type") == "message_start":
+                self.pending_break, self.message_text = self.saw_delta, False
+                return None
             delta = inner.get("delta", {}) if inner.get("type") == "content_block_delta" else {}
             if delta.get("type") == "text_delta":
-                self.saw_delta = True
-                return delta.get("text")
+                text = delta.get("text") or ""
+                if self.pending_break and not self.message_text and text:
+                    text = "\n\n" + text
+                self.saw_delta = self.message_text = True
+                self.pending_break = False
+                return text or None
             return None
         if kind == "assistant" and not self.saw_delta:
             blocks = event.get("message", {}).get("content", [])

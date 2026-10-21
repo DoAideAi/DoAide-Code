@@ -4,7 +4,7 @@ Tiers (see router.py and executors/__init__.py):
   0  simple   math, basic questions, short explanations         -> Ollama, small fast model (free)
   1  medium   explain code, small edits, debugging, tests        -> Ollama, best local coder model (free)
   2  complex  multi-file changes, large refactors, new features  -> Claude Sonnet (Codex as alternative)
-  3  hardest  architecture, security, concurrency, migrations    -> Claude Opus
+  3  hardest  architecture, security, concurrency (score >= 12)   -> Claude Opus
 
 The score is a sum of weighted signals, so one strong signal ("architecture") or several weak
 ones ("refactor" + three files + a long request) both push a task up. Every signal that fired is
@@ -112,6 +112,10 @@ def classify_task(prompt: str) -> TaskProfile:
         reasons.append("instruction (+3)")
 
     tier = sum(score >= t for t in TIER_THRESHOLDS)
+    if tier == 3 and kinds.get("design", 0) < 9:
+        # Opus is for the hardest work: architecture, security, concurrency. A big refactor,
+        # however phrased, is Sonnet's.
+        tier = 2
     return TaskProfile(
         score=round(score, 1),
         tier=tier,
