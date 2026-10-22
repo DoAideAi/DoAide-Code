@@ -219,6 +219,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'image-to-base64',
+    label: 'Image → Base64',
+    title: 'Image to Base64 Converter',
+    heading: 'Convert an image to Base64',
+    description:
+      'Drop an image and copy it as a Base64 data URL, raw Base64, an <img> tag, CSS background or Markdown. Converted in your browser, never uploaded. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',

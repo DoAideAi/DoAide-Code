@@ -35,6 +35,7 @@ const PAGES = {
   'json-path-finder': lazy(() => import('./JsonPathPage.jsx')),
   'html-preview': lazy(() => import('./HtmlPreviewPage.jsx')),
   'markdown-to-html': lazy(() => import('./MdHtmlPage.jsx')),
+  'image-to-base64': lazy(() => import('./ImagePage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {
