@@ -33,6 +33,7 @@ const PAGES = {
   'lorem-ipsum': lazy(() => import('./LoremPage.jsx')),
   'string-utilities': lazy(() => import('./StringPage.jsx')),
   'json-path-finder': lazy(() => import('./JsonPathPage.jsx')),
+  'html-preview': lazy(() => import('./HtmlPreviewPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {

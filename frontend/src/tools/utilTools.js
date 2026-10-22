@@ -201,6 +201,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'html-preview',
+    label: 'HTML preview',
+    title: 'HTML Preview',
+    heading: 'Preview HTML, CSS and JavaScript live',
+    description:
+      'Type HTML, CSS and JavaScript in three panes and watch the result render live in a sandboxed preview — runtime errors shown inline. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
