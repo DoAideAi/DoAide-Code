@@ -371,12 +371,16 @@ def rank_files(root: Path, request: str) -> Ranking:
     mentioned = mentioned_paths(request, root)
     ranking.idents = _idents(request, mentioned)
     present: dict[str, set[str]] = {}
+    all_paths = {rel for rel, _ in files}
     explicit: set[str] = set()
     defines: list[str] = []
     for rel, st in files:
         if st.st_size > MAX_FILE_BYTES:
             continue
-        if rel in mentioned or any(rel.endswith("/" + m) or Path(rel).name == m for m in mentioned):
+        # A mention that is a path in the project names that file only ("README.md" is the root
+        # one, not legacy/README.md too: live, Sonnet "fixed" the other one); others match by
+        # path suffix or file name.
+        if rel in mentioned or any(m not in all_paths and (rel.endswith("/" + m) or Path(rel).name == m) for m in mentioned):
             explicit.add(rel)
         lower = rel.lower()
         found = {t for t in terms if t in lower}

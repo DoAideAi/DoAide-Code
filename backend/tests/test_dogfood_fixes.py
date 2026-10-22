@@ -49,3 +49,16 @@ async def test_a_named_file_that_fits_still_goes_local_first(tmp_path: Path, sto
     sonnet = paid("claude-sonnet", 2)
     outcome, _ = await run([ollama, sonnet], "fix any typos in README.md", cwd=tmp_path, store=store)
     assert outcome.executor == "ollama-coder" and sonnet.jobs == []
+
+
+def test_a_mention_that_is_a_project_path_names_only_that_file(tmp_path: Path):
+    from doaide_code.context import rank_files
+
+    (tmp_path / "legacy").mkdir()
+    (tmp_path / "README.md").write_text("root\n")
+    (tmp_path / "legacy" / "README.md").write_text("old\n")
+    (tmp_path / "legacy" / "notes.md").write_text("old\n")
+    explicit = lambda prompt: [c.path for c in rank_files(tmp_path, prompt).candidates if c.explicit]  # noqa: E731
+    assert explicit("fix any typos in README.md") == ["README.md"]
+    assert explicit("fix any typos in legacy/README.md") == ["legacy/README.md"]
+    assert explicit("fix any typos in notes.md") == ["legacy/notes.md"]  # no exact path: by name
