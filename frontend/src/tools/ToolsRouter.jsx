@@ -24,6 +24,7 @@ const PAGES = {
   'jwt-decoder': lazy(() => import('./JwtPage.jsx')),
   'cron-builder': lazy(() => import('./CronPage.jsx')),
   base64: lazy(() => import('./Base64Page.jsx')),
+  'css-gradient': lazy(() => import('./GradientPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {

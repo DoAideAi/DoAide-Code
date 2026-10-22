@@ -120,6 +120,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'css-gradient',
+    label: 'CSS gradient',
+    title: 'CSS Gradient Generator',
+    heading: 'Build a CSS gradient',
+    description:
+      'Pick colors and positions, see the gradient live, and copy the CSS — linear, radial or conic, up to six stops, with ready-made presets. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
