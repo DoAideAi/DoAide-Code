@@ -155,6 +155,12 @@ export function createSession(token) {
   })
 }
 
+// Messages older than `before` (a message id), oldest first: { messages, has_more }.
+export function fetchEarlierMessages(token, sessionId, before, limit = 20) {
+  const params = new URLSearchParams({ before, limit: String(limit) })
+  return get(`/api/sessions/${encodeURIComponent(sessionId)}/messages?${params}`, token)
+}
+
 export function switchSession(token, sessionId) {
   return get(`/api/session?session_id=${encodeURIComponent(sessionId)}`, token)
 }

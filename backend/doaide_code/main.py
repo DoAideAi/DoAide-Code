@@ -223,12 +223,16 @@ def create_app(
         return {"id": s["id"], "title": s["title"], "created_at": s["created_at"], "updated_at": s["updated_at"]}
 
     @app.get("/api/sessions/{session_id}/messages")
-    async def session_messages(session_id: str, user: User = Depends(current_user)) -> dict:
+    async def session_messages(
+        session_id: str, before: str | None = None, limit: int = 20, user: User = Depends(current_user)
+    ) -> dict:
+        """A page of a session's messages, oldest first: the latest, or those older than `before`."""
         s = store.get_session(session_id)
         if not s or s["user_email"] != user.email:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Session not found")
-        from .chat import SNAPSHOT_MESSAGES, public_message
-        return {"messages": [public_message(m) for m in store.list_messages(session_id, SNAPSHOT_MESSAGES)]}
+        from .chat import public_message
+        messages, has_more = store.message_page(session_id, max(1, min(limit, 100)), before)
+        return {"messages": [public_message(m) for m in messages], "has_more": has_more}
 
     @app.post("/api/messages", status_code=status.HTTP_202_ACCEPTED)
     async def post_message(body: SendMessage, user: User = Depends(current_user)) -> dict:

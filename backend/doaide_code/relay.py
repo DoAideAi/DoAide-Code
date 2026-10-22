@@ -142,6 +142,7 @@ class RelayService:
 
     def snapshot(self, user_email: str) -> dict[str, Any]:
         session = self.current_session(user_email)
+        messages, has_more = self.store.message_page(session["id"], SNAPSHOT_MESSAGES)
         return {
             "type": "snapshot",
             "session_id": session["id"],
@@ -150,7 +151,8 @@ class RelayService:
             "mode": "hub",
             "agent_online": self.agent_online(user_email),
             "models": self._models.get(user_email),
-            "messages": [public_message(m) for m in self.store.list_messages(session["id"], SNAPSHOT_MESSAGES)],
+            "messages": [public_message(m) for m in messages],
+            "has_more": has_more,
         }
 
     async def _publish_status(self, user_email: str) -> None:

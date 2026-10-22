@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 // Split text into prose and ``` fenced code segments. An unclosed fence (mid-stream) is code.
 export function splitFences(text) {
@@ -530,16 +530,65 @@ function Welcome({ onSend }) {
 }
 
 // onRetry(prompt) sends a failed reply's prompt again; null hides Retry (offline or busy).
-export default function MessageList({ messages, onSend = null, onRetry = null }) {
+// The oldest message the server knows (notices are client-only), to page back from.
+export function oldestServerId(messages) {
+  return messages.find((m) => !String(m.id).startsWith('notice-'))?.id ?? null
+}
+
+function LoadEarlier({ onLoad }) {
+  const [state, setState] = useState('idle') // idle | loading | failed
+  const load = async () => {
+    setState('loading')
+    try {
+      await onLoad()
+      setState('idle')
+    } catch {
+      setState('failed')
+    }
+  }
+  return (
+    <button
+      type="button"
+      data-testid="load-earlier"
+      onClick={load}
+      disabled={state === 'loading'}
+      className="self-center rounded-full border border-zinc-700/60 px-3 py-1 text-xs text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-60"
+    >
+      {state === 'loading' ? 'Loading…' : state === 'failed' ? 'Could not load, try again' : 'Load earlier messages'}
+    </button>
+  )
+}
+
+export default function MessageList({ messages, onSend = null, onRetry = null, hasMore = false, onLoadEarlier = null }) {
+  const scroller = useRef(null)
   const end = useRef(null)
   const last = messages[messages.length - 1]
+  // Distance from the bottom before older messages were added above, to keep the view still.
+  const fromBottom = useRef(null)
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: 'end' })
-  }, [messages.length, last?.content])
+  }, [last?.id, last?.content])
+  useLayoutEffect(() => {
+    const el = scroller.current
+    if (el && fromBottom.current !== null) el.scrollTop = el.scrollHeight - fromBottom.current
+    fromBottom.current = null
+  }, [messages[0]?.id])
+
+  const loadEarlier = async () => {
+    const el = scroller.current
+    fromBottom.current = el ? el.scrollHeight - el.scrollTop : null
+    try {
+      await onLoadEarlier()
+    } catch (error) {
+      fromBottom.current = null
+      throw error
+    }
+  }
 
   return (
-    <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+    <main ref={scroller} className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
       <div className="mx-auto flex max-w-2xl flex-col gap-4 px-3 py-5 text-[15px] sm:px-4">
+        {hasMore && onLoadEarlier && <LoadEarlier onLoad={loadEarlier} />}
         {messages.length === 0 && <Welcome onSend={onSend} />}
         {messages.map((m, i) => {
           const prompt = onRetry && m.status === 'error' ? promptFor(messages, i) : null

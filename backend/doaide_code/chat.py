@@ -66,13 +66,15 @@ class ChatService:
     def snapshot(self, user_email: str) -> dict[str, Any]:
         session = self.current_session(user_email)
         project = self.store.active_project(user_email)
+        messages, has_more = self.store.message_page(session["id"], SNAPSHOT_MESSAGES)
         return {
             "type": "snapshot",
             "session_id": session["id"],
             "project": project["name"] if project else None,
             "status": self.status(user_email),
             "mode": "local",
-            "messages": [public_message(m) for m in self.store.list_messages(session["id"], SNAPSHOT_MESSAGES)],
+            "messages": [public_message(m) for m in messages],
+            "has_more": has_more,
         }
 
     async def _status(self, user_email: str) -> None:

@@ -7,6 +7,7 @@ import {
   downloadInstaller,
   fetchConfig,
   fetchBenchmarks,
+  fetchEarlierMessages,
   fetchModelComparison,
   fetchProjects,
   fetchSessions,
@@ -28,7 +29,7 @@ import HowItWorksPage from './components/HowItWorksPage.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
 import { NoModelsBanner } from './components/Models.jsx'
 import ModelsPage from './components/ModelsPage.jsx'
-import MessageList from './components/MessageList.jsx'
+import MessageList, { oldestServerId } from './components/MessageList.jsx'
 import SearchBar from './components/SearchBar.jsx'
 import SetupPage from './components/SetupPage.jsx'
 import SignIn from './components/SignIn.jsx'
@@ -131,6 +132,8 @@ export default function App() {
   const { token, needsSignIn, clientId, error, onCredential, renew } = useAuth()
   const {
     messages,
+    sessionId,
+    hasMore,
     project,
     serverStatus,
     mode,
@@ -205,6 +208,13 @@ export default function App() {
       // Ignore errors creating session.
     }
   }, [token, apply, loadSessions])
+
+  const loadEarlier = useCallback(async () => {
+    const before = oldestServerId(messages)
+    if (!token || !sessionId || !before) return
+    const page = await fetchEarlierMessages(token, sessionId, before)
+    apply({ type: 'earlier', session_id: sessionId, ...page })
+  }, [token, sessionId, messages, apply])
 
   const handleSelectSession = useCallback(async (sessionId) => {
     if (!token) return
@@ -330,7 +340,13 @@ export default function App() {
             <ConnectionBanner connecting={connection === 'connecting'} onRetry={() => socket.current?.retryNow()} />
           )}
           {online && <NoModelsBanner models={models} />}
-          <MessageList messages={messages} onSend={online ? send : null} onRetry={online && !busy ? send : null} />
+          <MessageList
+            messages={messages}
+            onSend={online ? send : null}
+            onRetry={online && !busy ? send : null}
+            hasMore={hasMore}
+            onLoadEarlier={loadEarlier}
+          />
           <Composer
             busy={busy}
             disabled={connection !== 'open'}

@@ -312,12 +312,29 @@ class Store:
     def set_message_tier(self, message_id: str, tier: int) -> None:
         self._exec("UPDATE messages SET tier = ? WHERE id = ?", (tier, message_id))
 
-    def list_messages(self, session_id: str, limit: int = 200) -> list[dict[str, Any]]:
-        rows = self._all(
-            "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
-            (session_id, limit),
-        )
+    def list_messages(self, session_id: str, limit: int = 200, before: str | None = None) -> list[dict[str, Any]]:
+        """The latest `limit` messages, oldest first; with `before` (a message id), those older than it."""
+        if before is None:
+            rows = self._all(
+                "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                (session_id, limit),
+            )
+        else:
+            rows = self._all(
+                "SELECT m.* FROM messages m JOIN messages b ON b.id = ? AND b.session_id = m.session_id "
+                "WHERE m.session_id = ? AND (m.created_at < b.created_at "
+                "OR (m.created_at = b.created_at AND m.rowid < b.rowid)) "
+                "ORDER BY m.created_at DESC, m.rowid DESC LIMIT ?",
+                (before, session_id, limit),
+            )
         return list(reversed(rows))
+
+    def message_page(
+        self, session_id: str, limit: int, before: str | None = None
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """A page of messages (see list_messages) and whether older ones remain."""
+        rows = self.list_messages(session_id, limit + 1, before)
+        return rows[-limit:] if limit else [], len(rows) > limit
 
     # Settings
 

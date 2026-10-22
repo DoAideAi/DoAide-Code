@@ -2,7 +2,10 @@ import { create } from 'zustand'
 
 export const initialChat = {
   project: null,
+  sessionId: null,
   messages: [],
+  // Older messages remain on the server (a snapshot carries only the latest few).
+  hasMore: false,
   serverStatus: 'idle', // idle | busy | error
   mode: 'local', // local: this server runs the models | hub: prompts are relayed to the laptop
   agentOnline: false, // hub mode only: is the laptop agent connected?
@@ -28,7 +31,9 @@ export function applyEvent(state, event) {
       return {
         ...state,
         project: event.project,
+        sessionId: event.session_id ?? null,
         messages: (event.messages ?? []).slice(-SNAPSHOT_MESSAGES),
+        hasMore: Boolean(event.has_more) || (event.messages ?? []).length > SNAPSHOT_MESSAGES,
         serverStatus: event.status,
         mode: event.mode ?? 'local',
         agentOnline: Boolean(event.agent_online),
@@ -41,6 +46,13 @@ export function applyEvent(state, event) {
         ? state.messages.map((m) => (m.id === event.message.id ? event.message : m))
         : [...state.messages, event.message]
       return { ...state, messages }
+    }
+    case 'earlier': {
+      // An older page from "Load earlier messages"; ignored if the session changed meanwhile.
+      if (event.session_id !== state.sessionId) return state
+      const known = new Set(state.messages.map((m) => m.id))
+      const older = event.messages.filter((m) => !known.has(m.id))
+      return { ...state, messages: [...older, ...state.messages], hasMore: Boolean(event.has_more) }
     }
     case 'delta':
       return {

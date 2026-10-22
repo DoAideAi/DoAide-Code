@@ -90,6 +90,24 @@ describe('hub events', () => {
     expect(s.messages.at(-1).id).toBe('m39')
   })
 
+  it('a snapshot records the session and whether older messages remain', () => {
+    const s = applyEvent(initialChat, { type: 'snapshot', session_id: 's1', project: null, status: 'idle', messages: [], has_more: true })
+    expect(s.sessionId).toBe('s1')
+    expect(s.hasMore).toBe(true)
+    expect(applyEvent(s, { type: 'snapshot', session_id: 's2', project: null, status: 'idle', messages: [] }).hasMore).toBe(false)
+  })
+
+  it('earlier messages go before the loaded ones, once each, for the same session only', () => {
+    let s = applyEvent(initialChat, {
+      type: 'snapshot', session_id: 's', project: null, status: 'idle', messages: [msg('c', 'user', 'c')], has_more: true,
+    })
+    const page = { messages: [msg('a', 'user', 'a'), msg('b', 'assistant', 'b'), msg('c', 'user', 'c')], has_more: false }
+    expect(applyEvent(s, { type: 'earlier', session_id: 'other', ...page })).toBe(s)
+    s = applyEvent(s, { type: 'earlier', session_id: 's', ...page })
+    expect(s.messages.map((m) => m.id)).toEqual(['a', 'b', 'c'])
+    expect(s.hasMore).toBe(false)
+  })
+
   it('a short snapshot is kept whole, and new messages still append after it', () => {
     let s = applyEvent(initialChat, { type: 'snapshot', session_id: 's', project: null, status: 'idle', messages: [msg('a', 'user', 'hi')] })
     expect(s.messages.map((m) => m.id)).toEqual(['a'])
