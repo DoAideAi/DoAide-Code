@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import CodeEditor from './CodeEditor.jsx'
+import ShortcutsHelp from './ShortcutsHelp.jsx'
 import ToolShell, { BUTTON, CopyButton } from './ToolShell.jsx'
 import { LANGUAGES } from './codeTools.js'
 import { MAX_SNIPPET_CHARS, createSnippet } from './snippetShare.js'
@@ -102,9 +103,12 @@ export default function SharePage() {
           The snippet is stored on DoAide's server and anyone with the link can read it, so don't share passwords or
           API keys. Links don't expire.
         </p>
-        <button type="button" data-testid="share-run" onClick={share} disabled={!ready} className={`${BUTTON} self-start disabled:opacity-50`}>
-          {busy ? 'Creating link…' : 'Create share link'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button type="button" data-testid="share-run" onClick={share} disabled={!ready} className={`${BUTTON} disabled:opacity-50`}>
+            {busy ? 'Creating link…' : 'Create share link'}
+          </button>
+          <ShortcutsHelp />
+        </div>
       </div>
 
       {tooLong && (

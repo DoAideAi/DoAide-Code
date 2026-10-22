@@ -34,6 +34,10 @@
       "destination": "/compare/:slug/index.html"
     },
     {
+      "source": "/free-code-editor-online",
+      "destination": "/free-code-editor-online/index.html"
+    },
+    {
       "source": "/embed",
       "destination": "/embed.html"
     },
