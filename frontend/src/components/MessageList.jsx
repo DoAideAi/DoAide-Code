@@ -1,5 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { explainFailure } from '../errors.js'
+import { TOKEN_CLASS, highlight } from '../highlight.js'
+import { Markdown } from '../markdown.jsx'
 import { MOD_KEY } from '../hooks/useShortcuts.js'
 
 // Split text into prose and ``` fenced code segments. An unclosed fence (mid-stream) is code.
@@ -72,35 +74,26 @@ function CopyButton({ text }) {
   )
 }
 
-function Code({ value }) {
+function Code({ value, lang = '' }) {
+  const tokens = useMemo(() => highlight(value, lang), [value, lang])
   return (
     <div className="group relative my-2">
       <pre className="overflow-x-auto rounded-xl bg-shade/40 p-3 pr-16 font-mono text-[13px] leading-relaxed text-zinc-200">
-        <code>{value}</code>
+        <code data-lang={lang || undefined}>
+          {tokens.map((t, i) =>
+            t.kind ? (
+              <span key={i} className={TOKEN_CLASS[t.kind]}>
+                {t.text}
+              </span>
+            ) : (
+              t.text
+            ),
+          )}
+        </code>
       </pre>
       <CopyButton text={value} />
     </div>
   )
-}
-
-// `code` and **bold** in prose; everything else stays plain text.
-const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*)/g
-
-function Inline({ text }) {
-  return text.split(INLINE).map((piece, i) => {
-    if (i % 2 === 0) return piece
-    if (piece.startsWith('`'))
-      return (
-        <code key={i} className="rounded-md bg-shade/30 px-1.5 py-0.5 font-mono text-[0.88em] text-sky-200">
-          {piece.slice(1, -1)}
-        </code>
-      )
-    return (
-      <strong key={i} className="font-semibold text-zinc-50">
-        {piece.slice(2, -2)}
-      </strong>
-    )
-  })
 }
 
 // SEARCH/REPLACE edit blocks (complete, or still streaming in) shown as one line each: DoAide
@@ -115,19 +108,17 @@ function Body({ content }) {
   return splitFences(hideEdits(content)).map((part, i) =>
     part.kind === 'code' ? (
       codeLines(part.value) <= SHOWN_CODE_LINES ? (
-        <Code key={i} value={part.value} />
+        <Code key={i} value={part.value} lang={part.lang} />
       ) : (
         <details key={i} data-testid="collapsed-code" className="my-1.5 text-xs text-zinc-400">
           <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-full bg-shade/25 px-2.5 py-1 hover:text-zinc-200">
             Show code ({codeLines(part.value)} lines{part.lang ? `, ${part.lang}` : ''})
           </summary>
-          <Code value={part.value} />
+          <Code value={part.value} lang={part.lang} />
         </details>
       )
     ) : (
-      <span key={i} className="whitespace-pre-wrap break-words">
-        <Inline text={part.value} />
-      </span>
+      <Markdown key={i} text={part.value} />
     ),
   )
 }

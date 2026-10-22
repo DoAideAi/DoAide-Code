@@ -438,6 +438,16 @@ describe('Claude Code activity and diff previews', () => {
     expect(document.body.textContent).not.toContain('`route()`')
   })
 
+  it('renders Markdown and highlighted code in replies', async () => {
+    await boot(false, {
+      messages: [{ id: 'r', role: 'assistant', content: '## Fix\n\n- *first* step\n- second\n\n```js\nconst a = 1\n```', status: 'done' }],
+    })
+    expect(screen.getByText('Fix', { selector: 'h4' })).toBeTruthy()
+    expect(screen.getByText('first', { selector: 'em' })).toBeTruthy()
+    expect(document.querySelectorAll('li')).toHaveLength(2)
+    expect(screen.getByText('const', { selector: 'span' }).className).toContain('text-violet-300')
+  })
+
   it('an empty chat offers suggestions that send in one tap', async () => {
     const ws = await boot(false, { messages: [] })
     expect(screen.getByText('What can I help with?')).toBeTruthy()
