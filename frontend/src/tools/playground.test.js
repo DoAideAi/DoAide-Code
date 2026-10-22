@@ -25,6 +25,12 @@ describe('pyRunnerDoc', () => {
     expect(doc).toContain("e.data.type !== 'run'")
     expect(doc).toContain('runPythonAsync')
   })
+
+  it('shims the storages Pyodide touches before loading it (they throw when sandboxed)', () => {
+    const doc = pyRunnerDoc()
+    expect(doc.indexOf("'sessionStorage'")).toBeGreaterThan(-1)
+    expect(doc.indexOf("'sessionStorage'")).toBeLessThan(doc.indexOf('pyodide.js'))
+  })
 })
 
 describe('isRunnerMessage', () => {

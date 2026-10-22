@@ -46,8 +46,20 @@ setTimeout(() => post('done'), 60)
 }
 
 // A persistent document that loads Pyodide once, then runs whatever code is posted to it.
+// Pyodide touches sessionStorage while loading, which throws in a sandboxed document, so the
+// first script replaces both storages with harmless in-memory ones.
 export function pyRunnerDoc() {
-  return `<!doctype html><html><body><script src="${PYODIDE_URL}"></script><script>
+  return `<!doctype html><html><body><script>
+const mem = () => { const m = new Map(); return {
+  getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)),
+  removeItem: (k) => m.delete(k), clear: () => m.clear(),
+  key: (i) => [...m.keys()][i] ?? null, get length() { return m.size },
+} }
+try {
+  Object.defineProperty(window, 'sessionStorage', { value: mem() })
+  Object.defineProperty(window, 'localStorage', { value: mem() })
+} catch {}
+</scr` + `ipt><script src="${PYODIDE_URL}"></script><script>
 ${CONSOLE_CAPTURE}
 post('loading')
 const ready = loadPyodide()
