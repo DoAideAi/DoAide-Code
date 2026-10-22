@@ -14,7 +14,8 @@ function loadGis() {
   })
 }
 
-export default function SignIn({ clientId, onCredential, error }) {
+// embedded: just the button and errors, inside the landing page.
+export default function SignIn({ clientId, onCredential, error, embedded = false }) {
   const button = useRef(null)
   const [loadError, setLoadError] = useState(null)
 
@@ -37,8 +38,8 @@ export default function SignIn({ clientId, onCredential, error }) {
   }, [clientId, onCredential])
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-      <h1 className="text-lg font-medium text-zinc-200">DoAide Code</h1>
+    <div className={embedded ? 'flex min-h-[44px] flex-col items-center gap-2' : 'flex h-full flex-col items-center justify-center gap-4 px-6 text-center'}>
+      {!embedded && <h1 className="text-lg font-medium text-zinc-200">DoAide Code</h1>}
       {clientId ? (
         <div ref={button} />
       ) : (

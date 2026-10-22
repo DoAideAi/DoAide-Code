@@ -1,0 +1,72 @@
+import SignIn from './SignIn.jsx'
+
+// The signed-out page: what DoAide Code is, and the sign-in button. Static, so it is also what
+// search engines and link previews describe (with the tags in index.html).
+
+const FEATURES = [
+  ['Free models first', 'A coder model on your laptop (Ollama) answers first. Most tasks never cost a cent.'],
+  ['Claude only when needed', 'An answer that fails its checks goes to Claude Sonnet. Opus and Codex are kept for the hardest work.'],
+  ['Your code stays home', 'Models run on your laptop, inside your project. The server only relays prompts sent from your phone.'],
+  ['Edits apply themselves', 'Changes are written to your files with a diff one click away. Type /undo to restore them.'],
+  ['Chat from your phone', 'Send a prompt from anywhere: it is queued for your laptop and the reply syncs back.'],
+  ['Uses your own logins', 'Claude and Codex run on your existing subscriptions. No API keys to paste in.'],
+]
+
+const STEPS = [
+  ['Sign in', 'With Google, on any device.'],
+  ['Install the agent', 'One download for your laptop; it connects to your account.'],
+  ['Ask', 'Type a task. DoAide picks the cheapest model that can do it.'],
+]
+
+export default function Landing({ clientId, onCredential, error }) {
+  return (
+    <div data-testid="landing" className="h-[100dvh] overflow-y-auto">
+      <main className="mx-auto flex max-w-4xl flex-col gap-12 px-4 py-12 sm:py-16">
+        <header className="flex flex-col items-center gap-4 text-center">
+          <h1 className="text-3xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">
+            An AI coding assistant that tries free models first
+          </h1>
+          <p className="max-w-2xl text-base text-zinc-400">
+            DoAide Code routes every task to the cheapest model that can handle it: a local model on your laptop,
+            then Claude only when the local answer isn't good enough. Chat from your laptop or your phone.
+          </p>
+          <SignIn clientId={clientId} onCredential={onCredential} error={error} embedded />
+          <p className="text-xs text-zinc-500">Free to use. Sign in with Google to connect your laptop.</p>
+        </header>
+
+        <section aria-labelledby="features" className="flex flex-col gap-4">
+          <h2 id="features" className="text-center text-sm font-medium uppercase tracking-wide text-zinc-500">
+            Why DoAide Code
+          </h2>
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {FEATURES.map(([title, text]) => (
+              <li key={title} className="rounded-lg border border-zinc-800 p-4">
+                <h3 className="text-sm font-medium text-zinc-200">{title}</h3>
+                <p className="mt-1 text-sm text-zinc-400">{text}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section aria-labelledby="steps" className="flex flex-col gap-4">
+          <h2 id="steps" className="text-center text-sm font-medium uppercase tracking-wide text-zinc-500">
+            Get started in three steps
+          </h2>
+          <ol className="grid gap-3 sm:grid-cols-3">
+            {STEPS.map(([title, text], i) => (
+              <li key={title} className="rounded-lg border border-zinc-800 p-4">
+                <span className="text-xs tabular-nums text-zinc-500">{i + 1}</span>
+                <h3 className="text-sm font-medium text-zinc-200">{title}</h3>
+                <p className="mt-1 text-sm text-zinc-400">{text}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <footer className="border-t border-zinc-800 pt-6 text-center text-xs text-zinc-500">
+          DoAide Code · part of <a href="https://doaide.com" className="underline hover:text-zinc-300">DoAide</a>
+        </footer>
+      </main>
+    </div>
+  )
+}

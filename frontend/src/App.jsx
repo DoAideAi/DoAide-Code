@@ -44,7 +44,7 @@ import ModelsPage from './components/ModelsPage.jsx'
 import MessageList, { oldestServerId } from './components/MessageList.jsx'
 import SearchBar, { jumpTo } from './components/SearchBar.jsx'
 import SetupPage from './components/SetupPage.jsx'
-import SignIn from './components/SignIn.jsx'
+import Landing from './components/Landing.jsx'
 import TopBar from './components/TopBar.jsx'
 import UsagePage from './components/UsagePage.jsx'
 import useNotificationSound from './hooks/useNotificationSound.js'
@@ -393,7 +393,7 @@ export default function App() {
     stop: () => (busy && !searchOpen && !sidebarOpen && !paletteOpen ? void socket.current?.send({ type: 'stop' }) : false),
   })
 
-  if (needsSignIn) return <SignIn clientId={clientId} onCredential={onCredential} error={error} />
+  if (needsSignIn) return <Landing clientId={clientId} onCredential={onCredential} error={error} />
   // Until the saved session is checked: not the chat (it flashed with a dead "Connecting..." box
   // before the sign-in page).
   if (!token) return <div className="flex h-[100dvh] items-center justify-center text-sm text-zinc-500">Signing in…</div>

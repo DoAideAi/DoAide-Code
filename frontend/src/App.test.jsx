@@ -287,7 +287,7 @@ describe('sign-in never expires', () => {
     const ws = await boot(false)
     expect(ws.url).toContain('token=renewed')
     expect(localStorage.getItem('doaide-code-token')).toBe('renewed')
-    expect(screen.queryByText('DoAide Code', { selector: 'h1' })).toBeNull()
+    expect(screen.queryByTestId('landing')).toBeNull()
   })
 
   it('renews when the socket rejects the token mid-session', async () => {
@@ -305,7 +305,7 @@ describe('sign-in never expires', () => {
     expect(screen.queryByPlaceholderText(/Message/)).toBeNull()
     await flush()
     await flush()
-    expect(screen.getByText('DoAide Code', { selector: 'h1' })).toBeTruthy()
+    expect(screen.getByTestId('landing')).toBeTruthy()
   })
 
   it('asks for Google sign-in only when the refresh token is revoked', async () => {
@@ -315,7 +315,7 @@ describe('sign-in never expires', () => {
     render(<App />)
     await flush()
     await flush()
-    expect(screen.getByText('DoAide Code', { selector: 'h1' })).toBeTruthy()
+    expect(screen.getByTestId('landing')).toBeTruthy()
     expect(FakeSocket.instances).toHaveLength(0)
   })
 })

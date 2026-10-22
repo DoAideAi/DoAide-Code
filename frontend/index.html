@@ -4,10 +4,51 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0f1013" />
-    <title>DoAide Code</title>
+    <title>DoAide Code: AI coding assistant that tries free models first</title>
+    <meta
+      name="description"
+      content="DoAide Code routes every coding task to the cheapest model that can do it: a free local model on your laptop first, Claude only when needed. Chat from your laptop or phone."
+    />
+    <link rel="canonical" href="https://code.doaide.com/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="DoAide Code" />
+    <meta property="og:url" content="https://code.doaide.com/" />
+    <meta property="og:title" content="DoAide Code: AI coding assistant that tries free models first" />
+    <meta
+      property="og:description"
+      content="Free local models answer first; Claude only when needed. Your code stays on your laptop, and you can chat from your phone."
+    />
+    <meta property="og:image" content="https://code.doaide.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="DoAide Code: AI coding assistant that tries free models first" />
+    <meta
+      name="twitter:description"
+      content="Free local models answer first; Claude only when needed. Chat from your laptop or phone."
+    />
+    <meta name="twitter:image" content="https://code.doaide.com/og-image.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "DoAide Code",
+        "url": "https://code.doaide.com/",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS, Linux, Windows, Web",
+        "description": "An AI coding assistant that routes each task to the cheapest capable model: a free local model first, Claude only when needed.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "publisher": { "@type": "Organization", "name": "DoAide", "url": "https://doaide.com" }
+      }
+    </script>
   </head>
   <body class="bg-surface text-zinc-200">
     <div id="root"></div>
+    <noscript>
+      <h1>DoAide Code</h1>
+      <p>An AI coding assistant that tries free local models first and escalates to Claude only when needed. Enable JavaScript to use it.</p>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

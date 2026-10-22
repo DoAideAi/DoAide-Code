@@ -12,3 +12,4 @@ frontend/dist.previous/
 .env
 .env.*
 .DS_Store
+frontend/vite.config.js.timestamp-*.mjs
