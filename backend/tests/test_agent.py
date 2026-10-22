@@ -53,6 +53,7 @@ async def test_hello_reports_project_and_available_executors(store, executors, t
     assert hello == {
         "type": "hello",
         "project": "alpha",
+        "projects": ["alpha"],
         "executors": ["ollama", "claude-sonnet", "claude-opus"],
         "running": None,
     }
@@ -92,7 +93,7 @@ async def test_commands_use_laptop_project_registry(store, executors, tmp_path):
     out = Outbox()
     await run(make_agent(store, executors), {"id": "c1", "text": f"/add-project demo {tmp_path}"}, out)
     assert out.events[0]["role"] == "system" and out.events[0]["status"] == "done"
-    assert out.events[1] == {"type": "project", "project": "demo"}
+    assert out.events[1] == {"type": "project", "project": "demo", "projects": ["demo"]}
     assert store.active_project(OWNER)["path"] == str(tmp_path.resolve())
 
 

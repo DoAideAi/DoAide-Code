@@ -7,6 +7,7 @@ import {
   downloadInstaller,
   fetchConfig,
   fetchModelComparison,
+  fetchProjects,
   fetchSessions,
   fetchTaskHistory,
   fetchUsage,
@@ -158,6 +159,8 @@ export default function App() {
 
   // Notification sound
   const { muted, toggleMute, checkAndPlay } = useNotificationSound()
+  // Stable, so the project menu loads its list once per opening.
+  const loadProjects = useCallback(() => fetchProjects(token), [token])
 
   // Check for notification sound on message changes
   useEffect(() => {
@@ -292,6 +295,8 @@ export default function App() {
         onSearch={() => setSearchOpen((p) => !p)}
         muted={muted}
         onToggleMute={toggleMute}
+        loadProjects={loadProjects}
+        onSwitchProject={online && !busy ? (name) => send(`/switch-project ${name}`) : null}
       />
       {searchOpen && (
         <SearchBar messages={messages} open={searchOpen} onClose={() => setSearchOpen(false)} />

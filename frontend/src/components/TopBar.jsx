@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { currentTheme, followSystem, saveTheme } from '../theme.js'
 import { usableTools } from '../store.js'
+import ProjectSwitcher from './ProjectSwitcher.jsx'
 
 const DOT = {
   green: 'bg-emerald-400',
@@ -106,6 +107,8 @@ export default function TopBar({
   onSearch = null,
   muted = true,
   onToggleMute = null,
+  loadProjects = null,
+  onSwitchProject = null,
 }) {
   const ready = usableTools(models).length
   const presence = busy && color === 'green' ? 'Working…' : PRESENCE[color]
@@ -131,9 +134,7 @@ export default function TopBar({
           <div className="flex min-w-0 items-center gap-1.5 text-xs text-zinc-500">
             <span className="shrink-0">{presence}</span>
             <span aria-hidden="true">·</span>
-            <span data-testid="project-pill" className="truncate">
-              {project ?? 'no project'}
-            </span>
+            <ProjectSwitcher project={project} loadProjects={loadProjects} onSwitch={onSwitchProject} />
           </div>
         </div>
       </div>

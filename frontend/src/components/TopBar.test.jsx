@@ -47,3 +47,41 @@ describe('theme toggle', () => {
     expect(screen.getByTestId('theme-toggle').getAttribute('aria-label')).toBe('Switch to dark mode')
   })
 })
+
+describe('project switcher', () => {
+  it('is plain text when switching is not possible', () => {
+    render(<TopBar project="alpha" color="green" busy={false} />)
+    expect(screen.getByTestId('project-pill').tagName).toBe('SPAN')
+  })
+
+  it('lists projects and switches to the one picked', async () => {
+    const onSwitch = vi.fn()
+    const load = vi.fn(() => Promise.resolve({ projects: [{ name: 'alpha' }, { name: 'beta' }], active: 'alpha' }))
+    render(<TopBar project="alpha" color="green" busy={false} loadProjects={load} onSwitchProject={onSwitch} />)
+    fireEvent.click(screen.getByTestId('project-pill'))
+    const beta = await screen.findByRole('button', { name: 'beta' })
+    expect(screen.getByRole('option', { selected: true }).textContent).toContain('alpha')
+    fireEvent.click(beta)
+    expect(onSwitch).toHaveBeenCalledWith('beta')
+    expect(screen.queryByTestId('project-menu')).toBeNull()
+  })
+
+  it('picking the current project does nothing; Escape closes; empty and failed lists say so', async () => {
+    const onSwitch = vi.fn()
+    let load = () => Promise.resolve({ projects: [{ name: 'alpha' }] })
+    const { rerender } = render(<TopBar project="alpha" color="green" busy={false} loadProjects={load} onSwitchProject={onSwitch} />)
+    fireEvent.click(screen.getByTestId('project-pill'))
+    fireEvent.click(await screen.findByRole('button', { name: /alpha/ }))
+    expect(onSwitch).not.toHaveBeenCalled()
+    load = () => Promise.resolve({ projects: [] })
+    rerender(<TopBar project={null} color="green" busy={false} loadProjects={load} onSwitchProject={onSwitch} />)
+    fireEvent.click(screen.getByTestId('project-pill'))
+    expect(await screen.findByText(/No projects yet/)).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('project-menu')).toBeNull()
+    load = () => Promise.reject(new Error('down'))
+    rerender(<TopBar project={null} color="green" busy={false} loadProjects={load} onSwitchProject={onSwitch} />)
+    fireEvent.click(screen.getByTestId('project-pill'))
+    expect(await screen.findByText(/Couldn’t load projects/)).toBeTruthy()
+  })
+})

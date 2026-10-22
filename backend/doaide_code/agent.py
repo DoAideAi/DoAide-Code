@@ -77,13 +77,24 @@ class LaptopAgent:
         project = self.store.active_project(self.owner)
         return project["name"] if project else None
 
+    def project_names(self) -> list[str]:
+        """The laptop's projects, for the hub's project switcher (folders stay on the laptop)."""
+        return [p["name"] for p in self.store.list_projects()]
+
     async def hello(self) -> dict[str, Any]:
         executors = [e.name for e in self.router.executors if await e.available()]
         models = await self.router.models(force=True)
         self._models = models
         running = self._task_id if self._task is not None and not self._task.done() else None
         # The job still running from before a reconnect: the hub adopts it or tells us to stop.
-        return {"type": "hello", "project": self.project_name(), "executors": executors, "models": models, "running": running}
+        return {
+            "type": "hello",
+            "project": self.project_name(),
+            "projects": self.project_names(),
+            "executors": executors,
+            "models": models,
+            "running": running,
+        }
 
     def connected(self, send: Send | None) -> None:
         self._send = send
@@ -205,7 +216,7 @@ class LaptopAgent:
                 await send({"type": "changes", "id": result.changes[0], "changes": result.changes[1]})
             await send({"type": "done", "id": job_id, "role": "system", "status": "done", "content": result.text})
             if result.project_changed:
-                await send({"type": "project", "project": self.project_name()})
+                await send({"type": "project", "project": self.project_name(), "projects": self.project_names()})
             return
 
         project = self.store.active_project(self.owner)

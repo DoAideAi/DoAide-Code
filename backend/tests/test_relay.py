@@ -208,3 +208,17 @@ def test_drafts_from_the_laptop_reach_the_browser(hub, token, agent_token):
         {"type": "draft", "id": job["id"], "text": "Thinking"},
         {"type": "draft", "id": job["id"], "text": "", "clear": True},
     ]
+
+
+def test_the_hub_lists_the_projects_the_laptop_reported(hub, token, agent_token):
+    assert hub.get("/api/projects", headers=auth(token)).json() == {"projects": [], "active": None}
+    with hub.websocket_connect(f"/ws?token={token}") as browser:
+        browser.receive_json()
+        with hub.websocket_connect(f"/agent?token={agent_token}") as laptop:
+            laptop.send_json({"type": "hello", "project": "alpha", "projects": ["alpha", "beta"], "executors": []})
+            drain_until(browser, "project")
+            body = hub.get("/api/projects", headers=auth(token)).json()
+            assert body == {"projects": [{"name": "alpha"}, {"name": "beta"}], "active": "alpha"}
+            laptop.send_json({"type": "project", "project": "gamma", "projects": ["alpha", "beta", "gamma"]})
+            drain_until(browser, "project")
+            assert [p["name"] for p in hub.get("/api/projects", headers=auth(token)).json()["projects"]][-1] == "gamma"

@@ -195,8 +195,9 @@ def create_app(
     @app.get("/api/projects")
     async def projects(user: User = Depends(current_user)) -> dict:
         if isinstance(chat, RelayService):
-            # Project folders live on the laptop; the hub only knows the active one's name.
-            return {"projects": [], "active": store.remote_project(user.email)}
+            # Project folders live on the laptop; the hub knows only the names it reported.
+            names = chat.projects(user.email)
+            return {"projects": [{"name": n} for n in names], "active": store.remote_project(user.email)}
         active = store.active_project(user.email)
         return {"projects": store.list_projects(), "active": active["name"] if active else None}
 

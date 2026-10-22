@@ -114,6 +114,8 @@ class RelayService:
         self.hub = hub
         self._agents: dict[str, AgentSocket] = {}
         self._executors: dict[str, list[str]] = {}
+        # Project names the laptop reported (hello, and after /add-project etc.).
+        self._projects: dict[str, list[str]] = {}
         # Each connected laptop's detected models (see detect.py); never produced by a model.
         self._models: dict[str, dict[str, Any]] = {}
         self._running: dict[str, str] = {}
@@ -289,6 +291,7 @@ class RelayService:
         kind = event.get("type")
         if kind == "hello":
             await self._adopt(user_email, event.get("running"))
+            self._remember_projects(user_email, event.get("projects"))
             project = event.get("project")
             self._executors[user_email] = [str(e) for e in event.get("executors") or []]
             await self._set_models(user_email, event.get("models"))
@@ -298,6 +301,7 @@ class RelayService:
             await self._set_models(user_email, event.get("models"))
             return
         if kind == "project":
+            self._remember_projects(user_email, event.get("projects"))
             project = event.get("project")
             await self._set_project(user_email, project if isinstance(project, str) else None)
             return
@@ -415,6 +419,14 @@ class RelayService:
             return
         self.store.update_meta(message["id"], meta)
         await self.hub.publish(user_email, {"type": "changes", "id": message["id"], "changes": meta["changes"]})
+
+    def projects(self, user_email: str) -> list[str]:
+        """The laptop's project names, as last reported (empty before it first connects)."""
+        return self._projects.get(user_email, [])
+
+    def _remember_projects(self, user_email: str, projects: Any) -> None:
+        if isinstance(projects, list):
+            self._projects[user_email] = [p for p in projects if isinstance(p, str)][:200]
 
     async def _set_project(self, user_email: str, project: str | None) -> None:
         self.store.set_remote_project(user_email, project)

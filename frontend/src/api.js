@@ -130,6 +130,11 @@ export function fetchUsage(token, days = 7) {
   return get(`/api/usage?days=${days}&tz=${new Date().getTimezoneOffset()}`, token)
 }
 
+// Projects to switch between (in hub mode, the names the laptop reported).
+export function fetchProjects(token) {
+  return get('/api/projects', token)
+}
+
 // Multi-conversation support
 export function fetchSessions(token, limit = 50) {
   return get(`/api/sessions?limit=${limit}`, token)
