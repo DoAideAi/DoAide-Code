@@ -1001,4 +1001,101 @@ exit 0</code></pre>
     ],
     cta: ['/tools/code-formatter', 'Format your code free — no sign-up'],
   },
+  {
+    slug: 'online-regex-tester-and-builder',
+    title: 'Online Regex Tester and Builder: Test Regular Expressions Free (2026) | DoAide Code',
+    h1: 'Online regex tester and builder: write regular expressions that actually work',
+    description:
+      'How to build a regular expression step by step and test it live in your browser: flags, capture groups, common patterns (email, mobile numbers, PIN codes, GSTIN) and the mistakes that make a regex fail in production.',
+    updated: '2026-10-23',
+    intro: `<p>Nobody writes a correct regular expression on the first try — not juniors, not staff engineers. The difference is that experienced developers never trust a regex they haven't watched run against real input. That is the whole job of an online regex tester: type the pattern, type the text, and see every match and capture group highlighted as you type.</p>
+<p>This guide shows how to build a regex incrementally instead of guessing, what each flag actually does, and the handful of patterns — emails, mobile numbers, PIN codes, GSTIN — that cover most day-to-day validation. Follow along in the <a href="/tools/regex-tester">free online regex tester</a>: it runs entirely in your browser, nothing is uploaded, and there is no sign-up.</p>`,
+    sections: [
+      [
+        'how-it-works',
+        'How an online regex tester works',
+        `<p>A regex tester is a tight feedback loop. You give it two things — a pattern and a test string — and it gives you back three:</p>
+<ul>
+<li><strong>Every match, highlighted in place</strong>, so you see at a glance what the pattern grabbed and, just as importantly, what it missed.</li>
+<li><strong>Capture groups per match</strong> — both numbered groups like <code>(\\d{4})</code> and named ones like <code>(?&lt;year&gt;\\d{4})</code> — which is what you'll actually extract in code.</li>
+<li><strong>Clear errors for bad patterns</strong>, like an unclosed bracket or a stray quantifier, instead of a silent zero-matches.</li>
+</ul>
+<p>The <a href="/tools/regex-tester">DoAide Code regex tester</a> uses the JavaScript regex engine, re-running on every keystroke. Since everything is computed in the page, you can safely paste real log lines or data samples — they never leave your machine.</p>`,
+      ],
+      [
+        'builder',
+        'Building a regex step by step (the builder mindset)',
+        `<p>The reliable way to write a regex is to grow it one piece at a time with the tester open. Say you need to pull dates like <code>23/10/2026</code> out of messy text:</p>
+<ol>
+<li><strong>Start with the literal core:</strong> <code>/</code> matches itself, so begin with <code>\\d/\\d</code> and confirm it highlights something.</li>
+<li><strong>Add quantifiers:</strong> <code>\\d{2}/\\d{2}/\\d{4}</code> — two digits, two digits, four digits. Check it against a real sample.</li>
+<li><strong>Add capture groups</strong> for the parts you need: <code>(\\d{2})/(\\d{2})/(\\d{4})</code>, or named groups <code>(?&lt;day&gt;\\d{2})/(?&lt;month&gt;\\d{2})/(?&lt;year&gt;\\d{4})</code> so your code reads <code>match.groups.year</code> instead of <code>match[3]</code>.</li>
+<li><strong>Test the negatives:</strong> paste text that should <em>not</em> match — <code>123/45/678901</code>, a phone number, an IP address — and tighten with boundaries: <code>\\b(\\d{2})/(\\d{2})/(\\d{4})\\b</code>.</li>
+<li><strong>Only then</strong> copy it into your code, flags included.</li>
+</ol>
+<p>Each step is a five-second check in the tester. Skipping those checks is how a regex that "looked right" ends up matching half your log file.</p>`,
+      ],
+      [
+        'patterns',
+        'Common patterns: email, mobile numbers, PIN codes, GSTIN',
+        `<p>A starter set worth keeping (test each against your own data before shipping):</p>
+<table>
+<tr><th>What</th><th>Pattern</th><th>Notes</th></tr>
+<tr><td>Email (pragmatic)</td><td><code>[\\w.+-]+@[\\w-]+\\.[\\w.]{2,}</code></td><td>Catches real addresses; full RFC-compliant email regexes are a trap — validate by sending a mail.</td></tr>
+<tr><td>Indian mobile number</td><td><code>\\b[6-9]\\d{9}\\b</code></td><td>Ten digits starting 6–9; add <code>(?:\\+91[ -]?)?</code> in front to allow a +91 prefix.</td></tr>
+<tr><td>PIN code</td><td><code>\\b[1-9]\\d{5}\\b</code></td><td>Six digits, no leading zero.</td></tr>
+<tr><td>GSTIN</td><td><code>\\b\\d{2}[A-Z]{5}\\d{4}[A-Z]\\d[A-Z]\\d\\b</code></td><td>State code + PAN + entity, Z is literal in position 14 for most registrations — this shape-check catches typos, not validity.</td></tr>
+<tr><td>ISO date</td><td><code>\\b\\d{4}-\\d{2}-\\d{2}\\b</code></td><td>Shape only; 2026-13-45 still matches. Parse to validate.</td></tr>
+<tr><td>Number with decimals</td><td><code>-?\\d+(?:\\.\\d+)?</code></td><td><code>(?: )</code> groups without capturing.</td></tr>
+</table>
+<p>Paste any of these into the <a href="/tools/regex-tester">regex tester</a> with a page of your real data and watch what over- and under-matches before trusting it.</p>`,
+      ],
+      [
+        'flags',
+        'Flags: what g, i, m and s actually change',
+        `<ul>
+<li><strong>g (global):</strong> find every match, not just the first. Almost always what you want in a tester; in code, required for <code>matchAll</code> and replace-all.</li>
+<li><strong>i (ignore case):</strong> <code>error</code> also matches <code>Error</code> and <code>ERROR</code> — the flag to reach for when scanning logs.</li>
+<li><strong>m (multiline):</strong> <code>^</code> and <code>$</code> anchor to each line instead of the whole string. Essential when testing against multi-line pastes.</li>
+<li><strong>s (dotall):</strong> <code>.</code> also matches newlines, so <code>start.*end</code> can span lines.</li>
+</ul>
+<p>A classic confusion: with multiline text and no <code>m</code>, <code>^\\w+</code> matches only the very first word of the paste. Toggle flags in the tester and watch the highlights move — it teaches the difference faster than any cheat sheet.</p>`,
+      ],
+      [
+        'mistakes',
+        'The regex mistakes that bite in production',
+        `<ul>
+<li><strong>Greedy wildcards:</strong> <code>".*"</code> grabs from the first quote to the <em>last</em> quote on the line. Use the lazy form <code>".*?"</code> or, better, <code>"[^"]*"</code>.</li>
+<li><strong>Unescaped special characters:</strong> <code>.</code>, <code>+</code>, <code>(</code>, <code>[</code> and friends mean something. Matching a literal dot in <code>app.doaide.com</code> needs <code>\\.</code> — otherwise <code>appXdoaide</code> matches too.</li>
+<li><strong>Missing anchors in validation:</strong> <code>\\d{6}</code> happily finds six digits <em>inside</em> a 16-digit number. Validation patterns should be anchored: <code>^\\d{6}$</code>.</li>
+<li><strong>Catastrophic backtracking:</strong> nested quantifiers like <code>(a+)+$</code> can take seconds on a 40-character non-matching input — a real denial-of-service vector if user input hits that regex on your server.</li>
+<li><strong>Using regex where a parser belongs:</strong> HTML, JSON and SQL are not regular languages. Extract a quick value, fine; parse structure, use a parser — or the <a href="/tools/json-formatter">JSON validator</a> for JSON.</li>
+</ul>
+<p>If a hairy regex in a codebase resists understanding, paste the surrounding function into <a href="/tools/explain-code">Explain Code</a> and get the pattern translated into English, piece by piece.</p>`,
+      ],
+    ],
+    faqs: [
+      [
+        'What is the best free online regex tester?',
+        'A good regex tester highlights every match and capture group live as you type, explains pattern errors, supports the g/i/m/s flags, and runs in your browser so your test data is never uploaded. The DoAide Code regex tester at code.doaide.com/tools/regex-tester does all of this free, with no sign-up.',
+      ],
+      [
+        'Which regex engine does an online tester use?',
+        "The DoAide Code tester runs your pattern on the browser's own JavaScript (ECMAScript) engine. JavaScript regex covers the common syntax shared with Python and Java; a few advanced features differ (for example Python's re.VERBOSE or possessive quantifiers), so always re-test in your target language for exotic patterns.",
+      ],
+      [
+        'How do I test a regex with capture groups?',
+        'Wrap the parts you want to extract in parentheses, or use named groups like (?<year>\\d{4}). The tester lists each match with its numbered and named groups, so you can confirm exactly what match.groups.year will contain in your code.',
+      ],
+      [
+        'Why does my regex match too much?',
+        'Usually a greedy quantifier: .* expands to the longest possible match. Make it lazy with .*? or replace the dot with a negated class like [^"]* that cannot cross the closing delimiter. Testing against realistic multi-line input in a tester shows the over-match immediately.',
+      ],
+      [
+        'Is it safe to paste real data into an online regex tester?',
+        'In the DoAide Code tester, yes in the technical sense: matching runs entirely in the page and nothing is sent to a server. Still, mask customer personal data out of habit before pasting it anywhere — a few X characters rarely change whether the pattern works.',
+      ],
+    ],
+    cta: ['/tools/regex-tester', 'Test your regex free — live highlighting'],
+  },
 ]
