@@ -304,7 +304,25 @@ export function replyStatus(message) {
   return { label: 'Done', tone: 'text-emerald-300/90' }
 }
 
-function Reply({ message }) {
+// Under a failed reply: what happened and, when the prompt is known, a button to send it again.
+function Failure({ onRetry }) {
+  return (
+    <div data-testid="reply-error" role="alert" className="mt-1.5 flex items-center gap-2 px-1 text-xs text-red-300">
+      <span>This task failed.</span>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-full border border-red-500/40 px-2.5 py-0.5 text-red-200 hover:bg-red-500/10"
+        >
+          Retry
+        </button>
+      )}
+    </div>
+  )
+}
+
+function Reply({ message, onRetry }) {
   const streaming = message.status === 'streaming'
   const foot = footer(message.meta)
   const changes = message.meta?.changes
@@ -329,6 +347,7 @@ function Reply({ message }) {
             </div>
           )}
           {message.content ? <Body content={message.content} /> : null}
+          {error && !message.content && <p>The task stopped with an error before it answered.</p>}
           {streaming && message.content && (
             <span className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-zinc-400 align-middle" />
           )}
@@ -348,12 +367,13 @@ function Reply({ message }) {
           )}
         </div>
         {!streaming && <Checks checks={message.meta?.checks} />}
+        {error && <Failure onRetry={onRetry} />}
       </div>
     </div>
   )
 }
 
-function Message({ message }) {
+function Message({ message, onRetry }) {
   const via = message.meta?.via === 'mcp'
   // A task Dispatch sent through the Tasks API: labelled like a Claude Code call; the reply is a normal one.
   const dispatch = message.meta?.via === 'dispatch'
@@ -406,7 +426,15 @@ function Message({ message }) {
       </div>
     )
   }
-  return <Reply message={message} />
+  return <Reply message={message} onRetry={onRetry} />
+}
+
+// The prompt a reply answered: the closest user message before it.
+export function promptFor(messages, index) {
+  for (let i = index - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') return messages[i].content
+  }
+  return null
 }
 
 const SUGGESTIONS = ['What does this project do?', 'Explain the main file in simple words', 'Find bugs in my latest changes']
@@ -439,7 +467,8 @@ function Welcome({ onSend }) {
   )
 }
 
-export default function MessageList({ messages, onSend = null }) {
+// onRetry(prompt) sends a failed reply's prompt again; null hides Retry (offline or busy).
+export default function MessageList({ messages, onSend = null, onRetry = null }) {
   const end = useRef(null)
   const last = messages[messages.length - 1]
   useEffect(() => {
@@ -450,9 +479,10 @@ export default function MessageList({ messages, onSend = null }) {
     <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
       <div className="mx-auto flex max-w-2xl flex-col gap-4 px-3 py-5 text-[15px] sm:px-4">
         {messages.length === 0 && <Welcome onSend={onSend} />}
-        {messages.map((m) => (
-          <Message key={m.id} message={m} />
-        ))}
+        {messages.map((m, i) => {
+          const prompt = onRetry && m.status === 'error' ? promptFor(messages, i) : null
+          return <Message key={m.id} message={m} onRetry={prompt ? () => onRetry(prompt) : null} />
+        })}
         <div ref={end} />
       </div>
     </main>

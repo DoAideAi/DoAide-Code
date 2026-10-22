@@ -17,6 +17,7 @@ import {
   setupStatus,
 } from './api.js'
 import Composer from './components/Composer.jsx'
+import ConnectionBanner from './components/ConnectionBanner.jsx'
 import HowItWorksPage from './components/HowItWorksPage.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
 import { NoModelsBanner } from './components/Models.jsx'
@@ -153,6 +154,14 @@ export default function App() {
     return () => socket.current?.close()
   }, [token, apply, setConnection, renew])
 
+  // The socket dropped (or never opened): the offline banner stays up through reconnect attempts,
+  // but not during the first connect.
+  const [lost, setLost] = useState(false)
+  useEffect(() => {
+    if (connection === 'closed') setLost(true)
+    else if (connection === 'open') setLost(false)
+  }, [connection])
+
   // Hub only: on the laptop itself, offer the local server (no server round trip).
   const [localUrl, setLocalUrl] = useState(null)
   useEffect(() => {
@@ -185,6 +194,7 @@ export default function App() {
   // Stop showing after the answer finished.
   const busy = serverStatus === 'busy' && messages.some((m) => m.status === 'streaming' || m.status === 'queued')
   const send = (text) => socket.current?.send({ type: 'send', text }) ?? false
+  const online = connection === 'open'
   return (
     <div className="flex h-[100dvh] flex-col">
       <TopBar
@@ -219,8 +229,11 @@ export default function App() {
           {mode === 'hub' && connection === 'open' && !agentOnline && (
             <LaptopBanner onSetup={() => setSetupOpen(true)} />
           )}
-          {connection === 'open' && <NoModelsBanner models={models} />}
-          <MessageList messages={messages} onSend={connection === 'open' ? send : null} />
+          {lost && !online && (
+            <ConnectionBanner connecting={connection === 'connecting'} onRetry={() => socket.current?.retryNow()} />
+          )}
+          {online && <NoModelsBanner models={models} />}
+          <MessageList messages={messages} onSend={online ? send : null} onRetry={online && !busy ? send : null} />
           <Composer
             busy={busy}
             disabled={connection !== 'open'}

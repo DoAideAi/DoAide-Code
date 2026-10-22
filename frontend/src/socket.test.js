@@ -95,4 +95,26 @@ describe('socket liveness', () => {
     vi.advanceTimersByTime(20000)
     expect(FakeSocket.instances).toHaveLength(2) // the backoff reconnect was cancelled
   })
+
+  it('retryNow reconnects at once after a drop, even on a hidden page', () => {
+    const ws = start()
+    ws.readyState = 3
+    ws.onclose({ code: 1006 })
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    try {
+      conn.retryNow()
+    } finally {
+      delete document.visibilityState
+    }
+    expect(FakeSocket.instances).toHaveLength(2)
+    vi.advanceTimersByTime(20000)
+    expect(FakeSocket.instances).toHaveLength(2) // the backoff reconnect was cancelled
+  })
+
+  it('retryNow on a live socket only checks it', () => {
+    const ws = start()
+    conn.retryNow()
+    expect(ws.sent.at(-1)).toEqual({ type: 'ping' })
+    expect(FakeSocket.instances).toHaveLength(1)
+  })
 })

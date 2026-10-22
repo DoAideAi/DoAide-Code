@@ -737,3 +737,45 @@ describe('tasks from Dispatch', () => {
     expect(screen.getByText('Added a module docstring.')).toBeTruthy()
   })
 })
+
+describe('errors in the chat', () => {
+  const FAILED = [
+    { id: 'u1', role: 'user', content: 'refactor the parser', status: 'done' },
+    { id: 'a1', role: 'assistant', content: 'Your laptop is offline', status: 'error' },
+  ]
+
+  it('a failed task says so and Retry sends its prompt again', async () => {
+    const ws = await boot(true, { messages: FAILED })
+    const error = screen.getByTestId('reply-error')
+    expect(error.textContent).toContain('This task failed.')
+    expect(screen.getByText('Your laptop is offline')).toBeTruthy()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry' })))
+    expect(ws.sent.at(-1)).toEqual({ type: 'send', text: 'refactor the parser' })
+  })
+
+  it('a failed reply with no text still explains itself', async () => {
+    await boot(true, { messages: [FAILED[0], { ...FAILED[1], content: '' }] })
+    expect(screen.getByText('The task stopped with an error before it answered.')).toBeTruthy()
+  })
+
+  it('no Retry while another task is running', async () => {
+    await boot(true, {
+      status: 'busy',
+      messages: [...FAILED, { id: 'u2', role: 'user', content: 'next', status: 'done' }, { id: 'a2', role: 'assistant', content: '', status: 'streaming' }],
+    })
+    expect(screen.getByTestId('reply-error')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+  })
+
+  it('a dropped connection shows a banner whose Retry reconnects at once', async () => {
+    const ws = await boot(true)
+    expect(screen.queryByTestId('connection-banner')).toBeNull()
+    await act(async () => ws.drop(1006))
+    expect(screen.getByTestId('connection-banner').textContent).toContain('Can’t reach DoAide')
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry' })))
+    expect(FakeSocket.instances).toHaveLength(2)
+    expect(screen.getByTestId('connection-banner').textContent).toContain('Reconnecting')
+    await act(async () => FakeSocket.instances[1].open())
+    expect(screen.queryByTestId('connection-banner')).toBeNull()
+  })
+})

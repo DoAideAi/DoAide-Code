@@ -94,9 +94,9 @@ export function connect({ path, token, onEvent, onState, onUnauthorized }) {
     check = setTimeout(() => frames === before && drop(), PONG_WAIT_MS)
   }
 
-  // Back on the page or the network: check the socket at once, or reconnect if it is gone.
-  const wake = () => {
-    if (closed || document.visibilityState === 'hidden') return
+  // Check the socket at once, or reconnect now instead of waiting out the backoff.
+  const retryNow = () => {
+    if (closed) return
     if (ws && ws.readyState === WebSocket.OPEN) probe()
     else if (!ws || ws.readyState > 1) {
       retry = 0
@@ -104,12 +104,15 @@ export function connect({ path, token, onEvent, onState, onUnauthorized }) {
       open()
     }
   }
+  // Back on the page or the network.
+  const wake = () => document.visibilityState !== 'hidden' && retryNow()
   document.addEventListener('visibilitychange', wake)
   window.addEventListener('online', wake)
 
   open()
   return {
     send,
+    retryNow,
     close() {
       closed = true
       clearTimeout(timer)
