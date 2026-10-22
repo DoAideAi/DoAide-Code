@@ -86,3 +86,20 @@ body {
     animation: none;
   }
 }
+
+/* Line numbers in code blocks: drawn here, so selecting or copying the code leaves them out. */
+.code-lines {
+  counter-reset: line;
+}
+
+.code-lines .code-line::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: var(--gutter, 2ch);
+  margin-right: 1.25ch;
+  text-align: right;
+  color: rgb(113 113 122 / 0.7);
+  user-select: none;
+  -webkit-user-select: none;
+}
