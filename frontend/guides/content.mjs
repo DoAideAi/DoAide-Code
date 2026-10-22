@@ -9,6 +9,7 @@ export const site = {
   accent: '#60a5fa',
   nav: [
     ['/tools', 'Free tools'],
+    ['/all-tools', 'All tools'],
     ['/features', 'Features'],
     ['/guides', 'Guides'],
     ['/compare', 'Compare'],

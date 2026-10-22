@@ -56,6 +56,10 @@
       "destination": "/collaboration/index.html"
     },
     {
+      "source": "/all-tools",
+      "destination": "/all-tools/index.html"
+    },
+    {
       "source": "/embed",
       "destination": "/embed.html"
     },

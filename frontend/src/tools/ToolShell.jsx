@@ -8,6 +8,16 @@ import { currentTheme, followSystem, onThemeChange, saveTheme } from '../theme.j
 import FeedbackWidget from './FeedbackWidget.jsx'
 import ToolTabs from './ToolTabs.jsx'
 
+// The in-depth guide for a tool, linked under its description; slugs map to /guides pages.
+const TOOL_GUIDES = {
+  'code-formatter': ['/guides/best-free-online-code-formatter', 'picking and using a code formatter'],
+  'json-formatter': ['/guides/best-free-online-code-formatter', 'picking and using a code formatter'],
+  'regex-tester': ['/guides/online-regex-tester-and-builder', 'building and testing regular expressions'],
+  'sql-formatter': ['/guides/free-online-sql-formatter-validator', 'formatting and validating SQL'],
+  'share-code': ['/guides/code-snippet-sharing-tool', 'sharing code snippets as links'],
+  'embed-code': ['/guides/code-snippet-sharing-tool', 'sharing code snippets as links'],
+}
+
 const SUN = 'M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4'
 const MOON = 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z'
 
@@ -35,6 +45,7 @@ export function ThemeToggle() {
 
 export default function ToolShell({ tool, children }) {
   useEffect(() => applyMeta(tool), [tool])
+  const guide = TOOL_GUIDES[tool.slug]
   return (
     <div data-testid="tools-page" className="h-[100dvh] overflow-y-auto">
       <a
@@ -57,7 +68,19 @@ export default function ToolShell({ tool, children }) {
       <main id="tool-main" tabIndex={-1} className="mx-auto flex max-w-5xl flex-col gap-5 px-4 pb-12 pt-4 focus:outline-none">
         <header className="flex flex-col gap-2">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">{tool.heading}</h1>
-          <p className="text-sm text-zinc-400">{tool.description}</p>
+          <p className="text-sm text-zinc-400">
+            {tool.description}
+            {guide && (
+              <>
+                {' '}
+                Guide:{' '}
+                <a href={guide[0]} className="text-sky-300 underline hover:text-sky-200">
+                  {guide[1]}
+                </a>
+                .
+              </>
+            )}
+          </p>
         </header>
         <ToolTabs activeSlug={tool.slug} />
         {children}
@@ -70,9 +93,17 @@ export default function ToolShell({ tool, children }) {
             The AI tools above explain, review, convert and test code for free. And DoAide Code itself is an AI coding
             assistant that works on your whole codebase, trying free local models first.
           </p>
-          <a href="/" className="self-start text-sky-300 underline hover:text-sky-200">
-            Learn more about DoAide Code
-          </a>
+          <div className="flex flex-wrap gap-4">
+            <a href="/" className="text-sky-300 underline hover:text-sky-200">
+              Learn more about DoAide Code
+            </a>
+            <a href="/all-tools" className="text-sky-300 underline hover:text-sky-200">
+              All free tools
+            </a>
+            <a href="/guides" className="text-sky-300 underline hover:text-sky-200">
+              Guides
+            </a>
+          </div>
         </section>
       </main>
     </div>

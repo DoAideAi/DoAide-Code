@@ -7,6 +7,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { guides, site } from '../guides/content.mjs'
 import { pages } from '../pages/content.mjs'
+import { TOOLS } from '../src/tools/codeTools.js'
+import { UTIL_TOOLS } from '../src/tools/utilTools.js'
 
 const dist = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist')
 
@@ -167,4 +169,66 @@ for (const p of pages) {
   write(path, page({ title: p.title, description: p.description, path, ogType: 'website', jsonLd, body: p.body }))
 }
 
-console.log(`build-guides: wrote ${guides.length} guides + index and ${pages.length} pages to dist`)
+// The /all-tools directory: rendered from the live tool catalogs, so a tool added to
+// codeTools.js or utilTools.js appears here on the next build without editing content.
+const TOOL_GUIDES = {
+  'code-review': 'free-ai-code-review-online',
+  'convert-code': 'convert-code-between-languages-ai',
+  'generate-tests': 'ai-unit-test-generator',
+  'generate-docs': 'code-documentation-best-practices',
+  'code-formatter': 'best-free-online-code-formatter',
+  'regex-tester': 'online-regex-tester-and-builder',
+  'sql-formatter': 'free-online-sql-formatter-validator',
+  'share-code': 'code-snippet-sharing-tool',
+  'embed-code': 'code-snippet-sharing-tool',
+}
+const toolCard = (t) => {
+  const guide = guides.find((g) => g.slug === TOOL_GUIDES[t.slug])
+  return `<div class="card"><h3><a href="/tools/${t.slug}">${esc(t.title)}</a></h3><p>${esc(t.description)}${
+    guide ? ` <a href="/guides/${guide.slug}">Read the guide.</a>` : ''
+  }</p></div>`
+}
+const allTools = [...TOOLS, ...UTIL_TOOLS]
+const allToolsDescription = `Every free developer tool on DoAide Code in one place: ${allTools.length} tools — AI code review, explainers and converters, plus formatters, a regex tester, SQL and JSON validators, snippet sharing and more. No sign-up.`
+write(
+  '/all-tools',
+  page({
+    title: 'All Free Developer Tools: Formatters, Testers & AI Code Tools | DoAide Code',
+    description: allToolsDescription,
+    path: '/all-tools',
+    ogType: 'website',
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        name: 'DoAide Code free developer tools',
+        numberOfItems: allTools.length,
+        itemListElement: allTools.map((t, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: t.title,
+          url: `${site.url}/tools/${t.slug}`,
+        })),
+      },
+      crumbs([
+        [site.name, '/'],
+        ['All tools', '/all-tools'],
+      ]),
+    ],
+    body: `<h1>All free developer tools</h1>
+<p>${esc(allToolsDescription)} Each tool lives at its own URL, works in the browser, and is free without an account.</p>
+<h2>AI code tools</h2>
+<p>Paste code, get an answer: these tools run your code past an AI model on the server and stream the result back.</p>
+${TOOLS.map(toolCard).join('\n')}
+<h2>Developer utilities</h2>
+<p>Instant, in-browser utilities: everything below is computed in the page, so your code and data never leave your machine.</p>
+${UTIL_TOOLS.map(toolCard).join('\n')}
+<h2>Learn the workflows</h2>
+<p>The <a href="/guides">guides</a> cover the workflows behind these tools — AI code review, formatting, regex building, SQL hygiene and snippet sharing — with the tool for each step linked in place.</p>
+<a class="cta" href="/tools">Open the free tools</a>`,
+  }),
+)
+
+console.log(
+  `build-guides: wrote ${guides.length} guides + index, ${pages.length} pages and /all-tools (${allTools.length} tools) to dist`,
+)
