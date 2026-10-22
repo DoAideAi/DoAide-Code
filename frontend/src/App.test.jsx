@@ -1061,3 +1061,15 @@ describe('nothing typed is lost', () => {
     expect(screen.getByLabelText('Message').value).toBe('half a thought')
   })
 })
+
+describe('command palette', () => {
+  it('Ctrl+P opens it, and a picked action runs', async () => {
+    await boot(true)
+    await act(async () => fireEvent.keyDown(window, { key: 'p', ctrlKey: true }))
+    expect(screen.getByTestId('command-palette')).toBeTruthy()
+    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: 'settings' } })
+    await act(async () => fireEvent.keyDown(screen.getByTestId('palette-input'), { key: 'Enter' }))
+    expect(screen.queryByTestId('command-palette')).toBeNull()
+    expect(screen.getByTestId('settings-page')).toBeTruthy()
+  })
+})

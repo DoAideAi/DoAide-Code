@@ -12,6 +12,7 @@ const THEMES = [
 const SHORTCUTS = [
   ['newChat', 'New chat'],
   ['clear', 'Clear the chat from view'],
+  ['palette', 'Command palette'],
   ['stop', 'Stop the reply'],
 ]
 
@@ -146,7 +147,7 @@ function Shortcuts() {
   const [keys, setKeys] = useState(loadKeys)
   const change = (next) => {
     // Turning one back on takes its default key; if another shortcut now has it, leave it off.
-    for (const action of ['newChat', 'clear']) {
+    for (const action of ['newChat', 'clear', 'palette']) {
       if (next[action] && next[action] !== keys[action] && keyProblem(next, action, next[action])) next[action] = null
     }
     setKeys(saveKeys(next))

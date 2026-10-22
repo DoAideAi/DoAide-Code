@@ -600,9 +600,9 @@ export function promptFor(messages, index) {
 
 const SUGGESTIONS = ['What does this project do?', 'Explain the main file in simple words', 'Find bugs in my latest changes']
 
-// "⌘K new chat · ⌘L clear · Esc stop", with the keys chosen in Settings (off ones left out).
+// "⌘P commands · ⌘K new chat · ⌘L clear · Esc stop", with the keys chosen in Settings (off ones left out).
 export function shortcutHints(keys = loadKeys()) {
-  return [['newChat', 'new chat'], ['clear', 'clear'], ['stop', 'stop']]
+  return [['palette', 'commands'], ['newChat', 'new chat'], ['clear', 'clear'], ['stop', 'stop']]
     .map(([action, what]) => shortcutLabel(keys, action) && `${shortcutLabel(keys, action)} ${what}`)
     .filter(Boolean)
     .join(' · ')

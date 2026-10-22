@@ -32,6 +32,9 @@ import ConversationSidebar from './components/ConversationSidebar.jsx'
 import FileViewer from './components/FileViewer.jsx'
 import GettingStarted from './components/GettingStarted.jsx'
 import SettingsPage from './components/SettingsPage.jsx'
+import CommandPalette from './components/CommandPalette.jsx'
+import { paletteItems } from './palette.js'
+import { saveTheme } from './theme.js'
 import { exportConversation } from './export.js'
 import { clearUnsent, echoed, recordUnsent, unsent } from './drafts.js'
 import HowItWorksPage from './components/HowItWorksPage.jsx'
@@ -371,11 +374,23 @@ export default function App() {
   // Stop showing after the answer finished.
   const busy = serverStatus === 'busy' && messages.some((m) => m.status === 'streaming' || m.status === 'queued')
   useTabTitle(busy)
+  // The command palette (Ctrl/Cmd+P): projects and conversations are fetched as it opens.
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [paletteProjects, setPaletteProjects] = useState([])
+  useEffect(() => {
+    if (!paletteOpen) return
+    loadSessions()
+    Promise.resolve(loadProjects())
+      .then((body) => setPaletteProjects((body?.projects ?? []).map((p) => p.name)))
+      .catch(() => setPaletteProjects([]))
+  }, [paletteOpen, loadSessions, loadProjects])
+
   useShortcuts({
     newChat: () => (token ? void handleNewChat() : false),
     clear: () => (token ? void apply({ type: 'clear-view' }) : false),
-    // Escape belongs to the search box and the sidebar while they are open.
-    stop: () => (busy && !searchOpen && !sidebarOpen ? void socket.current?.send({ type: 'stop' }) : false),
+    palette: () => (token ? void setPaletteOpen((o) => !o) : false),
+    // Escape belongs to the search box, the sidebar and the palette while they are open.
+    stop: () => (busy && !searchOpen && !sidebarOpen && !paletteOpen ? void socket.current?.send({ type: 'stop' }) : false),
   })
 
   if (needsSignIn) return <SignIn clientId={clientId} onCredential={onCredential} error={error} />
@@ -393,8 +408,48 @@ export default function App() {
   }
   const online = connection === 'open'
   const chooseModel = online && !busy ? (name) => send(`/model ${name}`) : null
+  const show = (name) => () => {
+    setOpenFile(null)
+    setPage(name)
+  }
+  const palette = paletteOpen && (
+    <CommandPalette
+      onClose={() => setPaletteOpen(false)}
+      items={paletteItems({
+        keys: loadKeys(),
+        models: online ? models : null,
+        projects: paletteProjects,
+        project,
+        sessions,
+        sessionId,
+        muted,
+        act: {
+          newChat: handleNewChat,
+          search: () => setSearchOpen(true),
+          clear: () => apply({ type: 'clear-view' }),
+          sidebar: () => setSidebarOpen(true),
+          exportChat: sessionId ? handleExport : null,
+          settings: show('settings'),
+          models: show('models'),
+          usage: show('usage'),
+          how: show('how'),
+          toggleMute,
+          setTheme: saveTheme,
+          chooseModel,
+          switchProject: online && !busy ? (name) => send(`/switch-project ${name}`) : null,
+          openSession: (id) => {
+            setPage(null)
+            setOpenFile(null)
+            handleSelectSession(id)
+          },
+          send: online && !busy ? send : null,
+        },
+      })}
+    />
+  )
   return (
     <div className="flex h-[100dvh]">
+      {palette}
       <ConversationSidebar
         sessions={sessions}
         activeSessionId={sessionId}
@@ -423,6 +478,7 @@ export default function App() {
         onHow={toggle('how')}
         onSettings={toggle('settings')}
         onExport={sessionId ? handleExport : null}
+        onPalette={() => setPaletteOpen(true)}
         onToggleSidebar={() => setSidebarOpen((p) => !p)}
         onNewChat={handleNewChat}
         newChatHint={shortcutLabel(loadKeys(), 'newChat')}

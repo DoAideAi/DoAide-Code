@@ -7,8 +7,10 @@ export const MOD_KEY = /mac/i.test(globalThis.navigator?.platform ?? '') ? '⌘'
 // null when the shortcut is off. Stop is Escape alone, on or off.
 //   newChat  Ctrl/Cmd+K  new chat
 //   clear    Ctrl/Cmd+L  clear the chat from view (the conversation goes on)
+//   palette  Ctrl/Cmd+P  the command palette (instead of the browser's Print)
 //   stop     Escape      stop the reply being written
-export const DEFAULT_KEYS = { newChat: 'k', clear: 'l', stop: 'escape' }
+export const DEFAULT_KEYS = { newChat: 'k', clear: 'l', palette: 'p', stop: 'escape' }
+export const SHORTCUT_NAMES = { newChat: 'New chat', clear: 'Clear view', palette: 'Command palette', stop: 'Stop' }
 const KEY = 'doaide-shortcuts'
 // Keys the browser or the message box needs with Ctrl/Cmd: copy, paste, undo, close tab, ...
 export const RESERVED = new Set(['a', 'c', 'f', 'n', 'q', 'r', 't', 'v', 'w', 'x', 'y', 'z'])
@@ -36,7 +38,7 @@ export function keyProblem(keys, action, key) {
   if (!/^[a-z0-9]$/.test(key)) return 'Use a letter or a digit'
   if (RESERVED.has(key)) return `${MOD_KEY}${key.toUpperCase()} belongs to the browser`
   const other = Object.keys(keys).find((name) => name !== action && keys[name] === key)
-  return other ? `Already used by ${other === 'newChat' ? 'New chat' : 'Clear view'}` : null
+  return other ? `Already used by ${SHORTCUT_NAMES[other]}` : null
 }
 
 // How a shortcut reads in hints, e.g. "⌘K"; null when it is off.
@@ -53,6 +55,7 @@ export function shortcutFor(event, keys = DEFAULT_KEYS) {
   const key = event.key?.toLowerCase()
   if (mod && key && keys.newChat === key) return 'newChat'
   if (mod && key && keys.clear === key) return 'clear'
+  if (mod && key && keys.palette === key) return 'palette'
   if (keys.stop && key === 'escape' && !event.ctrlKey && !event.metaKey && !event.altKey) return 'stop'
   return null
 }

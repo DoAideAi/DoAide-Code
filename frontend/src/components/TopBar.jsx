@@ -171,6 +171,7 @@ export default function TopBar({
   onHow = null,
   onSettings = null,
   onExport = null,
+  onPalette = null,
   localUrl = null,
   onRefresh = () => window.location.reload(),
   onToggleSidebar = null,
@@ -184,6 +185,7 @@ export default function TopBar({
 }) {
   const ready = usableTools(models).length
   const more = [
+    onPalette && { id: 'palette', label: 'Command palette', icon: 'search', onClick: onPalette },
     onSearch && { id: 'search', label: 'Search', icon: 'search', onClick: onSearch },
     onToggleMute && { id: 'mute', label: muted ? 'Unmute notifications' : 'Mute notifications', icon: muted ? 'bellOff' : 'bell', onClick: onToggleMute },
     onModels && { id: 'models', label: 'Models', icon: 'models', onClick: onModels },
