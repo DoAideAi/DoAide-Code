@@ -1,6 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Landing from './Landing.jsx'
+import { UTIL_TOOLS } from '../tools/utilTools.js'
 
 afterEach(() => {
   cleanup()
@@ -35,7 +36,7 @@ describe('Landing', () => {
     expect(screen.getByTestId('landing-popular').querySelectorAll('a')).toHaveLength(4)
     expect(screen.getByTestId('landing-ai-tools').querySelectorAll('a')).toHaveLength(7)
     const utils = screen.getByTestId('landing-utils')
-    expect(utils.querySelectorAll('a')).toHaveLength(5)
+    expect(utils.querySelectorAll('a')).toHaveLength(UTIL_TOOLS.length)
     expect(utils.textContent).toContain('New')
     expect(utils.querySelector('a').getAttribute('href')).toBe('/tools/diff-checker')
   })

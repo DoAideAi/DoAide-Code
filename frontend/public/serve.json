@@ -30,6 +30,10 @@
       "destination": "/embed.html"
     },
     {
+      "source": "/s/:id([A-Za-z0-9]+)",
+      "destination": "/index.html"
+    },
+    {
       "source": "/tools",
       "destination": "/index.html"
     },

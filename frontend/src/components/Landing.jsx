@@ -96,8 +96,8 @@ export default function Landing({ clientId, onCredential, error }) {
               Free tools, no sign-in
             </h2>
             <p className="max-w-xl text-sm text-zinc-400">
-              Eleven free tools for everyday coding: AI that explains, reviews and converts code, plus instant
-              utilities that never upload a byte. Shareable on WhatsApp.
+              Thirteen free tools for everyday coding: AI that explains, reviews and converts code, plus instant
+              utilities and snippet sharing. Shareable on WhatsApp.
             </p>
           </div>
 

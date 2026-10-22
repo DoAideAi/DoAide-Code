@@ -15,6 +15,7 @@ const PAGES = {
   'regex-tester': lazy(() => import('./RegexPage.jsx')),
   'json-formatter': lazy(() => import('./JsonPage.jsx')),
   'embed-code': lazy(() => import('./EmbedPage.jsx')),
+  'share-code': lazy(() => import('./SharePage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {

@@ -11,8 +11,12 @@ registerServiceWorker()
 // way round). The entry keeps only React and the shared styles.
 const App = lazy(() => import('./App.jsx'))
 const ToolsRouter = lazy(() => import('./tools/ToolsRouter.jsx'))
+const SnippetPage = lazy(() => import('./tools/SnippetPage.jsx'))
+const path = window.location.pathname
 const page = (
-  <Suspense fallback={null}>{window.location.pathname.startsWith('/tools') ? <ToolsRouter /> : <App />}</Suspense>
+  <Suspense fallback={null}>
+    {path.startsWith('/tools') ? <ToolsRouter /> : path.startsWith('/s/') ? <SnippetPage /> : <App />}
+  </Suspense>
 )
 
 ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode>{page}</React.StrictMode>)

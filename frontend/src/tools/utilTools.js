@@ -39,6 +39,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'share-code',
+    label: 'Share code',
+    title: 'Share Code Snippets',
+    heading: 'Share code with a short link',
+    description:
+      'Paste code and get a short link anyone can open: syntax highlighted, up to 20,000 characters, no sign-up. Share snippets on WhatsApp, Slack or anywhere.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',

@@ -128,6 +128,15 @@ CREATE TABLE IF NOT EXISTS tool_feedback (
     comment TEXT NOT NULL DEFAULT '',
     created_at REAL NOT NULL
 );
+-- Code snippets shared from the public tools; the id is the short URL path (/s/<id>).
+CREATE TABLE IF NOT EXISTS shared_snippets (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL,
+    language TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    views INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL
+);
 """
 
 
@@ -381,6 +390,27 @@ class Store:
 
     def list_tool_feedback(self, limit: int = 100) -> list[dict[str, Any]]:
         return self._all("SELECT * FROM tool_feedback ORDER BY id DESC LIMIT ?", (limit,))
+
+    # Shared snippets
+
+    def add_shared_snippet(self, snippet_id: str, code: str, language: str = "", title: str = "") -> bool:
+        """False when the id is already taken (the caller picks a new one)."""
+        try:
+            self._exec(
+                "INSERT INTO shared_snippets (id, code, language, title, created_at) VALUES (?, ?, ?, ?, ?)",
+                (snippet_id, code, language, title, time.time()),
+            )
+        except sqlite3.IntegrityError:
+            return False
+        return True
+
+    def view_shared_snippet(self, snippet_id: str) -> dict[str, Any] | None:
+        """The snippet, counting this read as a view; None when the id is unknown."""
+        row = self._one("SELECT * FROM shared_snippets WHERE id = ?", (snippet_id,))
+        if row is not None:
+            self._exec("UPDATE shared_snippets SET views = views + 1 WHERE id = ?", (snippet_id,))
+            row["views"] += 1
+        return row
 
     # Refresh tokens
 

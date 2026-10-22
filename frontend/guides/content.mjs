@@ -429,4 +429,283 @@ export const guides = [
     ],
     cta: ['/tools/explain-code', 'Start with Explain code — free'],
   },
+  {
+    slug: 'free-ai-code-tools-2026',
+    title: '10 Free AI Code Tools Every Developer Needs in 2026 | DoAide Code',
+    h1: '10 free AI code tools every developer needs in 2026',
+    description:
+      'The 10 free AI code tools worth bookmarking in 2026: review, explain, bug finding, test generation, conversion, optimization, local models and more — what each is for and when to reach for it.',
+    updated: '2026-10-23',
+    intro: `<p>The free tier of AI developer tooling got genuinely good. In 2026 you can get senior-style code review, a full unit-test suite, an idiomatic language conversion and a local model running on your own laptop — all for ₹0 and mostly without an account. The catch is knowing which tool fits which moment.</p>
+<p>This list is that map: ten tools (and tool categories), what each one is actually for, and the thirty-second way to try it. Several live right here on <a href="/tools">code.doaide.com/tools</a> — free, no sign-up — and the rest are things we use and recommend even though we didn't build them.</p>`,
+    sections: [
+      [
+        'code-review',
+        '1. AI code review — the tool that pays for itself first',
+        `<p>If you bookmark one tool from this list, make it review. Paste a function or file into the <a href="/tools/code-review">free AI code review</a> and get findings grouped by severity — correctness, security, performance, readability — each with a concrete fix. It catches the off-by-ones, unhandled empty inputs, SQL built by string concatenation and N+1 queries that slip past tired human eyes.</p>
+<p>When to reach for it: before every commit of non-trivial logic, and before every pull request. Thirty seconds that routinely saves a round of review comments.</p>`,
+      ],
+      [
+        'explain',
+        '2. Explain code — for every snippet you didn’t write',
+        `<p><a href="/tools/explain-code">Explain code</a> turns any pasted snippet into a step-by-step plain-English walkthrough: what each part does, why it is there, what the idioms mean. It is the fastest way through an unfamiliar codebase, a dense Stack Overflow answer, or a regex someone wrote in 2019 and left behind.</p>
+<p>When to reach for it: onboarding to a new repo, reviewing AI-generated code before using it, and learning a new language by reading real code instead of toy tutorials.</p>`,
+      ],
+      [
+        'find-bugs',
+        '3. A dedicated bug finder — not the same thing as review',
+        `<p>Review tells you everything worth improving; <a href="/tools/find-bugs">Find bugs</a> answers one question with full force: <em>what breaks this code, and with which input?</em> It hunts defects — the empty list that divides by zero, the Unicode string that breaks the parser, the race in the async handler — and shows the triggering input plus the fix.</p>
+<p>When to reach for it: "it fails sometimes and I can't see why", and as a pre-flight check on functions that handle money, auth or user input.</p>`,
+      ],
+      [
+        'tests',
+        '4. Unit test generator — from empty test folder to real suite',
+        `<p>The <a href="/tools/generate-tests">AI unit test generator</a> takes one function and returns a runnable suite in the idiomatic framework — pytest, JUnit 5, Jest — covering the happy path, the edge cases you forgot, and error handling. Generated edge-case tests double as a bug-finding tool: a failing generated test is either a real bug or a wrong assumption, and both are worth knowing.</p>
+<p>When to reach for it: before refactoring (lock in behaviour first), after fixing a bug (keep the regression test), and whenever the test file is embarrassingly empty.</p>`,
+      ],
+      [
+        'convert',
+        '5. Code converter — idiomatic translation between 17 languages',
+        `<p>The <a href="/tools/convert-code">AI code converter</a> translates intent, not syntax: a Python list comprehension becomes a Java stream, callback JavaScript becomes idiomatic asyncio Python, error handling moves between exception styles correctly. It beats line-by-line transpilers because the output reads like it was written in the target language.</p>
+<p>When to reach for it: assignments that demand a specific language, migrating a service, or learning a new language by converting code you already understand deeply.</p>`,
+      ],
+      [
+        'optimize',
+        '6. Code optimizer — algorithms first, micro-tweaks last',
+        `<p>Paste a slow function into <a href="/tools/optimize-code">Optimize code</a> and get a faster version with every change explained — better algorithms and data structures first (the O(n²) loop that should be a set lookup), micro-optimizations last. The explanation matters as much as the code: it teaches you to see the next slow loop yourself.</p>
+<p>When to reach for it: the endpoint that got slow as data grew, the loop a review flagged, the function profiling pointed at.</p>`,
+      ],
+      [
+        'comments',
+        '7. Comment generator — documentation for the next reader',
+        `<p><a href="/tools/add-comments">Add comments</a> returns your code with clear comments explaining what it does and why — docstrings, parameter descriptions, the non-obvious decisions. Used well, it documents the gnarly function you wrote at 2 AM so that future-you (the next reader, statistically) isn't lost.</p>
+<p>When to reach for it: before handing code to a teammate, submitting an assignment, or archiving a project you'll revisit in six months.</p>`,
+      ],
+      [
+        'utilities',
+        '8. Browser-only dev utilities — zero upload, zero AI, daily use',
+        `<p>Not everything needs a model. Four utilities you will use weekly, all running entirely in your browser (nothing is uploaded): the <a href="/tools/diff-checker">diff checker</a> for "what changed since it last worked?", the <a href="/tools/regex-tester">regex tester</a> with live matches as you type, the <a href="/tools/json-formatter">JSON formatter</a> that turns an API's wall of text into a collapsible tree, and the <a href="/tools/code-formatter">code formatter</a> — because consistent indentation makes bugs visible.</p>`,
+      ],
+      [
+        'local-models',
+        '9. Local models — free AI that never leaves your laptop',
+        `<p>Ollama (and tools like it) run open coder models — qwen2.5-coder, DeepSeek-Coder and friends — on your own machine. Free forever, fully private, works offline. On a 16 GB laptop a 7B coder model handles explain/complete/small-edit tasks surprisingly well; with more RAM, 32B models are genuinely capable.</p>
+<p>This is the engine behind the DoAide Code assistant's cost model: it <a href="/">routes every task to the cheapest capable model</a> — a local model first, Claude only when the task is hard. You can adopt the same principle manually: local model for routine tasks, hosted tools for the hard ones.</p>`,
+      ],
+      [
+        'api',
+        '10. A code-tools API in your hooks and CI — review on every commit',
+        `<p>The sleeper pick: all seven AI tools above are also a <a href="/api-docs">free REST API</a> — one POST endpoint, no key, Markdown out. That turns "paste into a website" into "runs automatically": a pre-commit hook that reviews staged files, a CI step that reviews changed functions, an editor macro bound to a keystroke.</p>
+<pre><code>curl -s https://code.doaide.com/api/public/code-tool \\
+  -H 'Content-Type: application/json' \\
+  -d '{"action":"review","code":"def avg(nums):\\n    return sum(nums) / len(nums)"}'</code></pre>
+<p>When to reach for it: the moment you notice you've pasted into the same tool three days running — automate it.</p>`,
+      ],
+    ],
+    faqs: [
+      [
+        'Are these AI code tools really free?',
+        'Yes. Every DoAide Code tool listed here is free with no sign-up, under fair-use rate limits (8 AI requests per 10 minutes). The browser utilities and local models via Ollama are free without any limits because they run on your machine.',
+      ],
+      [
+        'What is the best free AI code tool in 2026?',
+        'For impact per minute, AI code review — it catches real bugs in code you were about to ship. The best toolkit combines review with explain, a test generator, and a local model for private day-to-day tasks.',
+      ],
+      [
+        'Do free AI code tools require an account or credit card?',
+        'The tools on code.doaide.com need neither — open the URL, paste code, done. Some other free tiers (editor autocomplete assistants) require accounts; local models via Ollama need only an install.',
+      ],
+      [
+        'Is it safe to paste code into free AI tools?',
+        'Paste only what you can share: strip API keys, passwords and proprietary secrets first. The DoAide utilities (diff, regex, JSON, formatter) run entirely in your browser, and nothing is uploaded at all.',
+      ],
+      [
+        'Can free AI tools replace paid ones like GitHub Copilot?',
+        'For review, explanation, conversion and test generation — yes, the free tools here cover it. For inline autocomplete while typing, paid tools like Copilot still lead; see our guide on the free Copilot alternative for the honest split.',
+      ],
+    ],
+    cta: ['/tools', 'Try all 12 free code tools'],
+  },
+  {
+    slug: 'free-github-copilot-alternative',
+    title: 'DoAide Code: The Free Alternative to GitHub Copilot (2026) | DoAide Code',
+    h1: 'DoAide Code: the free alternative to GitHub Copilot',
+    description:
+      'Looking for a free GitHub Copilot alternative? What Copilot actually charges for, which of those jobs DoAide Code does free with no sign-up, and the honest cases where Copilot is still worth it.',
+    updated: '2026-10-23',
+    intro: `<p>"Free GitHub Copilot alternative" is usually a search made at one of three moments: the free tier's monthly limit just ran out, the $10/month renewal came up, or you're on a machine where you can't install extensions at all — the office laptop, the college lab PC. The honest answer depends on which part of Copilot you actually use.</p>
+<p>Copilot bundles two different products: <strong>autocomplete while you type</strong>, and <strong>chat-based help with code you already have</strong> — review it, explain it, test it, convert it, debug it. The second bundle is what <a href="/tools">DoAide Code</a> does free, with no account, no extension and no editor requirement. This guide maps exactly which jobs move over, and which don't.</p>`,
+    sections: [
+      [
+        'what-you-pay-for',
+        'What you actually pay Copilot for',
+        `<p>Copilot's paid plans (from $10/month individual) buy you: unlimited inline completions, editor chat, PR summaries on higher tiers, and access inside supported editors with a GitHub account signed in. The free tier gives a limited monthly allowance of completions and chat requests.</p>
+<p>Break that into jobs-to-be-done and a pattern appears: the <em>typing accelerators</em> (completions) genuinely need the paid product, while the <em>understanding and checking</em> jobs — the ones you do in bursts, a few times a day — don't need an editor integration at all. They need a place to paste code and a well-tuned prompt behind it.</p>`,
+      ],
+      [
+        'what-moves-free',
+        'The jobs that move to DoAide Code for free',
+        `<table>
+<tr><th>Job</th><th>In Copilot</th><th>Free on DoAide Code</th></tr>
+<tr><td>Review my code</td><td>Chat prompt (counts against limits); PR review on paid tiers</td><td><a href="/tools/code-review">AI code review</a> — structured severities and fixes, every time</td></tr>
+<tr><td>Explain this code</td><td>Chat prompt</td><td><a href="/tools/explain-code">Explain code</a> — step-by-step walkthrough</td></tr>
+<tr><td>Why does this break?</td><td>Chat back-and-forth</td><td><a href="/tools/find-bugs">Find bugs</a> — the triggering input plus the fix</td></tr>
+<tr><td>Write unit tests</td><td>Chat prompt or /tests command</td><td><a href="/tools/generate-tests">Generate tests</a> — idiomatic pytest/JUnit/Jest suite</td></tr>
+<tr><td>Convert between languages</td><td>Chat prompt</td><td><a href="/tools/convert-code">Convert code</a> — 17 languages, idiomatic output</td></tr>
+<tr><td>Make this faster</td><td>Chat prompt</td><td><a href="/tools/optimize-code">Optimize code</a> — algorithms first, explained</td></tr>
+<tr><td>Document this function</td><td>Chat prompt</td><td><a href="/tools/add-comments">Add comments</a></td></tr>
+<tr><td>Automate review in hooks/CI</td><td>Paid API/enterprise features</td><td><a href="/api-docs">Free REST API</a>, no key</td></tr>
+</table>
+<p>The difference in kind, not just price: each DoAide tool ships a task-tuned prompt and a consistent output shape, so "review this" means the same rigorous checklist every time — no prompt engineering, no variance between runs, no monthly request budget to ration.</p>`,
+      ],
+      [
+        'where-copilot-wins',
+        'Where Copilot is still worth paying for',
+        `<p>Honesty section. Keep (or get) Copilot if:</p>
+<ul>
+<li><strong>Inline completions are your main speed-up.</strong> Nothing on DoAide Code competes with keystroke-level autocomplete — finishing your line, filling repetitive patterns, drafting a function from a comment. If you write boilerplate-heavy code all day, completions pay for themselves.</li>
+<li><strong>You want chat with whole-project context inside the editor.</strong> Copilot sees your open files; the free paste-in tools see only what you paste. (DoAide Code's local assistant closes this gap differently — see below.)</li>
+<li><strong>You're a verified student:</strong> GitHub offers Copilot Pro free through the Student Developer Pack — take it, and still use the no-login tools on machines where you can't install anything.</li>
+</ul>`,
+      ],
+      [
+        'assistant',
+        'The repo-scale alternative: an assistant that tries free models first',
+        `<p>For whole-project work, DoAide Code's answer isn't a paste box — it's a <a href="/">local assistant</a> built as a multi-model harness. A small agent runs on your laptop, reads the repo you point it at, and routes each task to the cheapest model that can handle it: free local models (via Ollama) answer first, and only genuinely hard tasks escalate to Claude. Your code stays on your machine; edits land in your working directory where you review them with ordinary <code>git diff</code>.</p>
+<p>That's a different trade than Copilot's: no inline completions, but repo-scale help where most tasks cost nothing and the project never leaves your laptop.</p>`,
+      ],
+      [
+        'switch-plan',
+        'A practical switch (or combine) plan',
+        `<ol>
+<li><strong>Audit a week of Copilot use.</strong> Count completions-driven minutes vs chat requests like "review/explain/test this".</li>
+<li><strong>Move the burst tasks</strong> to the free tools — bookmark <a href="/tools/code-review">review</a>, <a href="/tools/explain-code">explain</a> and <a href="/tools/generate-tests">tests</a>; they're each one URL.</li>
+<li><strong>Automate what repeats:</strong> wire the <a href="/api-docs">free API</a> into a pre-commit hook so review happens without pasting at all.</li>
+<li><strong>Then decide about the subscription.</strong> If completions still earn their keep, keep Copilot for typing and use DoAide Code for checking — they combine well. If chat was most of your usage, you just made it free.</li>
+</ol>`,
+      ],
+    ],
+    faqs: [
+      [
+        'Is there a completely free alternative to GitHub Copilot?',
+        'For review, explanation, debugging, conversion, documentation and test generation — yes: DoAide Code does those free with no account at code.doaide.com/tools. For inline autocomplete specifically, free options are limited tiers (Copilot Free, Windsurf/Codeium free plans) or local models in your editor.',
+      ],
+      [
+        'Does DoAide Code have autocomplete like Copilot?',
+        'No. DoAide Code checks and transforms code you already have (review, explain, convert, tests) and offers a local repo assistant; it does not suggest code as you type. Many developers pair it with an autocomplete tool.',
+      ],
+      [
+        'Do I need to install anything to use DoAide Code?',
+        'No. The tools are URLs that work in any browser — including lab PCs and locked-down work laptops where you cannot install extensions. The optional local assistant installs on your own machine.',
+      ],
+      [
+        'Is DoAide Code free for commercial use?',
+        'Yes — the tools and API are free under fair-use rate limits (8 AI requests per 10 minutes) for any use. Don’t paste code you’re not allowed to share; check your employer’s policy for proprietary code, as with any online tool.',
+      ],
+      [
+        'How is this free when Copilot costs $10/month?',
+        'Routing. Most review/explain/test tasks don’t need a frontier model, so DoAide Code serves them with cheap or local models and reserves expensive models for hard tasks. Low serving cost is what makes the no-login free tier sustainable.',
+      ],
+    ],
+    cta: ['/tools/code-review', 'Try the free Copilot alternative now'],
+  },
+  {
+    slug: 'how-to-review-code-with-ai',
+    title: 'How to Review Code with AI for Free: Step-by-Step Workflows (2026) | DoAide Code',
+    h1: 'How to review code with AI for free: workflows that stick',
+    description:
+      'Step-by-step AI code review workflows for free: reviewing a function before commit, reviewing a pull request, automating review in a git hook, and reading AI findings like a senior engineer.',
+    updated: '2026-10-23',
+    intro: `<p>Knowing that AI code review exists is one thing; having a workflow where every risky change actually gets reviewed — automatically, for free, without anyone remembering to do it — is another. This is the workflow guide: four concrete routines, from a 30-second manual check to a pre-commit hook that reviews every staged file, all built on the <a href="/tools/code-review">free DoAide Code review tool</a> and its <a href="/api-docs">keyless API</a>.</p>
+<p>(For what AI review catches and how it compares to human review, start with the companion guide: <a href="/guides/free-ai-code-review-online">how AI code review works</a>. This one assumes you're sold and want the habit.)</p>`,
+    sections: [
+      [
+        'workflow-1',
+        'Workflow 1: the 30-second pre-commit check (manual)',
+        `<ol>
+<li>You've just finished a function or fixed a bug. Copy the changed function — not the whole file; focused input gets sharper findings.</li>
+<li>Open <a href="/tools/code-review">code.doaide.com/tools/code-review</a> (bookmark it; the page remembers recent snippets on your machine).</li>
+<li>Paste, press <code>Ctrl/⌘ + Enter</code>.</li>
+<li>Triage the findings top-down: <strong>correctness and security first</strong> — fix those before anything else. Performance next if the code is on a hot path. Style last, and feel free to disagree with it.</li>
+<li>Fix, re-run. A clean (or consciously-accepted) second pass is your commit signal.</li>
+</ol>
+<p>That's the whole habit. The trick to making it stick: attach it to a trigger you already have, like writing the commit message — "no commit message before the review verdict".</p>`,
+      ],
+      [
+        'workflow-2',
+        'Workflow 2: reviewing a pull request (yours or a teammate’s)',
+        `<p>For a PR, review the <em>diff</em>, not the files:</p>
+<ol>
+<li>Get the changed code: <code>git diff main...feature-branch</code>, or copy the changed functions from the PR's Files view.</li>
+<li>Review each substantial changed function separately in the <a href="/tools/code-review">review tool</a> — three focused reviews beat one giant paste.</li>
+<li>For a change you don't understand, run <a href="/tools/explain-code">Explain code</a> first, then review — you'll judge the findings better.</li>
+<li>Check the diff itself with the <a href="/tools/diff-checker">diff checker</a> for a clean side-by-side when the platform's view is noisy.</li>
+<li>If the PR adds logic without tests, paste the new function into <a href="/tools/generate-tests">Generate tests</a> and attach the suite to your review comment. Reviewers who bring tests get listened to.</li>
+</ol>
+<p>Reviewing your own PR this way before requesting human review is the single best "make reviewers like you" move: your PRs arrive pre-cleaned, and humans spend their attention on design.</p>`,
+      ],
+      [
+        'workflow-3',
+        'Workflow 3: automate it — AI review in a git pre-commit hook',
+        `<p>The review you don't have to remember is the one that always happens. The same review tool is a <a href="/api-docs">free REST API</a> — one POST, no key — so a git hook can review every staged file:</p>
+<pre><code>#!/bin/sh
+# .git/hooks/pre-commit — AI-review staged files (advisory, never blocks)
+git diff --cached --name-only --diff-filter=ACM | while read -r f; do
+  jq -n --arg code "$(git show ":$f")" '{action:"review", code:$code}' \\
+  | curl -s https://code.doaide.com/api/public/code-tool \\
+      -H 'Content-Type: application/json' -d @- \\
+  | jq -r '.answer' | sed "s|^|[$f] |"
+done
+exit 0</code></pre>
+<p>Two design choices worth copying: it's <strong>advisory</strong> (always exits 0 — a busy API should never block your commit), and it reviews <strong>staged files</strong>, not the whole repo, staying well inside the fair-use limits (8 requests per 10 minutes). For CI, the same call works in any pipeline step; treat failures as warnings there too.</p>`,
+      ],
+      [
+        'workflow-4',
+        'Workflow 4: reading AI findings like a senior engineer',
+        `<p>The skill that multiplies all three workflows is triage. For each finding, ask:</p>
+<ul>
+<li><strong>Is it real?</strong> Reproduce correctness findings before fixing: write the failing input as a test (the <a href="/tools/find-bugs">bug finder</a> hands you the input). A finding you reproduced is a bug; one you can't is a question.</li>
+<li><strong>Is it in scope?</strong> A valid finding about code you didn't touch goes in a ticket, not in this commit. Keep diffs focused.</li>
+<li><strong>Is it a pattern?</strong> The third time review flags your missing error handling, the finding isn't about this function — it's about your habits. That's the free mentorship hiding in the tool.</li>
+<li><strong>Do you disagree?</strong> Fine — but say why in a comment or commit message. "Reviewed, accepted the O(n²) because n ≤ 20" is engineering; silently ignoring findings is how they stop being read.</li>
+</ul>`,
+      ],
+      [
+        'free-stack',
+        'The complete free review stack, assembled',
+        `<p>Putting it together with the rest of the free layer (full comparison in <a href="/guides/best-free-code-review-tools">best free code review tools</a>):</p>
+<ol>
+<li><strong>Editor:</strong> linter + formatter on save — catches the mechanical issues before AI ever sees them.</li>
+<li><strong>On commit:</strong> the pre-commit hook above, or the 30-second manual check for risky changes.</li>
+<li><strong>On PR:</strong> workflow 2 — self-review, tests attached.</li>
+<li><strong>In CI:</strong> lint + tests as gates; AI review as an advisory step.</li>
+<li><strong>Humans:</strong> design and requirements — the machines did the rest.</li>
+</ol>
+<p>Total cost: ₹0. Total setup: one bookmark and one shell script.</p>`,
+      ],
+    ],
+    faqs: [
+      [
+        'How do I review code with AI for free?',
+        'Paste the function or file into a free review tool like code.doaide.com/tools/code-review — no account needed — and triage the findings: correctness and security first, then performance, then style. For automatic review, call the free API from a git pre-commit hook.',
+      ],
+      [
+        'Can I automate AI code review on every commit?',
+        'Yes. The DoAide Code review tool is also a keyless REST API; a ten-line pre-commit hook reviews every staged file and prints findings before you commit. Keep it advisory (never blocking) and within the fair-use limit of 8 requests per 10 minutes.',
+      ],
+      [
+        'Should I review the whole file or just my changes?',
+        'Review the changed functions plus just enough surrounding code for context. Focused input produces sharper findings, uses fewer requests, and keeps your fixes inside the scope of the commit.',
+      ],
+      [
+        'What should I do when the AI review is wrong?',
+        'Treat findings as claims, not verdicts: reproduce correctness findings before fixing, and when you disagree, record why. AI review is a rigorous first pass — the judgment stays yours.',
+      ],
+      [
+        'Can AI review a whole pull request at once?',
+        'The free paste-in tool reviews what you paste, so review a PR as its changed functions, one at a time. For changes spanning a whole repository, DoAide Code’s local assistant works on your clone directly.',
+      ],
+    ],
+    cta: ['/tools/code-review', 'Review your code free — no sign-up'],
+  },
 ]

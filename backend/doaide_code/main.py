@@ -10,6 +10,8 @@ import asyncio
 import json
 import logging
 import re
+import secrets
+import string
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -74,6 +76,12 @@ class FeedbackRequest(BaseModel):
     tool: str
     helpful: bool
     comment: str = ""
+
+
+class SnippetRequest(BaseModel):
+    code: str
+    language: str = ""
+    title: str = ""
 
 
 class RefreshRequest(BaseModel):
@@ -214,6 +222,40 @@ def create_app(
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "That's a lot of feedback: wait a few minutes.")
         store.add_tool_feedback(body.tool, body.helpful, body.comment.strip()[:500])
         return {"ok": True}
+
+    # Shared snippets: paste code, get a short link (/s/<id>) anyone can open. No sign-in,
+    # so creation is rate limited and the code size capped.
+    snippet_limit = codetools.RateLimiter(limit=10, window=600)
+    snippet_id_ok = re.compile(r"[A-Za-z0-9]{6,12}").fullmatch
+    id_alphabet = string.ascii_letters + string.digits
+    max_snippet_chars = 20_000
+
+    @app.post("/api/public/snippets", status_code=status.HTTP_201_CREATED)
+    async def share_snippet(body: SnippetRequest, request: Request) -> dict:
+        code = body.code.strip("\n")
+        if not code.strip():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Paste some code first.")
+        if len(code) > max_snippet_chars:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"That's {len(code):,} characters; the limit is {max_snippet_chars:,}.",
+            )
+        forwarded = request.headers.get("x-forwarded-for", "")
+        client = forwarded.split(",")[-1].strip() or (request.client.host if request.client else "?")
+        if not snippet_limit.allow(client):
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "That's a lot of snippets: wait a few minutes.")
+        for _ in range(5):  # a fresh id collides almost never; retry the freak case
+            snippet_id = "".join(secrets.choice(id_alphabet) for _ in range(8))
+            if store.add_shared_snippet(snippet_id, code, body.language.strip()[:30], body.title.strip()[:100]):
+                return {"id": snippet_id, "url": f"{public_urls(request)[0]}/s/{snippet_id}"}
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Could not create a link. Try again.")
+
+    @app.get("/api/public/snippets/{snippet_id}")
+    async def read_snippet(snippet_id: str) -> dict:
+        row = store.view_shared_snippet(snippet_id) if snippet_id_ok(snippet_id) else None
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "No snippet lives at this link.")
+        return {k: row[k] for k in ("id", "code", "language", "title", "views", "created_at")}
 
     @app.post("/api/auth/local")
     async def local_login(request: Request) -> dict:
