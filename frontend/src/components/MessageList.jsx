@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { copyText } from '../copy.js'
 import { explainFailure } from '../errors.js'
 import { TOKEN_CLASS, highlight, langFor } from '../highlight.js'
 import { parseDiff } from '../diff.js'
@@ -31,7 +32,7 @@ export function codeLines(value) {
 }
 
 // Copies `text`; false when the browser refuses (no clipboard API and the fallback failed).
-export { copyText } from '../copy.js'
+export { copyText }
 
 const COPY_HEADER = 'rounded px-1.5 py-0.5 font-sans text-[11px] text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100'
 const COPY_INLINE = 'rounded-full bg-shade/25 px-2.5 py-1 font-sans text-xs text-zinc-400 hover:text-zinc-200'
