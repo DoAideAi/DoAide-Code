@@ -710,4 +710,201 @@ exit 0</code></pre>
     ],
     cta: ['/tools/code-review', 'Review your code free — no sign-up'],
   },
+  {
+    slug: 'how-to-write-clean-code-2026',
+    title: 'How to Write Clean Code in 2026: Practical Rules That Survive AI | DoAide Code',
+    h1: 'How to write clean code in 2026',
+    description:
+      'Clean code rules that still matter when AI writes half of it: naming, small functions, low complexity, honest error handling, and how to use AI review, complexity metrics and formatters to keep a codebase readable.',
+    updated: '2026-10-23',
+    intro: `<p>In 2026 a lot of code is first drafted by an AI assistant - and that has made clean code more important, not less. Generated code compiles and often works, but it lands in your repository at the speed you can prompt, and whoever maintains it (you, in three months) pays for every unclear name and tangled function. Clean code is what keeps a fast-growing codebase understandable.</p>
+<p>This guide is a practical set of rules - what to name things, how small to cut functions, how much complexity to tolerate, what to do with errors and comments - plus the free tools that enforce each rule in seconds: the <a href="/tools/code-complexity">complexity analyzer</a>, <a href="/tools/code-formatter">formatter</a> and <a href="/tools/code-review">AI code review</a>.</p>`,
+    sections: [
+      [
+        'naming',
+        'Names carry the design',
+        `<p>A reader meets your names a hundred times before they read any logic. The rules that pay off:</p>
+<ul>
+<li><strong>Say what it is, not how it is stored:</strong> <code>activeUsers</code>, not <code>userArr</code>; <code>retryDelayMs</code>, not <code>num2</code>.</li>
+<li><strong>Put units and qualifiers in the name:</strong> <code>timeoutMs</code>, <code>priceInr</code>, <code>maxRetries</code>. Half of all production surprises are a unit mismatch.</li>
+<li><strong>Verbs for functions, nouns for values:</strong> <code>sendInvoice(invoice)</code> reads like a sentence. A function named <code>invoice()</code> makes every call site ambiguous.</li>
+<li><strong>One vocabulary per concept:</strong> pick <code>fetch</code>, <code>get</code> or <code>load</code> - and then use the same one everywhere for the same kind of operation.</li>
+</ul>
+<p>Renaming is the cheapest refactor there is. If you inherit cryptic code, paste it into <a href="/tools/explain-code">Explain code</a> first, then rename while the understanding is fresh.</p>`,
+      ],
+      [
+        'functions',
+        'Small functions, one job each',
+        `<p>A function should do the thing its name says, completely, and nothing else. The practical thresholds most teams converge on:</p>
+<ul>
+<li><strong>Length:</strong> most functions under ~25 lines; past 50, split it.</li>
+<li><strong>Cyclomatic complexity:</strong> 1-5 is easy to test, 6-10 deserves a look, above 10 is a refactor candidate. Measure it in seconds with the <a href="/tools/code-complexity">free complexity analyzer</a> - it scores every function and flags the risky ones first.</li>
+<li><strong>Parameters:</strong> three is comfortable; past four, pass an options object or split the function.</li>
+<li><strong>Nesting:</strong> two levels read fine; four levels means invert conditions and return early.</li>
+</ul>
+<p>Early returns are the single easiest win: handle the error cases at the top and let the happy path flow unindented to the end.</p>`,
+      ],
+      [
+        'comments',
+        'Comments explain why, code explains what',
+        `<p>The 2026 consensus hasn't changed: a comment that restates the code (<code>// increment i</code>) is noise, and noise trains readers to skip all comments, including the one that matters. Comment the things code cannot say:</p>
+<ul>
+<li>Why this approach and not the obvious one (<em>"binary search is wrong here because the list is almost always under 10 items"</em>).</li>
+<li>Invariants and units the type system doesn't capture.</li>
+<li>Links to the issue, spec or incident that forced an odd decision.</li>
+</ul>
+<p>Public APIs deserve real documentation comments - JSDoc, docstrings, Javadoc - with parameters, return values and one example. The <a href="/tools/generate-docs">documentation generator</a> drafts those in your language's idiomatic style; our <a href="/guides/code-documentation-best-practices">documentation guide</a> goes deeper.</p>`,
+      ],
+      [
+        'errors',
+        'Handle errors honestly',
+        `<p>Clean error handling is mostly about not lying to the caller:</p>
+<ul>
+<li><strong>Never swallow:</strong> an empty <code>catch</code> turns a crash into a mystery. Log it, rethrow it, or handle it - visibly.</li>
+<li><strong>Fail at the edge:</strong> validate inputs where they enter the system and keep the core free of defensive clutter.</li>
+<li><strong>Error messages are UI:</strong> include what failed, with which input, and what the caller can do about it.</li>
+<li><strong>Make the unhappy path testable:</strong> if simulating a failure is hard, the design is wrong. The <a href="/tools/generate-tests">test generator</a> writes the error-path cases people skip.</li>
+</ul>`,
+      ],
+      [
+        'consistency',
+        'Consistency beats personal style',
+        `<p>A codebase written ten slightly different ways is harder to read than one written in a single mediocre style. Automate it: a formatter in the pre-commit hook ends every style debate, and the <a href="/tools/code-formatter">free formatter</a> cleans a pasted snippet when you don't have the project set up. The same goes for structure - same folder layout per feature, same test naming, same import order. Readers should be able to predict where things are.</p>`,
+      ],
+      [
+        'ai-era',
+        'Clean code when AI writes the first draft',
+        `<p>AI assistants changed the bottleneck: generating code is instant, so review is where quality is decided. A workflow that holds up:</p>
+<ol>
+<li><strong>Prompt small:</strong> ask for one function or one change, not a whole feature - small diffs are reviewable.</li>
+<li><strong>Review everything generated</strong> the way you'd review a new teammate's PR. A <a href="/tools/code-review">second AI's review</a> is surprisingly effective at catching the first AI's shortcuts - missing edge cases, quadratic loops, invented APIs.</li>
+<li><strong>Measure before merging:</strong> run generated code through the <a href="/tools/code-complexity">complexity analyzer</a>; AI happily writes a complexity-15 function if you let it.</li>
+<li><strong>Keep ownership:</strong> if you can't explain a generated line, have <a href="/tools/explain-code">Explain code</a> walk you through it - or delete it.</li>
+</ol>`,
+      ],
+    ],
+    faqs: [
+      [
+        'What is clean code, in one sentence?',
+        'Code a competent stranger can read once and change safely: clear names, small single-purpose functions, low complexity, honest errors, consistent style.',
+      ],
+      [
+        'What cyclomatic complexity should a function have?',
+        'Keep most functions at 5 or below; look hard at 6-10; refactor above 10. You can measure any snippet free at code.doaide.com/tools/code-complexity.',
+      ],
+      [
+        'Does clean code still matter when AI writes the code?',
+        'More than before: AI multiplies the volume of code entering a repository, and unreadable generated code becomes unmaintainable at the same speed. Review, complexity limits and consistent style are the controls.',
+      ],
+      [
+        'Is there a free tool to check my code quality?',
+        'Yes - the free AI code review at code.doaide.com/tools/code-review flags correctness, security, performance and readability problems with fixes, and the complexity analyzer scores every function, both without sign-up.',
+      ],
+    ],
+    cta: ['/tools/code-complexity', 'Measure your code complexity free'],
+  },
+  {
+    slug: 'code-documentation-best-practices',
+    title: 'Code Documentation Best Practices: JSDoc, Docstrings & READMEs (2026) | DoAide Code',
+    h1: 'Best practices for code documentation',
+    description:
+      'How to document code people actually read: what to document (and what not to), JSDoc and Python docstring conventions with examples, README structure, keeping docs honest in review, and generating first drafts with AI.',
+    updated: '2026-10-23',
+    intro: `<p>Nobody reads documentation for fun, so every line has to earn its place. Good code documentation answers the questions a reader has at the moment they have them: What does this function expect? What do I get back? What happens on failure? Why is this designed this way?</p>
+<p>This guide covers the conventions that work - JSDoc for JavaScript/TypeScript, docstrings for Python, READMEs for repositories - what to skip, and how to keep documentation true as code changes. You can draft documentation for any snippet in seconds with the <a href="/tools/generate-docs">free documentation generator</a>.</p>`,
+    sections: [
+      [
+        'what-to-document',
+        'Document the contract, not the implementation',
+        `<p>The highest-value documentation describes the <em>contract</em>: what a caller may rely on. For every public function, class or endpoint, that means:</p>
+<ul>
+<li><strong>Purpose</strong> - one sentence, in terms of the caller's problem.</li>
+<li><strong>Parameters</strong> - types, units, valid ranges, defaults.</li>
+<li><strong>Return value</strong> - shape and meaning, including the empty/none case.</li>
+<li><strong>Failures</strong> - which errors it throws or returns, and when.</li>
+<li><strong>One example</strong> - a realistic call with its result; examples are read ten times more than prose.</li>
+</ul>
+<p>Implementation details belong in code comments only when the why is non-obvious - see the <a href="/guides/how-to-write-clean-code-2026">clean code guide</a> on comments.</p>`,
+      ],
+      [
+        'jsdoc',
+        'JSDoc that pulls its weight',
+        `<p>For JavaScript and TypeScript, JSDoc feeds editors, type checkers and doc sites at once:</p>
+<pre><code>/**
+ * Splits an amount into equal shares, assigning the rounding
+ * remainder to the first share so the total is always exact.
+ *
+ * @param {number} amountPaise - Total in paise (not rupees).
+ * @param {number} ways - Number of shares, &gt;= 1.
+ * @returns {number[]} Shares in paise, summing to amountPaise.
+ * @throws {RangeError} If ways &lt; 1 or amountPaise &lt; 0.
+ * @example
+ * splitAmount(1001, 3) // [335, 333, 333]
+ */</code></pre>
+<p>Notes that make JSDoc useful rather than ceremonial: document units in the parameter description, document the rounding/edge behavior (that is what people come looking for), and in TypeScript skip type annotations JSDoc would duplicate - keep the prose.</p>`,
+      ],
+      [
+        'docstrings',
+        'Python docstrings: pick a style and stay with it',
+        `<p>PEP 257 sets the frame; Google style is the most readable of the common formats:</p>
+<pre><code>def split_amount(amount_paise: int, ways: int) -&gt; list[int]:
+    """Split an amount into equal shares with an exact total.
+
+    The rounding remainder goes to the first share, so
+    sum(result) == amount_paise always holds.
+
+    Args:
+        amount_paise: Total in paise (not rupees).
+        ways: Number of shares, at least 1.
+
+    Returns:
+        Shares in paise, largest first.
+
+    Raises:
+        ValueError: If ways &lt; 1 or amount_paise &lt; 0.
+    """</code></pre>
+<p>The first line is a complete sentence that fits on one line - tools like <code>help()</code>, IDE hovers and documentation generators show it alone. Type hints belong in the signature, not repeated in prose.</p>`,
+      ],
+      [
+        'readme',
+        'The README is the front door',
+        `<p>A repository README answers four questions in order: <strong>what is this</strong> (two sentences), <strong>how do I run it</strong> (copy-pasteable commands that actually work), <strong>how do I use it</strong> (one real example), and <strong>where do I go deeper</strong> (links). Everything else - architecture notes, decision records, contribution rules - links out rather than piling in. Draft and preview yours in the <a href="/tools/markdown-editor">free Markdown editor</a>, which renders code blocks with syntax highlighting as you type.</p>`,
+      ],
+      [
+        'honest-docs',
+        'Keep documentation honest',
+        `<p>Wrong documentation is worse than none - readers trust it over the code and ship the bug. What keeps docs true:</p>
+<ul>
+<li><strong>Docs change in the same commit as behavior.</strong> A diff that changes a default without touching the docstring is an incomplete diff - reviewers should block it.</li>
+<li><strong>Examples are tests:</strong> Python doctests and example-based unit tests fail when the documented behavior drifts. The <a href="/tools/generate-tests">test generator</a> happily turns an @example into cases.</li>
+<li><strong>Date your prose docs</strong> ("Updated 2026-10") so readers can calibrate trust.</li>
+<li><strong>Delete dead docs:</strong> a paragraph about a removed flag costs every future reader a detour.</li>
+</ul>`,
+      ],
+      [
+        'ai-drafts',
+        'Let AI write the first draft, you write the truth',
+        `<p>Documentation has a blank-page problem, and AI solves exactly that part. Paste a function into the <a href="/tools/generate-docs">documentation generator</a> and you get idiomatic JSDoc or docstrings - summary, parameters, returns, raises, example - in seconds. Then do the human pass: correct the intent ("why" is yours, the AI only sees "what"), check the edge cases it inferred, and cut anything that merely restates the signature. Ten minutes of editing a complete draft beats an hour facing an empty comment block - and the result is documentation that actually exists.</p>`,
+      ],
+    ],
+    faqs: [
+      [
+        'What should code documentation include?',
+        "The contract: purpose in one sentence, parameters with types and units, return value including the empty case, errors thrown, and one realistic example. Skip anything that restates the code.",
+      ],
+      [
+        'JSDoc or TypeScript types - do I need both?',
+        'In TypeScript, let the type system carry types and use JSDoc for what types cannot say: units, valid ranges, edge-case behavior, and examples. In plain JavaScript, JSDoc carries both.',
+      ],
+      [
+        'Which Python docstring format is best?',
+        'Any of Google, NumPy or Sphinx style works - consistency matters more than the pick. Google style is the most readable in plain text and is what most new projects choose.',
+      ],
+      [
+        'Can AI generate code documentation?',
+        'Yes - paste code into the free generator at code.doaide.com/tools/generate-docs and get JSDoc, docstrings, Javadoc or godoc comments with parameters, returns and examples. Review the draft: AI documents what the code does, you confirm what it is for.',
+      ],
+    ],
+    cta: ['/tools/generate-docs', 'Generate documentation free with AI'],
+  },
 ]
