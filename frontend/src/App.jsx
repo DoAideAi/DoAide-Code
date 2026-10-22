@@ -37,6 +37,7 @@ import TopBar from './components/TopBar.jsx'
 import UsagePage from './components/UsagePage.jsx'
 import useNotificationSound from './hooks/useNotificationSound.js'
 import useShortcuts, { MOD_KEY } from './hooks/useShortcuts.js'
+import useTabTitle from './hooks/useTabTitle.js'
 import { connect } from './socket.js'
 import { statusColor, useChat } from './store.js'
 
@@ -281,6 +282,7 @@ export default function App() {
   // Busy only while a reply is actually streaming or queued, so a stale status can never leave
   // Stop showing after the answer finished.
   const busy = serverStatus === 'busy' && messages.some((m) => m.status === 'streaming' || m.status === 'queued')
+  useTabTitle(busy)
   useShortcuts({
     newChat: () => (token ? void handleNewChat() : false),
     clear: () => (token ? void apply({ type: 'clear-view' }) : false),
