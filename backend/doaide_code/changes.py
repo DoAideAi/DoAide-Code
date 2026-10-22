@@ -416,7 +416,7 @@ def _second_docstrings(path: str, content: str) -> list[str]:
         first, second = (node.body + [None, None])[:2]
         if all(isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant) and isinstance(n.value.value, str) for n in (first, second)):
             name = getattr(node, "name", "the module")
-            found.append(f"{path}:{second.lineno}: {name} has two docstrings; replace the existing one instead of adding another")
+            found.append(f"{path}:{second.lineno}: {name} has two docstrings; merge the new text into the existing docstring, keeping what it says")
     return found
 
 

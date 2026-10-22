@@ -109,7 +109,9 @@ EDIT_KINDS = {"edit", "test", "debug"}
 LOCAL_GUIDANCE = {
     "question": "Give the direct answer.",
     "explain": "Say in plain words what it does and what it is for. Do not paste the code.",
-    "edit": "Change only what was asked.",
+    # Live (32b, "add a docstring to log_task"): it replaced a one-line docstring with a Google-style
+    # Args block, dropping what the old one said and inventing example values.
+    "edit": "Change only what was asked, in the file's style; extend existing docstrings, don't replace them.",
     "debug": "Name the cause in a few plain words, then the fix as edit blocks.",
     "design": "Give your recommendation and the main reason.",
 }
