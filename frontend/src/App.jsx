@@ -28,6 +28,7 @@ import Composer from './components/Composer.jsx'
 import ConnectionBanner from './components/ConnectionBanner.jsx'
 import ConversationSidebar from './components/ConversationSidebar.jsx'
 import FileViewer from './components/FileViewer.jsx'
+import SettingsPage from './components/SettingsPage.jsx'
 import HowItWorksPage from './components/HowItWorksPage.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
 import { NoModelsBanner } from './components/Models.jsx'
@@ -39,7 +40,7 @@ import SignIn from './components/SignIn.jsx'
 import TopBar from './components/TopBar.jsx'
 import UsagePage from './components/UsagePage.jsx'
 import useNotificationSound from './hooks/useNotificationSound.js'
-import useShortcuts, { MOD_KEY } from './hooks/useShortcuts.js'
+import useShortcuts, { loadKeys, shortcutLabel } from './hooks/useShortcuts.js'
 import useTabTitle from './hooks/useTabTitle.js'
 import { connect } from './socket.js'
 import { statusColor, useChat } from './store.js'
@@ -150,7 +151,7 @@ export default function App() {
   } = useChat()
   const socket = useRef(null)
   const [setupOpen, setSetupOpen] = useState(false)
-  // The page shown instead of the chat: 'models', 'usage', 'how' or null.
+  // The page shown instead of the chat: 'models', 'usage', 'how', 'settings' or null.
   const [page, setPage] = useState(null)
   const toggle = (name) => () => setPage((p) => (p === name ? null : name))
   const loadUsage = useCallback((days) => fetchUsage(token, days), [token])
@@ -310,6 +311,7 @@ export default function App() {
     return sent
   }
   const online = connection === 'open'
+  const chooseModel = online && !busy ? (name) => send(`/model ${name}`) : null
   return (
     <div className="flex h-[100dvh]">
       <ConversationSidebar
@@ -338,9 +340,10 @@ export default function App() {
         onUsage={token ? toggle('usage') : null}
         onModels={token ? toggle('models') : null}
         onHow={toggle('how')}
+        onSettings={toggle('settings')}
         onToggleSidebar={() => setSidebarOpen((p) => !p)}
         onNewChat={handleNewChat}
-        newChatHint={`${MOD_KEY}K`}
+        newChatHint={shortcutLabel(loadKeys(), 'newChat')}
         onSearch={() => setSearchOpen((p) => !p)}
         muted={muted}
         onToggleMute={toggleMute}
@@ -361,6 +364,8 @@ export default function App() {
         <UsagePage load={loadUsage} loadHistory={loadHistory} onClose={() => setPage(null)} />
       ) : page === 'how' ? (
         <HowItWorksPage onClose={() => setPage(null)} />
+      ) : page === 'settings' ? (
+        <SettingsPage models={online ? models : null} onChooseModel={chooseModel} onClose={() => setPage(null)} />
       ) : setupOpen && token ? (
         <SetupPage
           agentOnline={agentOnline}
@@ -393,7 +398,7 @@ export default function App() {
             onSend={send}
             onStop={() => socket.current?.send({ type: 'stop' })}
             models={online ? models : null}
-            onChooseModel={online && !busy ? (name) => send(`/model ${name}`) : null}
+            onChooseModel={chooseModel}
           />
         </>
       )}
