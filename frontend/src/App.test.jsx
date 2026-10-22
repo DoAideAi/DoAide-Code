@@ -1009,3 +1009,55 @@ describe('waiting for a reply', () => {
     expect(screen.getByTestId('queued').textContent).toMatch(/Queued for your laptop… \d+s/)
   })
 })
+
+describe('nothing typed is lost', () => {
+  it('a message sent just before the page closed comes back in the box', async () => {
+    localStorage.setItem('doaide-unsent', JSON.stringify({ sessionId: 's', text: 'fix the bug', at: 1 }))
+    await boot(true)
+    expect(screen.getByLabelText('Message').value).toBe('fix the bug')
+    expect(screen.getByText(/did not reach DoAide before the page closed/)).toBeTruthy()
+    expect(localStorage.getItem('doaide-unsent')).toBeNull()
+  })
+
+  it('one the server did get is not offered again', async () => {
+    localStorage.setItem('doaide-unsent', JSON.stringify({ sessionId: 's', text: 'fix the bug', at: 1 }))
+    await boot(true, { messages: [{ id: '1', role: 'user', content: 'fix the bug', status: 'done' }] })
+    expect(screen.getByLabelText('Message').value).toBe('')
+    expect(localStorage.getItem('doaide-unsent')).toBeNull()
+  })
+
+  it('a sent message is kept until the server echoes it', async () => {
+    const ws = await boot(true)
+    const box = screen.getByLabelText('Message')
+    fireEvent.change(box, { target: { value: 'hello' } })
+    expect(localStorage.getItem('doaide-draft:s')).toBe('hello')
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(localStorage.getItem('doaide-draft:s')).toBeNull()
+    expect(JSON.parse(localStorage.getItem('doaide-unsent')).text).toBe('hello')
+    await act(async () => ws.emit({ type: 'message', message: { id: '2', role: 'user', content: 'hello', status: 'done' } }))
+    expect(localStorage.getItem('doaide-unsent')).toBeNull()
+  })
+
+  it('a message lost in a dropped connection comes back after reconnecting', async () => {
+    const ws = await boot(true)
+    const box = screen.getByLabelText('Message')
+    fireEvent.change(box, { target: { value: 'hello' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await act(async () => ws.drop(1006))
+    await act(async () => new Promise((r) => setTimeout(r, 1100)))
+    const again = FakeSocket.instances.at(-1)
+    expect(again).not.toBe(ws)
+    await act(async () => {
+      again.open()
+      again.emit({ type: 'snapshot', session_id: 's', project: 'alpha', status: 'idle', messages: [] })
+    })
+    expect(screen.getByLabelText('Message').value).toBe('hello')
+    expect(screen.getByText(/lost when the connection dropped/)).toBeTruthy()
+  })
+
+  it('restores the draft saved for the conversation', async () => {
+    localStorage.setItem('doaide-draft:s', 'half a thought')
+    await boot(true)
+    expect(screen.getByLabelText('Message').value).toBe('half a thought')
+  })
+})

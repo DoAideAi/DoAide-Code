@@ -32,6 +32,7 @@ import FileViewer from './components/FileViewer.jsx'
 import GettingStarted from './components/GettingStarted.jsx'
 import SettingsPage from './components/SettingsPage.jsx'
 import { exportConversation } from './export.js'
+import { clearUnsent, echoed, recordUnsent, unsent } from './drafts.js'
 import HowItWorksPage from './components/HowItWorksPage.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
 import { NoModelsBanner } from './components/Models.jsx'
@@ -324,11 +325,45 @@ export default function App() {
   const [awaiting, setAwaiting] = useState(false)
   const lastId = messages.at(-1)?.id
   useEffect(() => setAwaiting(false), [lastId, connection])
+  // A sent message the server never echoed (the page closed, or the connection dropped first)
+  // goes back in the message box, so it is never lost.
+  const [prefill, setPrefill] = useState(null)
+  const restoreUnsent = useCallback((why) => {
+    const pending = unsent()
+    if (!pending || echoed(useChat.getState().messages, pending)) return
+    clearUnsent()
+    setPrefill({ text: pending.text })
+    apply({ type: 'notice', text: `${why} It's back in the message box: press Send to try again.` })
+  }, [apply])
+  // The first messages after a reconnect are the server's snapshot: did it get the message?
+  const reconnected = useRef(false)
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    // A drop after being connected; the first connection is covered by the reload check below.
+    if (connection === 'open') wasOpen.current = true
+    else if (wasOpen.current) reconnected.current = true
+  }, [connection])
+  useEffect(() => {
+    if (echoed(messages)) clearUnsent()
+    else if (reconnected.current && connection === 'open') {
+      reconnected.current = false
+      restoreUnsent('Your last message was lost when the connection dropped.')
+    }
+    // Only when the messages change; the connection is read, not watched.
+  }, [messages])
+  // After a reload (or a switch back), for the conversation it was sent in.
+  useEffect(() => {
+    if (sessionId && unsent()?.sessionId === sessionId) restoreUnsent('Your last message did not reach DoAide before the page closed.')
+  }, [sessionId, restoreUnsent])
+
   useEffect(() => {
     if (!awaiting) return undefined
-    const timer = setTimeout(() => setAwaiting(false), 20_000)
+    const timer = setTimeout(() => {
+      setAwaiting(false)
+      restoreUnsent('Your last message did not reach DoAide.')
+    }, 20_000)
     return () => clearTimeout(timer)
-  }, [awaiting])
+  }, [awaiting, restoreUnsent])
 
   // Busy only while a reply is actually streaming or queued, so a stale status can never leave
   // Stop showing after the answer finished.
@@ -348,7 +383,10 @@ export default function App() {
 
   const send = (text) => {
     const sent = socket.current?.send({ type: 'send', text }) ?? false
-    if (sent) setAwaiting(true)
+    if (sent) {
+      setAwaiting(true)
+      recordUnsent(sessionId, text)
+    }
     return sent
   }
   const online = connection === 'open'
@@ -464,6 +502,8 @@ export default function App() {
             disabled={connection !== 'open'}
             onSend={send}
             onStop={() => socket.current?.send({ type: 'stop' })}
+            sessionId={sessionId}
+            prefill={prefill}
             models={online ? models : null}
             onChooseModel={chooseModel}
           />

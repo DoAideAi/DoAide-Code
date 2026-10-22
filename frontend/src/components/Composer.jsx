@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { loadDraft, saveDraft } from '../drafts.js'
 import ModelPicker from './ModelPicker.jsx'
 
 // Grows with the text up to about eight lines, then scrolls.
@@ -27,8 +28,10 @@ export function suggestionsFor(text) {
   return pool.filter((s) => s.startsWith(typed) && s.trim() !== typed.trim()).slice(0, MAX_SUGGESTIONS)
 }
 
-export default function Composer({ busy, disabled, onSend, onStop, models = null, onChooseModel = null }) {
-  const [text, setText] = useState('')
+// `sessionId`: what is typed is saved for that conversation and comes back after a reload or a
+// crash. `prefill` ({ text }; a new object each time) puts text in the box, e.g. an unsent message.
+export default function Composer({ busy, disabled, onSend, onStop, models = null, onChooseModel = null, sessionId = null, prefill = null }) {
+  const [text, setText] = useState(() => loadDraft(sessionId))
   // The highlighted suggestion; -1 when none is (Enter then sends what was typed).
   const [active, setActive] = useState(-1)
   const [dismissed, setDismissed] = useState(false)
@@ -37,6 +40,7 @@ export default function Composer({ busy, disabled, onSend, onStop, models = null
 
   const change = (value) => {
     setText(value)
+    saveDraft(sessionId, value)
     setActive(-1)
     setDismissed(false)
   }
@@ -44,6 +48,19 @@ export default function Composer({ busy, disabled, onSend, onStop, models = null
     change(value)
     box.current?.focus()
   }
+
+  // Each conversation has its own draft.
+  const shownFor = useRef(sessionId)
+  useEffect(() => {
+    if (shownFor.current === sessionId) return
+    shownFor.current = sessionId
+    setText(loadDraft(sessionId))
+  }, [sessionId])
+
+  // Only when a new prefill arrives.
+  useEffect(() => {
+    if (prefill?.text) accept(prefill.text)
+  }, [prefill])
 
   useLayoutEffect(() => {
     const el = box.current
