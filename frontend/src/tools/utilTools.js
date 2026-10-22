@@ -66,6 +66,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'code-templates',
+    label: 'Templates',
+    title: 'Code Templates Library',
+    heading: 'Start from a code template',
+    description:
+      'Pre-built templates for the patterns you write over and over: React components and hooks, Express and FastAPI endpoints, Python classes and CLIs, SQL CRUD, Go servers. Copy and go. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'code-complexity',
     label: 'Complexity',
     title: 'Code Complexity Analyzer',
