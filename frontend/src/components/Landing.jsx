@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { fetchToolStats } from '../tools/codeTools.js'
+import { TOOLS, fetchToolStats } from '../tools/codeTools.js'
+import { UTIL_TOOLS } from '../tools/utilTools.js'
 import SignIn from './SignIn.jsx'
 import Testimonials from './Testimonials.jsx'
 
@@ -15,14 +16,12 @@ const FEATURES = [
   ['Uses your own logins', 'Claude and Codex run on your existing subscriptions. No API keys to paste in.'],
 ]
 
-const TOOL_LINKS = [
-  ['explain-code', 'Explain code'],
-  ['code-review', 'Code review'],
-  ['find-bugs', 'Find bugs'],
-  ['add-comments', 'Add comments'],
-  ['convert-code', 'Convert code'],
-  ['optimize-code', 'Optimize code'],
-  ['generate-tests', 'Generate tests'],
+// The tools most visitors come for, shown big; everything else is in the category rows below.
+const POPULAR = [
+  ['explain-code', 'Explain code', 'Paste any snippet and get a plain-English, step-by-step explanation.'],
+  ['code-review', 'AI code review', 'A senior-engineer review: correctness, security and performance, with fixes.'],
+  ['json-formatter', 'JSON formatter', 'Validate JSON as you type and explore it as a collapsible tree.'],
+  ['diff-checker', 'Diff checker', 'Paste two versions and see every changed line side by side.'],
 ]
 
 const STEPS = [
@@ -43,7 +42,13 @@ export default function Landing({ clientId, onCredential, error }) {
   }, [])
   return (
     <div data-testid="landing" className="h-[100dvh] overflow-y-auto">
-      <main className="mx-auto flex max-w-4xl flex-col gap-12 px-4 py-12 sm:py-16">
+      <a
+        href="#landing-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-10 focus:rounded-md focus:bg-zinc-800 focus:px-3 focus:py-2 focus:text-sm focus:text-zinc-100"
+      >
+        Skip to main content
+      </a>
+      <main id="landing-main" tabIndex={-1} className="mx-auto flex max-w-4xl flex-col gap-12 px-4 py-12 focus:outline-none sm:py-16">
         <header className="flex flex-col items-center gap-4 text-center">
           <h1 className="text-3xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">
             An AI coding assistant that tries free models first
@@ -85,27 +90,64 @@ export default function Landing({ clientId, onCredential, error }) {
           </ol>
         </section>
 
-        <section aria-labelledby="tools" className="flex flex-col items-center gap-3 rounded-lg border border-zinc-800 p-6 text-center">
-          <h2 id="tools" className="text-base font-medium text-zinc-100">
-            Try it now, no sign-in
-          </h2>
-          <p className="max-w-xl text-sm text-zinc-400">
-            Paste any code to explain it, review it, find bugs, add comments, convert it to another language,
-            optimize it or generate unit tests. Free, and shareable on WhatsApp.
-          </p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {TOOL_LINKS.map(([slug, label]) => (
-              <a
-                key={slug}
-                href={`/tools/${slug}`}
-                className="min-h-[40px] rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
-              >
-                {label}
-              </a>
-            ))}
+        <section aria-labelledby="tools" className="flex flex-col gap-4 rounded-lg border border-zinc-800 p-6">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <h2 id="tools" className="text-base font-medium text-zinc-100">
+              Free tools, no sign-in
+            </h2>
+            <p className="max-w-xl text-sm text-zinc-400">
+              Eleven free tools for everyday coding: AI that explains, reviews and converts code, plus instant
+              utilities that never upload a byte. Shareable on WhatsApp.
+            </p>
           </div>
+
+          <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Popular</h3>
+          <ul data-testid="landing-popular" className="grid gap-3 sm:grid-cols-2">
+            {POPULAR.map(([slug, label, text]) => (
+              <li key={slug}>
+                <a href={`/tools/${slug}`} className="block h-full rounded-lg border border-zinc-700 p-4 hover:bg-zinc-900">
+                  <span className="text-sm font-medium text-zinc-100">{label}</span>
+                  <p className="mt-1 text-sm text-zinc-400">{text}</p>
+                </a>
+              </li>
+            ))}
+          </ul>
+
+          <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">AI code tools</h3>
+          <ul data-testid="landing-ai-tools" className="flex flex-wrap gap-2">
+            {TOOLS.map((t) => (
+              <li key={t.slug}>
+                <a
+                  href={`/tools/${t.slug}`}
+                  className="flex min-h-[40px] items-center rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
+                >
+                  {t.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+
+          <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Developer utilities</h3>
+          <ul data-testid="landing-utils" className="flex flex-wrap gap-2">
+            {UTIL_TOOLS.map((t) => (
+              <li key={t.slug}>
+                <a
+                  href={`/tools/${t.slug}`}
+                  className="flex min-h-[40px] items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
+                >
+                  {t.label}
+                  {t.isNew && (
+                    <span className="rounded-full bg-sky-900/70 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-300">
+                      New
+                    </span>
+                  )}
+                </a>
+              </li>
+            ))}
+          </ul>
+
           {analyzed && (
-            <p data-testid="landing-stats" className="text-xs text-zinc-500">
+            <p data-testid="landing-stats" className="text-center text-xs text-zinc-500">
               <span className="tabular-nums">{analyzed.toLocaleString()}</span> snippet{analyzed === 1 ? '' : 's'} analyzed so far
             </p>
           )}

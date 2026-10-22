@@ -36,11 +36,30 @@ describe('CodeToolsPage', () => {
     expect(screen.getByTestId('tool-whatsapp').getAttribute('href')).toMatch(/^https:\/\/wa\.me\/\?text=/)
   })
 
-  it('switches tools in place', () => {
+  it('switches tools in place and moves focus to the new heading', async () => {
     render(<CodeToolsPage initialPath="/tools/explain-code" initialHash="" />)
     fireEvent.click(screen.getByRole('tab', { name: 'Review' }))
     expect(window.location.pathname).toBe('/tools/code-review')
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Free AI code review')
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading.textContent).toBe('Free AI code review')
+    await waitFor(() => expect(document.activeElement).toBe(heading))
+  })
+
+  it('links the utilities from the tool switcher, with a skip link', () => {
+    render(<CodeToolsPage initialPath="/tools/explain-code" initialHash="" />)
+    expect(screen.getByRole('link', { name: /Diff checker/ }).getAttribute('href')).toBe('/tools/diff-checker')
+    expect(screen.getByText('Skip to the tool').getAttribute('href')).toBe('#tool-main')
+  })
+
+  it('remembers a run in the recent snippets history', async () => {
+    localStorage.clear()
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ answer: 'ok' }) })))
+    render(<CodeToolsPage initialPath="/tools/explain-code" initialHash="" />)
+    expect(screen.queryByTestId('recent-snippets')).toBeNull()
+    fireEvent.change(screen.getByTestId('tool-code'), { target: { value: 'x = 1' } })
+    fireEvent.click(screen.getByTestId('tool-run'))
+    await waitFor(() => expect(screen.getByTestId('tool-answer')).toBeTruthy())
+    expect(screen.getByTestId('recent-snippets').textContent).toContain('x = 1')
   })
 
   it('converts with a chosen target language', async () => {

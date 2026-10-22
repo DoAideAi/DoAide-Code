@@ -29,4 +29,19 @@ describe('Landing', () => {
     render(<Landing clientId="" onCredential={() => {}} error="Sign-in was rejected for this account." />)
     expect(screen.getByText('Sign-in was rejected for this account.')).toBeTruthy()
   })
+
+  it('groups the tools into popular, AI and utility sections', () => {
+    render(<Landing clientId="" onCredential={() => {}} />)
+    expect(screen.getByTestId('landing-popular').querySelectorAll('a')).toHaveLength(4)
+    expect(screen.getByTestId('landing-ai-tools').querySelectorAll('a')).toHaveLength(7)
+    const utils = screen.getByTestId('landing-utils')
+    expect(utils.querySelectorAll('a')).toHaveLength(4)
+    expect(utils.textContent).toContain('New')
+    expect(utils.querySelector('a').getAttribute('href')).toBe('/tools/diff-checker')
+  })
+
+  it('offers a skip link to the main content', () => {
+    render(<Landing clientId="" onCredential={() => {}} />)
+    expect(screen.getByText('Skip to main content').getAttribute('href')).toBe('#landing-main')
+  })
 })

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CodeBlock, copyText, splitFences } from '../components/MessageList.jsx'
 import { Markdown } from '../markdown.jsx'
 import CodeEditor, { EDITOR_THEMES, saveEditorTheme, savedEditorTheme } from './CodeEditor.jsx'
@@ -85,6 +85,8 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
+  // After a tab switch, focus moves to the new heading so screen readers hear where they landed.
+  const headingRef = useRef(null)
   const choose = (next, event) => {
     event.preventDefault()
     if (next === tool) return
@@ -92,6 +94,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
     setTool(next)
     setAnswer('')
     setError(null)
+    setTimeout(() => headingRef.current?.focus(), 0)
   }
 
   const run = async () => {
@@ -118,7 +121,13 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
   const tooLong = code.length > MAX_CODE_CHARS
   return (
     <div data-testid="tools-page" className="h-[100dvh] overflow-y-auto">
-      <nav className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
+      <a
+        href="#tool-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-10 focus:rounded-md focus:bg-zinc-800 focus:px-3 focus:py-2 focus:text-sm focus:text-zinc-100"
+      >
+        Skip to the tool
+      </a>
+      <nav aria-label="Site" className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
         <a href="/" className="text-sm font-medium text-zinc-200 hover:text-zinc-50">
           DoAide Code
         </a>
@@ -126,9 +135,11 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
           Sign in
         </a>
       </nav>
-      <main className="mx-auto flex max-w-4xl flex-col gap-5 px-4 pb-12 pt-4">
+      <main id="tool-main" tabIndex={-1} className="mx-auto flex max-w-4xl flex-col gap-5 px-4 pb-12 pt-4 focus:outline-none">
         <header className="flex flex-col gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">{tool.heading}</h1>
+          <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold tracking-tight text-zinc-100 focus:outline-none sm:text-3xl">
+            {tool.heading}
+          </h1>
           <p className="text-sm text-zinc-400">{tool.description}</p>
           {analyzed && (
             <p data-testid="tool-stats" className="text-xs text-zinc-500">
@@ -262,7 +273,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
           </div>
         )}
         {answer && (
-          <section className="flex flex-col gap-3 rounded-lg border border-zinc-800 p-4">
+          <section aria-label="Answer" aria-live="polite" className="flex flex-col gap-3 rounded-lg border border-zinc-800 p-4">
             <Answer text={answer} />
             <div className="flex flex-wrap gap-2 border-t border-zinc-800 pt-3">
               <CopyLink text={answer} label="Copy answer" testid="tool-copy" />
