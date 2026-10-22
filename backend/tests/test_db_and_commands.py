@@ -80,3 +80,11 @@ def test_paths_with_spaces_and_unknown_commands(store, tmp_path):
     assert "No project named" in run_command(store, USER, "/switch-project nope").text
     assert "Unknown command" in run_command(store, USER, "/frobnicate").text
     assert run_command(store, USER, "/new").new_session
+
+
+def test_add_project_by_path_makes_a_valid_name_from_any_folder(store, tmp_path):
+    folder = tmp_path / "My App (v2)"
+    folder.mkdir()
+    result = run_command(store, USER, f'/add-project "{folder}"')
+    assert "Added project 'My-App-v2'" in result.text and result.project_changed
+    assert store.active_project(USER)["path"] == str(folder.resolve())

@@ -3,7 +3,7 @@ import { explainFailure } from '../errors.js'
 import { TOKEN_CLASS, highlight, langFor } from '../highlight.js'
 import { parseDiff } from '../diff.js'
 import { Markdown } from '../markdown.jsx'
-import { MOD_KEY } from '../hooks/useShortcuts.js'
+import { loadKeys, shortcutLabel } from '../hooks/useShortcuts.js'
 
 // Split text into prose and ``` fenced code segments. An unclosed fence (mid-stream) is code.
 export function splitFences(text) {
@@ -587,7 +587,16 @@ export function promptFor(messages, index) {
 
 const SUGGESTIONS = ['What does this project do?', 'Explain the main file in simple words', 'Find bugs in my latest changes']
 
-function Welcome({ onSend }) {
+// "⌘K new chat · ⌘L clear · Esc stop", with the keys chosen in Settings (off ones left out).
+export function shortcutHints(keys = loadKeys()) {
+  return [['newChat', 'new chat'], ['clear', 'clear'], ['stop', 'stop']]
+    .map(([action, what]) => shortcutLabel(keys, action) && `${shortcutLabel(keys, action)} ${what}`)
+    .filter(Boolean)
+    .join(' · ')
+}
+
+// `intro`: shown above the suggestions (the Getting started checklist).
+function Welcome({ onSend, intro = null }) {
   return (
     <div className="mt-[12vh] flex flex-col items-center gap-4 px-2 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-xl font-semibold text-white">
@@ -597,9 +606,10 @@ function Welcome({ onSend }) {
         <p className="text-lg font-medium text-zinc-100">What can I help with?</p>
         <p className="mt-1 text-sm text-zinc-500">Ask anything about your code. Type /help for commands.</p>
         <p data-testid="shortcut-hints" className="mt-2 hidden text-xs text-zinc-600 sm:block">
-          {MOD_KEY}K new chat · {MOD_KEY}L clear · Esc stop
+          {shortcutHints()}
         </p>
       </div>
+      {intro}
       {onSend && (
         <div className="flex flex-wrap justify-center gap-2">
           {SUGGESTIONS.map((s) => (
@@ -655,6 +665,7 @@ export default function MessageList({
   hasMore = false,
   onLoadEarlier = null,
   pending = false,
+  welcome = null,
 }) {
   const scroller = useRef(null)
   const end = useRef(null)
@@ -685,7 +696,7 @@ export default function MessageList({
     <main ref={scroller} className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
       <div className="mx-auto flex max-w-2xl flex-col gap-4 px-3 py-5 text-[15px] sm:px-4">
         {hasMore && onLoadEarlier && <LoadEarlier onLoad={loadEarlier} />}
-        {messages.length === 0 && !pending && <Welcome onSend={onSend} />}
+        {messages.length === 0 && !pending && <Welcome onSend={onSend} intro={welcome} />}
         {messages.map((m, i) => {
           const prompt = onRetry && m.status === 'error' ? promptFor(messages, i) : null
           return (

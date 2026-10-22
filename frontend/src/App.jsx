@@ -29,6 +29,7 @@ import Composer from './components/Composer.jsx'
 import ConnectionBanner from './components/ConnectionBanner.jsx'
 import ConversationSidebar from './components/ConversationSidebar.jsx'
 import FileViewer from './components/FileViewer.jsx'
+import GettingStarted from './components/GettingStarted.jsx'
 import SettingsPage from './components/SettingsPage.jsx'
 import { exportConversation } from './export.js'
 import HowItWorksPage from './components/HowItWorksPage.jsx'
@@ -444,6 +445,19 @@ export default function App() {
             hasMore={hasMore}
             onLoadEarlier={loadEarlier}
             pending={awaiting}
+            welcome={
+              <GettingStarted
+                mode={mode}
+                agentOnline={agentOnline}
+                models={online ? models : null}
+                project={project}
+                onSetup={() => setSetupOpen(true)}
+                onModels={() => setPage('models')}
+                onSend={online ? send : null}
+                loadProjects={loadProjects}
+                onSwitchProject={online && !busy ? (name) => send(`/switch-project ${name}`) : null}
+              />
+            }
           />
           <Composer
             busy={busy}

@@ -177,7 +177,8 @@ def run_command(store: Store, user_email: str, text: str, *, workspace: str = DE
             name, path, create = args[0], root / args[0], True
         elif len(args) == 1:
             path = Path(args[0]).expanduser()
-            name = path.name
+            # Named after the folder, made valid: "My App" becomes "My-App".
+            name = re.sub(r"[^A-Za-z0-9._-]+", "-", path.resolve().name).strip("-.")[:64] or "project"
         elif len(args) == 2:
             name, path = args[0], Path(args[1]).expanduser()
         else:
