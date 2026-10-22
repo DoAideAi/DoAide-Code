@@ -62,3 +62,13 @@ def test_a_mention_that_is_a_project_path_names_only_that_file(tmp_path: Path):
     assert explicit("fix any typos in README.md") == ["README.md"]
     assert explicit("fix any typos in legacy/README.md") == ["legacy/README.md"]
     assert explicit("fix any typos in notes.md") == ["legacy/notes.md"]  # no exact path: by name
+
+
+def test_edit_summaries_drop_lead_ins_to_hidden_blocks():
+    from doaide_code.runner import _edit_summary
+
+    assert _edit_summary("Here are the two edit blocks:") == ""
+    assert _edit_summary("Fix the path in the body text:\n\nFix the same typo in the table:") == (
+        "Fix the path in the body text.\n\nFix the same typo in the table."
+    )
+    assert _edit_summary("Added a --version flag.") == "Added a --version flag."

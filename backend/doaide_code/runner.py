@@ -575,6 +575,19 @@ def _repair_job(run: Job, fix: str, first: str) -> Job:
     return replace(run, prompt=fix, context="", history=history)
 
 
+# What is left of "Here are the two edit blocks:" once the blocks are taken out (live: Sonnet).
+_LEAD_IN = re.compile(r"^\s*(?:here(?:'s| is| are)|below (?:is|are)|the (?:following|edits?|changes?)\b|i'll\b|let me\b).*:\s*$", re.I)
+
+
+def _edit_summary(prose: str) -> str:
+    """The prose around applied edit blocks, without lead-ins to blocks that are not shown; the
+    blocks' own captions ("Fix the same typo in the table:") end as sentences. Empty when nothing
+    is left, so the caller says which files were updated."""
+    lines = [line for line in prose.splitlines() if not _LEAD_IN.match(line)]
+    text = "\n".join(re.sub(r":\s*$", ".", line) for line in lines).strip()
+    return re.sub(r"\n{3,}", "\n\n", text)
+
+
 def _fits_whole(
     candidates: list[Executor], ranking: Ranking | None, kind: str
 ) -> tuple[list[Executor], str | None]:
@@ -790,7 +803,7 @@ async def _preview_changes(
     store.add_changeset(changeset.id, record, changeset.summary())
     outcome.changes = changeset.summary()
     files = ", ".join(f.path for f in changeset.changed)
-    summary = strip_edits(outcome.content)
+    summary = _edit_summary(strip_edits(outcome.content))
     if auto:
         try:
             await asyncio.to_thread(apply_record, record)
