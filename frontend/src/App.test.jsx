@@ -364,6 +364,24 @@ describe('Claude Code activity and diff previews', () => {
     expect(collapsed[0].open).toBe(false)
   })
 
+  it('copies a code block with its Copy button', async () => {
+    const writeText = vi.fn(() => Promise.resolve())
+    await boot(false, {
+      messages: [{ id: 'r', role: 'assistant', content: 'Run:\n```bash\nnpm test\n```', status: 'done' }],
+    })
+    Object.defineProperty(globalThis.navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const button = screen.getByTestId('copy-code')
+    await act(async () => fireEvent.click(button))
+    expect(writeText).toHaveBeenCalledWith('npm test')
+    expect(button.textContent).toBe('Copied')
+    writeText.mockImplementationOnce(() => Promise.reject(new Error('denied')))
+    document.execCommand = vi.fn(() => true)
+    await act(async () => fireEvent.click(button))
+    expect(document.execCommand).toHaveBeenCalledWith('copy')
+    expect(button.textContent).toBe('Copied')
+    delete globalThis.navigator.clipboard
+  })
+
   it('shows progress while a reply has no text yet', async () => {
     await boot(false, { messages: [{ id: 'r', role: 'assistant', content: '', status: 'streaming', created_at: 0 }] })
     expect(screen.getByTestId('working').textContent).toContain('Working on your laptop')

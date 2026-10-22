@@ -24,11 +24,60 @@ export function codeLines(value) {
   return value.replace(/\n$/, '').split('\n').length
 }
 
+// Copies `text`; false when the browser refuses (no clipboard API and the fallback failed).
+export async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    // Older browsers and non-secure pages: a hidden textarea and the copy command.
+    const area = document.createElement('textarea')
+    area.value = text
+    area.setAttribute('readonly', '')
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    try {
+      return document.execCommand('copy')
+    } catch {
+      return false
+    } finally {
+      area.remove()
+    }
+  }
+}
+
+function CopyButton({ text }) {
+  const [state, setState] = useState('idle') // idle | copied | failed
+  useEffect(() => {
+    if (state === 'idle') return undefined
+    const timer = setTimeout(() => setState('idle'), 1500)
+    return () => clearTimeout(timer)
+  }, [state])
+  return (
+    <button
+      type="button"
+      data-testid="copy-code"
+      aria-label={state === 'copied' ? 'Copied' : 'Copy code'}
+      title="Copy code"
+      // Without the fence's trailing newline: pasted into a terminal, it would run at once.
+      onClick={async () => setState((await copyText(text.replace(/\n+$/, ''))) ? 'copied' : 'failed')}
+      className="absolute right-1.5 top-1.5 rounded-md bg-zinc-800/90 px-2 py-1 font-sans text-[11px] text-zinc-300 opacity-80 transition hover:bg-zinc-700 hover:opacity-100 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+    >
+      {state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy'}
+    </button>
+  )
+}
+
 function Code({ value }) {
   return (
-    <pre className="my-2 overflow-x-auto rounded-xl bg-shade/40 p-3 font-mono text-[13px] leading-relaxed text-zinc-200">
-      <code>{value}</code>
-    </pre>
+    <div className="group relative my-2">
+      <pre className="overflow-x-auto rounded-xl bg-shade/40 p-3 pr-16 font-mono text-[13px] leading-relaxed text-zinc-200">
+        <code>{value}</code>
+      </pre>
+      <CopyButton text={value} />
+    </div>
   )
 }
 
