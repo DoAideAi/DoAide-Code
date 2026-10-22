@@ -52,7 +52,11 @@ export async function copyText(text) {
   }
 }
 
-function CopyButton({ text }) {
+const COPY_FLOATING =
+  'absolute right-1.5 top-1.5 rounded-md bg-zinc-800/90 px-2 py-1 font-sans text-[11px] text-zinc-300 opacity-80 transition hover:bg-zinc-700 hover:opacity-100 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+const COPY_INLINE = 'rounded-full bg-shade/25 px-2.5 py-1 font-sans text-xs text-zinc-400 hover:text-zinc-200'
+
+function CopyButton({ text, inline = false }) {
   const [state, setState] = useState('idle') // idle | copied | failed
   useEffect(() => {
     if (state === 'idle') return undefined
@@ -67,7 +71,7 @@ function CopyButton({ text }) {
       title="Copy code"
       // Without the fence's trailing newline: pasted into a terminal, it would run at once.
       onClick={async () => setState((await copyText(text.replace(/\n+$/, ''))) ? 'copied' : 'failed')}
-      className="absolute right-1.5 top-1.5 rounded-md bg-zinc-800/90 px-2 py-1 font-sans text-[11px] text-zinc-300 opacity-80 transition hover:bg-zinc-700 hover:opacity-100 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+      className={inline ? COPY_INLINE : COPY_FLOATING}
     >
       {state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy'}
     </button>
@@ -78,7 +82,7 @@ function Code({ value, lang = '' }) {
   const tokens = useMemo(() => highlight(value, lang), [value, lang])
   return (
     <div className="group relative my-2">
-      <pre className="overflow-x-auto rounded-xl bg-shade/40 p-3 pr-16 font-mono text-[13px] leading-relaxed text-zinc-200">
+      <pre className={`overflow-x-auto rounded-xl bg-shade/40 p-3 pr-16 ${lang ? 'pb-6' : ''} font-mono text-[13px] leading-relaxed text-zinc-200`}>
         <code data-lang={lang || undefined}>
           {tokens.map((t, i) =>
             t.kind ? (
@@ -91,6 +95,11 @@ function Code({ value, lang = '' }) {
           )}
         </code>
       </pre>
+      {lang && (
+        <span aria-hidden="true" className="pointer-events-none absolute bottom-1.5 right-2.5 font-sans text-[10px] text-zinc-500">
+          {lang}
+        </span>
+      )}
       <CopyButton text={value} />
     </div>
   )
@@ -104,18 +113,29 @@ export function hideEdits(text) {
   return text.replace(EDIT_BLOCK, (_, start, path) => `${start}✎ Editing ${path ? path.trim() : 'a file'}…`)
 }
 
+// A long code block behind "Show code", copyable without opening it.
+function CollapsedCode({ value, lang }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={open ? 'my-1.5' : 'my-1.5 flex flex-wrap items-center gap-1.5'}>
+      <details data-testid="collapsed-code" className="text-xs text-zinc-400" onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-full bg-shade/25 px-2.5 py-1 hover:text-zinc-200">
+          {open ? 'Hide code' : 'Show code'} ({codeLines(value)} lines{lang ? `, ${lang}` : ''})
+        </summary>
+        <Code value={value} lang={lang} />
+      </details>
+      {!open && <CopyButton text={value} inline />}
+    </div>
+  )
+}
+
 function Body({ content }) {
   return splitFences(hideEdits(content)).map((part, i) =>
     part.kind === 'code' ? (
       codeLines(part.value) <= SHOWN_CODE_LINES ? (
         <Code key={i} value={part.value} lang={part.lang} />
       ) : (
-        <details key={i} data-testid="collapsed-code" className="my-1.5 text-xs text-zinc-400">
-          <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-full bg-shade/25 px-2.5 py-1 hover:text-zinc-200">
-            Show code ({codeLines(part.value)} lines{part.lang ? `, ${part.lang}` : ''})
-          </summary>
-          <Code value={part.value} lang={part.lang} />
-        </details>
+        <CollapsedCode key={i} value={part.value} lang={part.lang} />
       )
     ) : (
       <Markdown key={i} text={part.value} />

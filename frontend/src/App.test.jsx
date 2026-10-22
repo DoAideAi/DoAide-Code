@@ -384,6 +384,25 @@ describe('Claude Code activity and diff previews', () => {
     expect(collapsed[0].open).toBe(false)
   })
 
+  it('a collapsed code block copies without opening, and names its language when open', async () => {
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(globalThis.navigator, 'clipboard', { value: { writeText }, configurable: true })
+    await boot(true, {
+      messages: [{ id: 'r', role: 'assistant', content: '```python\na = 1\nb = 2\nc = 3\nd = 4\n```', status: 'done' }],
+    })
+    const collapsed = screen.getByTestId('collapsed-code')
+    const copy = screen.getAllByTestId('copy-code').find((b) => !collapsed.contains(b))
+    await act(async () => fireEvent.click(copy))
+    expect(writeText).toHaveBeenCalledWith('a = 1\nb = 2\nc = 3\nd = 4')
+    expect(copy.textContent).toBe('Copied')
+    collapsed.open = true
+    await act(async () => fireEvent(collapsed, new Event('toggle')))
+    expect(collapsed.querySelector('summary').textContent).toBe('Hide code (4 lines, python)')
+    expect(screen.getAllByTestId('copy-code').every((b) => collapsed.contains(b))).toBe(true)
+    expect(collapsed.querySelector('code').dataset.lang).toBe('python')
+    delete globalThis.navigator.clipboard
+  })
+
   it('copies a code block with its Copy button', async () => {
     const writeText = vi.fn(() => Promise.resolve())
     await boot(false, {
