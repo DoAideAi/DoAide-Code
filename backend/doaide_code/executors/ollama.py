@@ -19,7 +19,7 @@ from collections.abc import AsyncIterator
 import httpx
 
 from ..usage import Usage
-from ..prompts import EDIT_KINDS, LOCAL_REMINDER, few_shot, system_prompt
+from ..prompts import EDIT_KINDS, few_shot, local_reminder, system_prompt
 from .base import Executor, ExecutorError, Job, user_message
 
 # Tokens kept free for the answer, and the window bounds (qwen2.5-coder supports 32k).
@@ -195,7 +195,7 @@ class OllamaExecutor(Executor):
         messages += [{"role": t.role, "content": t.content} for t in job.history]
         request = user_message(job)
         if job.kind not in EDIT_KINDS:
-            request = f"{request}\n\n{LOCAL_REMINDER}"
+            request = f"{request}\n\n{local_reminder(job.prompt)}"
         messages.append({"role": "user", "content": request})
         payload = {
             "model": model,

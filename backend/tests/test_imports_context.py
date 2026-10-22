@@ -50,3 +50,23 @@ def test_ollama_context_is_capped_by_model_size():
     assert OllamaExecutor("http://x", "qwen2.5-coder:32b", context_chars=14_000).context_chars == 14_000
     small.context_chars = 3_000
     assert small.context_chars == 3_000
+
+
+def test_small_models_get_the_other_matching_files_by_name(tmp_path: Path):
+    for name, body in {
+        "agent.py": "# websocket client\nws = websocket.connect(url)\n" * 3,
+        "socket.js": "// websocket wrapper\nnew WebSocket(url)\n" * 3,
+        "main.py": '"""Server: chat websocket (/ws) endpoint."""\n@app.websocket("/ws")\n',
+        "legacy/app.js": "// old websocket code\nnew WebSocket(url)\n" * 5,
+        "dist/bundle.js": "websocket websocket websocket",
+    }.items():
+        (tmp_path / name).parent.mkdir(exist_ok=True)
+        (tmp_path / name).write_text(body)
+    ranking = rank_files(tmp_path, "what files handle the websocket?")
+    assert "dist/bundle.js" not in ranking.tree  # build output is never context
+    text, files = ranking.render(14_000, max_files=2)
+    assert "legacy/app.js" not in files  # stale code ranks below live code
+    pointers = text[text.index("## Other matching files") :]
+    assert all(f"- {p}" in pointers for p in {"agent.py", "socket.js", "main.py", "legacy/app.js"} - set(files))
+    # Named files are edited, not searched: no pointer list then.
+    assert "## Other matching files" not in rank_files(tmp_path, "fix main.py").render(14_000, max_files=2)[0]

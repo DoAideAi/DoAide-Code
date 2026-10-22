@@ -28,6 +28,10 @@ TEXT_SUFFIXES = {
     ".cpp", ".hpp", ".cs", ".rb", ".php", ".sh", ".sql", ".vue", ".svelte", ".ini", ".cfg", ".env.example",
 }
 TEXT_NAMES = {"Dockerfile", "Makefile", "Caddyfile", "Procfile", ".gitignore"}
+# Build output and coverage reports: generated, never what a question is about.
+SKIP_DIRS = {"dist", "coverage", "htmlcov"}
+# Old code kept for reference: ranked below the live code that shares its words.
+STALE_DIRS = {"legacy", "deprecated", "archive", "old", "attic"}
 SKIP_NAMES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock", "uv.lock", "Cargo.lock"}
 MAX_SCAN_FILES = 4000
 MAX_FILE_BYTES = 200_000
@@ -50,6 +54,8 @@ STOPWORDS = {
 RELATIVE_CUTOFF = 0.3
 # With named files in the context, other files are added only if this much budget is left.
 NAMED_REMAINDER = 4000
+# Characters kept for the names of matching files a small model is not shown.
+POINTER_ROOM = 1000
 # Project files imported by the named files: one level deep, at most this many.
 MAX_IMPORTED = 6
 LANG = {".py": "python", ".js": "js", ".jsx": "jsx", ".ts": "ts", ".tsx": "tsx", ".json": "json", ".md": "md",
@@ -110,6 +116,10 @@ class Ranking:
         if budget <= 0 or not (self.tree or self.candidates or extra):
             return "", []
         named = any(c.explicit for c in self.candidates)
+        # Room kept for the other matching files' names (see _pointers), which whole files would
+        # otherwise always take.
+        pointer_room = POINTER_ROOM if max_files is not None and not named and budget > 4 * POINTER_ROOM else 0
+        budget -= pointer_room
         parts = ["# Project files (selected for this request)"]
         if not named:
             tree_lines = TREE_LINES if max_files is None or max_files > 3 else SMALL_TREE_LINES
@@ -168,7 +178,26 @@ class Ranking:
             parts.append(block)
             included.append(c.path)
             used += len(block)
+        if pointer_room and (pointers := self._pointers(included, budget + pointer_room - used)):
+            parts.append(pointers)
         return "\n".join(parts), included
+
+    def _pointers(self, shown: list[str], room: int, limit: int = 8) -> str:
+        """The next-best files by name, each with its best-matching line: a small model sees only
+        2-3 files, and "which files handle X?" needs the rest named (live: the 7b model answered
+        with agent.py and socket.js, never seeing main.py's /ws endpoint)."""
+        lines = ["\n## Other matching files (not shown; name them if relevant)"]
+        for c in [c for c in self.candidates if c.path not in shown][:limit]:
+            try:
+                text = (self.root / c.path).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            best = max(text.splitlines() or [""], key=lambda line: sum(t in line.lower() for t in self.terms))
+            line = f"- {c.path}: {best.strip()[:100]}" if best.strip() else f"- {c.path}"
+            if sum(len(x) + 1 for x in lines) + len(line) > room:
+                break
+            lines.append(line)
+        return "\n".join(lines) if len(lines) > 1 else ""
 
     def render_map(self, budget: int, *, extra: str = "", files: int = 10) -> tuple[str, list[str]]:
         """For agents that read files themselves: the tree, the likeliest files (paths only)
@@ -384,6 +413,8 @@ def rank_files(root: Path, request: str) -> Ranking:
             # Tests repeat the names they test; the source is what explains them, unless the
             # request is about the tests.
             score *= 1.5 if wants_tests else 0.5
+        if STALE_DIRS & set(lower.split("/")[:-1]):
+            score *= 0.4
         if rel in explicit or rel in imported or score > 0:
             st = stats[rel]
             boost = 1000 if rel in explicit else 500 if rel in imported else 0
@@ -403,7 +434,9 @@ def _walk(root: Path, cache: ProjectCache) -> tuple[list[str], list[tuple[str, o
     files: list[tuple[str, os.stat_result]] = []
     dir_mtimes: dict[str, int] = {}
     for current, dirs, names in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in IGNORED and not d.startswith(".") and not d.endswith(".egg-info"))
+        dirs[:] = sorted(
+            d for d in dirs if d not in IGNORED and d not in SKIP_DIRS and not d.startswith(".") and not d.endswith(".egg-info")
+        )
         base = Path(current)
         rel_dir = base.relative_to(root).as_posix()
         try:

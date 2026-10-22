@@ -396,3 +396,20 @@ def test_claude_messages_after_tool_calls_start_a_new_paragraph():
     start = {"type": "stream_event", "event": {"type": "message_start"}}
     out = [parse(start), parse(delta("I'll search first.")), parse(start), parse(delta("Found it")), parse(delta(" here."))]
     assert "".join(c for c in out if c) == "I'll search first.\n\nFound it here."
+
+
+def test_which_files_questions_get_a_list_reminder():
+    from doaide_code.prompts import LIST_REMINDER, LOCAL_REMINDER, local_reminder
+
+    assert local_reminder("what files handle the WebSocket connection?") == LIST_REMINDER
+    assert local_reminder("Which modules read the config") == LIST_REMINDER
+    assert local_reminder("what does router.py do?") == LOCAL_REMINDER
+
+
+def test_a_list_of_files_answers_a_which_files_question():
+    from doaide_code.validate import off_topic_reason
+
+    q = "what files handle the WebSocket connection?"
+    assert off_topic_reason(q, "- frontend/src/socket.js opens and reconnects.\n- backend/doaide_code/main.py serves /ws.") is None
+    assert off_topic_reason(q, "- socket.js and relay.py") is None
+    assert off_topic_reason(q, "I like turtles.") is not None

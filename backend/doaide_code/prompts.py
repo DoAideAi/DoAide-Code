@@ -13,6 +13,7 @@ response cache, so changing any template retires answers produced with the old w
 from __future__ import annotations
 
 import hashlib
+import re
 from functools import lru_cache
 
 # How every model answers: short, and without stopping to ask.
@@ -88,6 +89,15 @@ BRIEF = (
 # Repeated after the request for answers without edits: a 7b model reading 3k tokens of files
 # forgets the system prompt's length rule (live: three long sentences on "what does router.py do?").
 LOCAL_REMINDER = "(Answer in 1-2 short sentences, in plain words for someone who does not code.)"
+# "Which files handle X?" wants every file, not the first two (live: the 7b model named two of
+# four to stay within 1-2 sentences).
+LIST_REMINDER = "(List every relevant file, including those under 'Other matching files': one short line each.)"
+LIST_QUESTION = re.compile(r"\b(?:which|what)\s+(?:files?|modules?|components?|classes|functions|places)\b|\bwhere\s+(?:are|do)\b", re.I)
+
+
+def local_reminder(prompt: str) -> str:
+    """The reminder after a local question: a short list for "which files" questions, else brevity."""
+    return LIST_REMINDER if LIST_QUESTION.search(prompt) else LOCAL_REMINDER
 
 LOCAL_BASE = f"""{IDENTITY}
 {LOCAL_ACCESS}
@@ -172,7 +182,7 @@ def few_shot(style: str, kind: str) -> list[tuple[str, str]]:
 
 def _version() -> str:
     styles = [system_prompt(s, k) for s in ("local", "claude", "codex") for k in KIND_GUIDANCE]
-    return hashlib.sha256("\n".join([*styles, *FEW_SHOT_ANSWER, *FEW_SHOT_EDIT, *FEW_SHOT_DEBUG, LOCAL_REMINDER]).encode()).hexdigest()[:12]
+    return hashlib.sha256("\n".join([*styles, *FEW_SHOT_ANSWER, *FEW_SHOT_EDIT, *FEW_SHOT_DEBUG, LOCAL_REMINDER, LIST_REMINDER]).encode()).hexdigest()[:12]
 
 
 PROMPT_VERSION = _version()

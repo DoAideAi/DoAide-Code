@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from .changes import _run, parse_edits
+from .prompts import LIST_QUESTION
 
 _FENCE = re.compile(r"^```([\w+-]*)[^\n]*\n(.*?)^```", re.M | re.S)
 _NEEDS_FILES = re.compile(
@@ -219,11 +220,18 @@ def _without_plans(text: str) -> str:
     return "\n\n".join(kept) if kept else text
 
 
+_PATH = re.compile(r"[\w.-]+/[\w./-]*\.\w{1,6}\b|\b[\w-]+\.(?:py|jsx?|tsx?|go|rs|java|rb|md|json|toml|ya?ml|css|html|sh)\b")
+
+
 def off_topic_reason(prompt: str, answer: str) -> str | None:
     """Why the answer does not seem to address the request, or None when it does."""
     text = answer.lower()
     if _REFUSAL.search(answer[:300]):
         return "the model declined to answer"
+    if LIST_QUESTION.search(prompt) and _PATH.search(answer):
+        # "Which files handle the login?" answered with paths: on topic, though the paths need not
+        # repeat the request's words (live: a correct list of files escalated to Sonnet).
+        return None
     words = {w.lower() for w in _WORD.findall(prompt)} - _STOPWORDS
     # Prefix match, so "sorting" in the request meets "sorted" in the answer.
     shared = sum(w[:5] in text for w in words)
