@@ -1098,4 +1098,93 @@ exit 0</code></pre>
     ],
     cta: ['/tools/regex-tester', 'Test your regex free — live highlighting'],
   },
+  {
+    slug: 'free-online-sql-formatter-validator',
+    title: 'Free Online SQL Formatter and Validator: Beautify SQL Queries (2026) | DoAide Code',
+    h1: 'Free online SQL formatter and validator',
+    description:
+      'Format SQL queries online — one clause per line, keywords uppercased, subqueries indented — and catch unbalanced parentheses, unterminated strings and dangerous missing WHERE clauses before they reach your database. Free, in-browser, no sign-up.',
+    updated: '2026-10-23',
+    intro: `<p>SQL arrives messy. It gets copied out of ORMs and log files as one endless line, assembled in application code with the formatting of a ransom note, and pasted into chats where every line break dies. Reading a 400-character single-line query to find the one wrong JOIN is miserable — and running an <code>UPDATE</code> that turned out to be missing its <code>WHERE</code> clause is a career memory.</p>
+<p>A SQL formatter fixes the first problem; a validator catches the second before your database does. This guide covers how both work and how to fold them into the two minutes before you run, review or share a query. Everything here can be tried in the <a href="/tools/sql-formatter">free online SQL formatter and validator</a> — it runs in your browser, uploads nothing, and needs no sign-up.</p>`,
+    sections: [
+      [
+        'what-formatting-does',
+        'What a good SQL formatter does to your query',
+        `<p>Readable SQL follows a layout experienced engineers converge on everywhere:</p>
+<ul>
+<li><strong>One clause per line:</strong> <code>SELECT</code>, <code>FROM</code>, each <code>JOIN</code>, <code>WHERE</code>, <code>GROUP BY</code>, <code>ORDER BY</code> and <code>LIMIT</code> each start their own line, so the shape of the query is visible before you read a word of it.</li>
+<li><strong>Keywords uppercased:</strong> <code>select id from users</code> becomes <code>SELECT id FROM users</code> — keywords and identifiers stop blurring together.</li>
+<li><strong>Conditions as continuations:</strong> <code>AND</code>, <code>OR</code> and <code>ON</code> lines indent one step under their clause, so a five-condition <code>WHERE</code> reads like a checklist.</li>
+<li><strong>Subqueries indented by depth:</strong> a nested <code>SELECT</code> sits visibly inside its parentheses instead of hiding mid-line.</li>
+<li><strong>Strings and comments untouched:</strong> anything inside quotes — names, patterns for <code>LIKE</code>, JSON payloads — and every comment passes through byte-for-byte. A formatter that uppercases words inside your string literals is corrupting data.</li>
+</ul>
+<p>Paste any query into the <a href="/tools/sql-formatter">SQL formatter</a> and compare: the before and after run identically, but only one of them can be reviewed.</p>`,
+      ],
+      [
+        'what-validation-catches',
+        'What the validator catches before your database does',
+        `<p>The validator is not a full SQL parser — it is a fast sanity check for the mistakes people actually paste:</p>
+<ul>
+<li><strong>Unbalanced parentheses:</strong> the classic result of editing a subquery by hand. The database error ("syntax error at or near...") points somewhere unhelpful; the validator just tells you the brackets don't close.</li>
+<li><strong>Unterminated strings:</strong> a lost closing quote swallows the rest of the query — easy to cause, hard to spot in a wall of text.</li>
+<li><strong>Trailing commas:</strong> the leftover comma after deleting the last column in a <code>SELECT</code> list or <code>INSERT</code>.</li>
+<li><strong>UPDATE or DELETE without a WHERE clause:</strong> the big one. Sometimes you really do mean every row — but you want that to be a decision, not a surprise. A warning here has saved more production data than most backup strategies.</li>
+</ul>
+<p>Shape-checking is not semantic checking: the validator cannot know your schema, so a typo in a column name still only surfaces at the database. For that class of problem, paste the query into the <a href="/tools/code-review">free AI code review</a>, which also flags injection-prone string concatenation and N+1 patterns in the surrounding code.</p>`,
+      ],
+      [
+        'when-to-format',
+        'When to format: the three moments that matter',
+        `<ol>
+<li><strong>Before you run it.</strong> Formatting a query is how you re-read it. The missing <code>WHERE</code>, the <code>LEFT JOIN</code> that should be <code>INNER</code>, the <code>OR</code> that needed parentheses — all of these are visible in clause-per-line layout and invisible on one line.</li>
+<li><strong>Before you review or commit it.</strong> SQL embedded in a pull request gets reviewed like code, and reviewers skim what they cannot read. Migrations, report queries and anything in a <code>.sql</code> file deserve the same formatting discipline as the application code around them.</li>
+<li><strong>Before you share it.</strong> A query pasted into Slack or WhatsApp as one line is a puzzle, not a question. Format it, then send it as a short link with the <a href="/tools/share-code">code snippet sharing tool</a> — syntax highlighted, up to 20,000 characters, no account needed on either end.</li>
+</ol>`,
+      ],
+      [
+        'conventions',
+        'SQL style choices worth standardising',
+        `<p>Formatters settle the mechanical layout; a few choices remain yours. Pick once per team and stop debating:</p>
+<table>
+<tr><th>Choice</th><th>Common pick</th><th>Why</th></tr>
+<tr><td>Keyword case</td><td>UPPERCASE</td><td>Keywords jump out in editors without SQL highlighting — chat, diffs, logs.</td></tr>
+<tr><td>Identifier case</td><td>snake_case, lowercase</td><td>Avoids quoted-identifier pain across PostgreSQL and MySQL.</td></tr>
+<tr><td>SELECT * in application code</td><td>Avoid</td><td>Explicit columns survive schema changes and document intent.</td></tr>
+<tr><td>JOIN style</td><td>Explicit <code>JOIN ... ON</code></td><td>Comma joins with WHERE-clause conditions hide the relationship and invite accidental cross joins.</td></tr>
+<tr><td>Aliases</td><td>Short but meaningful (<code>u</code>, <code>ord</code>)</td><td>Single letters scale badly past two tables.</td></tr>
+</table>
+<p>If a query resists formatting — six subqueries deep, conditions nobody can explain — the problem is the query. The <a href="/tools/explain-code">Explain Code tool</a> turns inherited SQL into plain English, and <a href="/tools/optimize-code">Optimize Code</a> suggests rewrites (CTEs, window functions, pushed-down filters) that are usually faster <em>and</em> more readable.</p>`,
+      ],
+      [
+        'privacy',
+        'Why in-browser formatting matters for SQL in particular',
+        `<p>Queries leak more than code does: table names, column names, internal report logic, sometimes literal customer values in <code>WHERE</code> clauses. Sending that to a random "free SQL beautifier" backend is a quiet data-handling decision nobody signed off on.</p>
+<p>The <a href="/tools/sql-formatter">DoAide Code SQL formatter</a> formats and validates entirely in the page — up to 50,000 characters, nothing leaves your machine. The habit still applies everywhere: replace literal personal values with placeholders before pasting a query into any tool, including your team chat.</p>`,
+      ],
+    ],
+    faqs: [
+      [
+        'What is the best free online SQL formatter?',
+        'One that puts each clause on its own line, uppercases keywords, indents subqueries, leaves strings and comments untouched, and runs in your browser so your query is never uploaded. The DoAide Code SQL formatter at code.doaide.com/tools/sql-formatter does this free, with validation included and no sign-up.',
+      ],
+      [
+        'Does formatting change what the SQL query does?',
+        'No. Formatting only changes whitespace, line breaks and keyword casing — identifiers, strings and comments pass through untouched, and SQL keywords are case-insensitive in every major database. The formatted query executes identically to the original.',
+      ],
+      [
+        'Can an online tool validate my SQL query?',
+        'It can catch structural mistakes: unbalanced parentheses, unterminated strings, trailing commas and UPDATE/DELETE statements missing a WHERE clause. It cannot know your schema, so wrong table or column names only surface when the database runs the query.',
+      ],
+      [
+        'Which SQL dialects does the formatter support?',
+        'The layout rules — clause per line, uppercased keywords, indented subqueries — are dialect-neutral and work for PostgreSQL, MySQL, SQL Server, Oracle and SQLite queries alike. Dialect-specific syntax inside the query passes through unchanged.',
+      ],
+      [
+        'Is it safe to paste production SQL into an online formatter?',
+        'In the DoAide Code formatter the processing is client-side, so the query never leaves your browser. Even so, strip literal customer data from WHERE clauses out of habit before pasting a query into any tool — the formatting result is the same with placeholders.',
+      ],
+    ],
+    cta: ['/tools/sql-formatter', 'Format and validate SQL free — no sign-up'],
+  },
 ]
