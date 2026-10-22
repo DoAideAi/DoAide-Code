@@ -822,6 +822,26 @@ describe('errors in the chat', () => {
     expect(ws.sent.at(-1)).toEqual({ type: 'send', text: 'refactor the parser' })
   })
 
+  it('a tool error is explained in plain words, with the raw text under Technical details', async () => {
+    const raw = 'All executors failed.\nollama: Ollama request failed: ConnectError: connection refused'
+    await boot(true, { messages: [FAILED[0], { ...FAILED[1], content: raw }] })
+    const explained = screen.getByTestId('explained-error')
+    expect(explained.textContent).toContain('Ollama is not running on your laptop.')
+    expect(explained.querySelector('details pre').textContent).toBe(raw)
+    expect(explained.querySelector('details').open).toBe(false)
+  })
+
+  it('a usage page that cannot load says why in plain words', async () => {
+    await boot(true)
+    const original = fetch.getMockImplementation()
+    fetch.mockImplementation(async (url, init) =>
+      url.startsWith('/api/usage') ? { ok: false, status: 500, json: async () => ({}) } : original(url, init),
+    )
+    await act(async () => fireEvent.click(screen.getByTestId('usage-toggle')))
+    await flush()
+    expect(screen.getByText(/server had a problem \(500\)/)).toBeTruthy()
+  })
+
   it('a failed reply with no text still explains itself', async () => {
     await boot(true, { messages: [FAILED[0], { ...FAILED[1], content: '' }] })
     expect(screen.getByText('The task stopped with an error before it answered.')).toBeTruthy()

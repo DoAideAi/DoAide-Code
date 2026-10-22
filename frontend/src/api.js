@@ -1,3 +1,5 @@
+import { OFFLINE_ERROR, requestError } from './errors.js'
+
 const TOKEN_KEY = 'doaide-code-token'
 // Never-expiring refresh token: trades for a fresh access token so sign-in is one-time.
 const REFRESH_KEY = 'doaide-code-refresh'
@@ -45,10 +47,16 @@ async function post(path, body) {
 }
 
 async function get(path, token) {
-  const resp = await fetch(path, { headers: { Authorization: `Bearer ${token}` } })
+  let resp
+  try {
+    resp = await fetch(path, { headers: { Authorization: `Bearer ${token}` } })
+  } catch {
+    // The browser's own text ("Failed to fetch", "Load failed") means nothing to people.
+    throw new Error(OFFLINE_ERROR)
+  }
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}))
-    const error = new Error(body.detail || `Request failed (${resp.status})`)
+    const error = new Error(requestError(resp.status, body.detail))
     error.status = resp.status
     throw error
   }

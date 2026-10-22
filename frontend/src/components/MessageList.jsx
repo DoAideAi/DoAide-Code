@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { explainFailure } from '../errors.js'
 import { MOD_KEY } from '../hooks/useShortcuts.js'
 
 // Split text into prose and ``` fenced code segments. An unclosed fence (mid-stream) is code.
@@ -357,6 +358,24 @@ export function replyStatus(message) {
   return { label: 'Done', tone: 'text-emerald-300/90' }
 }
 
+// A failed reply in plain words, with the raw error folded away for whoever needs it.
+function Explained({ failure }) {
+  return (
+    <div data-testid="explained-error">
+      <p className="font-medium">{failure.summary}</p>
+      <div className="mt-1 text-sm text-red-200/80">
+        <Body content={failure.hint} />
+      </div>
+      <details className="mt-2 text-xs text-red-200/70">
+        <summary className="cursor-pointer select-none">Technical details</summary>
+        <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-shade/40 p-2 font-mono">
+          {failure.details}
+        </pre>
+      </details>
+    </div>
+  )
+}
+
 // Under a failed reply: what happened and, when the prompt is known, a button to send it again.
 function Failure({ onRetry }) {
   return (
@@ -381,6 +400,7 @@ function Reply({ message, onRetry }) {
   const changes = message.meta?.changes
   const status = replyStatus(message)
   const error = message.status === 'error'
+  const explained = error ? explainFailure(message.content) : null
   return (
     <div className="flex items-end gap-2">
       <Avatar />
@@ -409,7 +429,11 @@ function Reply({ message, onRetry }) {
               </div>
             </div>
           )}
-          {message.content ? <Body content={message.content} /> : null}
+          {explained ? (
+            <Explained failure={explained} />
+          ) : message.content ? (
+            <Body content={message.content} />
+          ) : null}
           {error && !message.content && <p>The task stopped with an error before it answered.</p>}
           {streaming && message.content && (
             <span className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-zinc-400 align-middle" />
