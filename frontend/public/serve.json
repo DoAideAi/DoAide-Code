@@ -10,6 +10,10 @@
       "destination": "/guides/index.html"
     },
     {
+      "source": "/embed",
+      "destination": "/embed.html"
+    },
+    {
       "source": "/tools",
       "destination": "/index.html"
     },

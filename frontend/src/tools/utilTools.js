@@ -30,6 +30,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'embed-code',
+    label: 'Embed widget',
+    title: 'Embeddable Code Widget',
+    heading: 'Embed a code snippet on your site',
+    description:
+      'Paste code and get an iframe snippet for your blog, docs or README site. Readers see the snippet and open it in the free AI tools with one click. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',

@@ -49,6 +49,7 @@ describe('PWA files', () => {
     expect(config.rewrites).toEqual([
       { source: '/guides/:slug([a-z0-9-]+)', destination: '/guides/:slug/index.html' },
       { source: '/guides', destination: '/guides/index.html' },
+      { source: '/embed', destination: '/embed.html' },
       { source: '/tools', destination: '/index.html' },
       { source: '/tools/:slug([a-z0-9-]+)', destination: '/index.html' },
       { source: '/', destination: '/index.html' },

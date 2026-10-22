@@ -90,14 +90,14 @@ export function toolForPath(pathname) {
   return TOOLS.find((t) => t.slug === slug) ?? TOOLS[0]
 }
 
-function toBase64Url(text) {
+export function toBase64Url(text) {
   const bytes = new TextEncoder().encode(text)
   let binary = ''
   for (const b of bytes) binary += String.fromCharCode(b)
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-function fromBase64Url(value) {
+export function fromBase64Url(value) {
   const binary = atob(value.replace(/-/g, '+').replace(/_/g, '/'))
   return new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)))
 }

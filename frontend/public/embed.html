@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Code snippet - DoAide Code</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        background: #0f1013;
+        color: #e4e4e7;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid #27272a;
+        flex: none;
+      }
+      .lang { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #71717a; }
+      .open {
+        font-size: 12px;
+        font-weight: 600;
+        color: #7dd3fc;
+        text-decoration: none;
+        border: 1px solid #0c4a6e;
+        border-radius: 8px;
+        padding: 6px 10px;
+        white-space: nowrap;
+      }
+      .open:hover { background: #082f49; }
+      pre {
+        margin: 0;
+        padding: 12px;
+        flex: 1;
+        overflow: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        color: #d4d4d8;
+        tab-size: 4;
+      }
+      .foot {
+        flex: none;
+        padding: 6px 12px;
+        border-top: 1px solid #27272a;
+        font-size: 11px;
+      }
+      .foot a { color: #71717a; text-decoration: none; }
+      .foot a:hover { color: #a1a1aa; }
+      .empty { padding: 16px; color: #71717a; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <span class="lang" id="lang"></span>
+      <a class="open" id="open" href="https://code.doaide.com/tools" target="_blank" rel="noopener">Open in DoAide Code &rarr;</a>
+    </div>
+    <pre id="code" hidden></pre>
+    <p class="empty" id="empty" hidden>No code in this embed. Make one at code.doaide.com/tools/embed-code</p>
+    <div class="foot">
+      <a href="https://code.doaide.com/tools" target="_blank" rel="noopener">Free AI code tools &mdash; code.doaide.com</a>
+    </div>
+    <script>
+      ;(function () {
+        var params = new URLSearchParams(location.hash.replace(/^#/, ''))
+        var code = ''
+        try {
+          var b64 = (params.get('code') || '').replace(/-/g, '+').replace(/_/g, '/')
+          var binary = atob(b64)
+          code = new TextDecoder().decode(Uint8Array.from(binary, function (c) { return c.charCodeAt(0) }))
+        } catch (e) {
+          code = ''
+        }
+        var lang = params.get('lang') || ''
+        // Only a known-shaped slug may build the link, so the fragment can never point elsewhere.
+        var tool = /^[a-z][a-z-]*$/.test(params.get('tool') || '') ? params.get('tool') : 'explain-code'
+        if (code) {
+          document.getElementById('code').hidden = false
+          document.getElementById('code').textContent = code
+          var frag = '#code=' + (params.get('code') || '') + (lang ? '&lang=' + encodeURIComponent(lang) : '')
+          document.getElementById('open').href = 'https://code.doaide.com/tools/' + tool + frag
+        } else {
+          document.getElementById('empty').hidden = false
+        }
+        document.getElementById('lang').textContent = lang || 'code'
+      })()
+    </script>
+  </body>
+</html>
