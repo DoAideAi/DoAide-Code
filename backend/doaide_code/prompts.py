@@ -148,7 +148,8 @@ LOCAL_GUIDANCE = {
     "explain": "Say in plain words what it does and what it is for. Do not paste the code.",
     # Live (32b, "add a docstring to log_task"): it replaced a one-line docstring with a Google-style
     # Args block, dropping what the old one said and inventing example values.
-    "edit": "Change only what was asked, in the file's style; extend existing docstrings, don't replace them.",
+    # Live (32b, asked for what a line already did): it added a redundant condition to that line.
+    "edit": "Change only what was asked, in the file's style; extend docstrings, don't replace them. Already done? Say so.",
     "debug": "Name the cause in a few plain words, then the fix as edit blocks.",
     "design": "Give your recommendation and the main reason.",
 }

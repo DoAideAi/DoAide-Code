@@ -14,6 +14,7 @@ import difflib
 import hashlib
 import json
 import logging
+import os
 import re
 import shutil
 import sys
@@ -24,7 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .files import FileAccessError, resolve_in_root
+from .files import IGNORED, FileAccessError, resolve_in_root
 
 log = logging.getLogger(__name__)
 
@@ -288,6 +289,21 @@ def _compiles(path: str, text: str) -> bool:
     return True
 
 
+def _only_match(root: Path, path: str) -> Path | None:
+    """The one project file whose path ends with `path` ("history.py" for
+    backend/doaide_code/history.py), or None when there is none or more than one."""
+    found: list[Path] = []
+    for current, dirs, names in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in IGNORED and not d.startswith(".")]
+        for name in names:
+            full = Path(current, name)
+            if full.relative_to(root).as_posix().endswith("/" + path):
+                found.append(full)
+                if len(found) > 1:
+                    return None
+    return found[0] if found else None
+
+
 def build_changeset(root: Path, edits: list[Edit]) -> Changeset:
     root = root.resolve()
     changeset = Changeset(root)
@@ -297,6 +313,10 @@ def build_changeset(root: Path, edits: list[Edit]) -> Changeset:
         except FileAccessError:
             changeset.problems.append(f"{edit.path}: outside the project, skipped")
             continue
+        if edit.search.strip() and not target.exists() and (match := _only_match(root, edit.path.strip("./"))):
+            # An edit to "history.py" means the project's only history.py (live: the 32b wrote
+            # the path as the request named it, and the edit escalated as "file does not exist").
+            target = match
         rel = target.relative_to(root).as_posix()
         change = changeset.files.get(rel)
         if change is None:

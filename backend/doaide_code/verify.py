@@ -59,7 +59,9 @@ def related_tests(folder: Path, root: Path, paths: list[str]) -> list[str]:
         path = (root / rel).resolve()
         if not rel.endswith(".py") or folder not in path.parents:
             continue
-        if tests in path.parents and path.name.startswith("test_"):
+        if path.name.startswith("test_"):
+            # Also outside tests/: a new test file a model put next to the code must still run
+            # (live: one with a wrong import passed, never collected).
             found.add(path.relative_to(folder).as_posix())
             continue
         dotted = ".".join(path.relative_to(folder).with_suffix("").parts)
@@ -95,18 +97,20 @@ async def failing_tests(
     timeout: float = TIMEOUT,
     without_edit: Callable[[], AbstractAsyncContextManager[None]] | None = None,
     request: str = "",
+    details: dict[str, str] | None = None,
 ) -> str | None:
     """Why the project's tests fail after an edit to `paths` (the first failure), or None when
     they pass, or none could be run.
 
     `without_edit`: takes the edit out of the files while it is entered. The failing tests run
     again inside it, and those that fail there too are not the edit's doing, unless `request`
-    (what the user asked) is about them."""
+    (what the user asked) is about them. `details` gets each failing test's pytest summary line
+    ("AssertionError: assert 'a  b' == 'a b'"), for asking the model to fix its edit."""
     if not enabled() or (target := test_target(root, paths)) is None:
         return None
     folder, python = target
     selected = related_tests(folder, root.resolve(), paths)
-    failed = await _pytest(folder, python, selected, timeout)
+    failed = await _pytest(folder, python, selected, timeout, details)
     if not failed or without_edit is None or failed == ["?"]:
         return _reason(failed)
     if wanted := [t for t in failed if about(request, t)]:
@@ -148,9 +152,12 @@ def _reason(failed: list[str] | None) -> str | None:
     return "tests fail" if failed == ["?"] else f"tests fail ({failed[0]})"
 
 
-async def _pytest(folder: Path, python: Path, selected: list[str], timeout: float) -> list[str] | None:
+async def _pytest(
+    folder: Path, python: Path, selected: list[str], timeout: float, details: dict[str, str] | None = None
+) -> list[str] | None:
     """The failing tests' ids ([] when they pass, ["?"] when pytest failed without naming one),
-    or None when nothing could be learned (no pytest, a usage error, a timeout)."""
+    or None when nothing could be learned (no pytest, a usage error, a timeout). Their summary
+    messages go into `details`."""
     proc = None
     try:
         # No .pyc files: an edit that keeps a file's size within the same second as the last run
@@ -166,10 +173,20 @@ async def _pytest(folder: Path, python: Path, selected: list[str], timeout: floa
         if proc is not None and proc.returncode is None:
             proc.kill()
         return None
-    # 1: tests failed. 0 passed, 5 found none; anything else (no pytest, a usage error) says
-    # nothing about the edit.
+    # 1: tests failed; 2 with ERROR lines: a test file failed to import (live: a new test importing
+    # the package by a path that does not resolve passed as "nothing learned"). 0 passed, 5 found
+    # none; anything else (no pytest, a usage error) says nothing about the edit.
     if proc.returncode in (0, 5):
         return []
-    if proc.returncode != 1:
+    text = out.decode(errors="replace")
+    found = re.findall(r"^(?:FAILED|ERROR) (\S+)(?: - (.*))?$", text, re.M)
+    if proc.returncode != 1 and not (proc.returncode == 2 and found):
         return None
-    return re.findall(r"^(?:FAILED|ERROR) (\S+)", out.decode(errors="replace"), re.M) or ["?"]
+    if details is not None:
+        for test, message in found:
+            if not message.strip() and (block := re.search(rf"ERROR collecting {re.escape(test)} _+\n(.*?)(?=^[_=]{{3,}})", text, re.M | re.S)):
+                # A collection error's summary line has no message: its last "E   ..." line does.
+                message = next(iter(reversed(re.findall(r"^E\s+(.+)$", block.group(1), re.M))), "")
+            if message.strip():
+                details[test] = message.strip()[:300]
+    return [test for test, _ in found] or ["?"]

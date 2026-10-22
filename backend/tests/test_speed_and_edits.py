@@ -231,6 +231,13 @@ async def test_the_projects_tests_tell_a_good_edit_from_a_bad_one(project):
     assert await failing_tests(project, ["README.md"]) is None  # not Python: nothing to run
 
 
+async def test_a_new_test_file_that_cannot_import_fails(project):
+    (project / "tests" / "test_new.py").write_text("from no_such_package.calc import add\n\n\ndef test_x():\n    assert add\n")
+    details: dict[str, str] = {}
+    assert await failing_tests(project, ["tests/test_new.py"], details=details) == "tests fail (tests/test_new.py)"
+    assert "ModuleNotFoundError" in details["tests/test_new.py"]
+
+
 WRONG = "Fixed add.\n\ncalc.py\n<<<<<<< SEARCH\n    return a - b\n=======\n    return a * b\n>>>>>>> REPLACE"
 RIGHT = "Fixed add.\n\ncalc.py\n<<<<<<< SEARCH\n    return a - b\n=======\n    return a + b\n>>>>>>> REPLACE"
 
@@ -243,6 +250,19 @@ async def test_a_free_edit_that_breaks_the_tests_escalates_and_the_paid_fix_is_k
     outcome = await run_job(RouterBrain([coder, sonnet], offline=True), store, Job("fix add in calc.py", cwd=project), Outcome(), nop)
     assert outcome.executor == "claude-sonnet"
     assert outcome.meta()["route"]["escalated_from"]["reason"] == "tests fail (tests/test_calc.py::test_add)"
+    assert (project / "calc.py").read_text() == "def add(a, b):\n    return a + b\n"
+
+
+async def test_a_free_edit_that_breaks_the_tests_gets_one_free_retry_with_the_failure(project, store):
+    from .test_escalation import Scripted
+
+    coder = Scripted("ollama-coder", 1, [WRONG, RIGHT], "ollama")
+    sonnet = FakeExecutor("claude-sonnet", 2, [RIGHT])
+    sonnet.tool = "claude"
+    outcome = await run_job(RouterBrain([coder, sonnet], offline=True), store, Job("fix add in calc.py", cwd=project), Outcome(), nop)
+    assert outcome.executor == "ollama-coder" and sonnet.jobs == []
+    # The retry is told which test fails and why.
+    assert "tests/test_calc.py::test_add fails: assert" in coder.jobs[1].prompt
     assert (project / "calc.py").read_text() == "def add(a, b):\n    return a + b\n"
 
 

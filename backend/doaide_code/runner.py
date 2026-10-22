@@ -389,7 +389,23 @@ async def _run_job(
                         outcome.content, problem, code_checks = repaired.content, None, again_checks
             if problem is None and source in AUTO_APPLY_SOURCES:
                 # Passes the checks; does it pass the project's tests? (Written, tested, undone.)
-                problem = await _test_edits(job, outcome.content)
+                failures: dict[str, str] = {}
+                problem = await _test_edits(job, outcome.content, failures)
+                if problem and failures:
+                    # One free try with pytest's message, before paying Sonnet (live: a new test
+                    # with a wrong expected string cost $0.11 and 155 s there).
+                    test, message = next(iter(failures.items()))
+                    fix = (
+                        f"{job.prompt}\n\nWith your previous edit, {test} fails: {message}\n"
+                        "Reply with the complete, corrected edit blocks."
+                    )
+                    repaired = await _second_try(executor, run, job, outcome.content, fix, store, source)
+                    if repaired is not None:
+                        outcome.add_usage(repaired.usage or Usage())
+                        again, again_checks, _ = await _vet(job, repaired.content, decision.kind, known)
+                        if again is None and await _test_edits(job, repaired.content) is None:
+                            retry_note = f"fixed by {executor.name} on a second try ({problem})"
+                            outcome.content, problem, code_checks = repaired.content, None, again_checks
                 verified = problem is None
             if problem:
                 log.info("escalating from %s: %s", executor.name, problem)
@@ -494,9 +510,9 @@ async def _drain_resumable(
         return await _drain(executor, fresh, outcome, store, source, streamed, on_delta), fresh
 
 
-async def _test_edits(job: Job, answer: str) -> str | None:
+async def _test_edits(job: Job, answer: str, details: dict[str, str] | None = None) -> str | None:
     """Write the answer's edits, run the project's tests, put the files back. Why the tests fail
-    (None when they pass, or there are no edits or tests)."""
+    (None when they pass, or there are no edits or tests); `details` gets pytest's messages."""
     if job.cwd is None or (changeset := await propose(job.cwd, answer)) is None or not changeset.changed:
         return None
     if changeset.all_problems:
@@ -508,7 +524,8 @@ async def _test_edits(job: Job, answer: str) -> str | None:
         return None
     try:
         return await failing_tests(
-            job.cwd, [f.path for f in changeset.changed], without_edit=_taken_out(record), request=job.prompt
+            job.cwd, [f.path for f in changeset.changed], without_edit=_taken_out(record), request=job.prompt,
+            details=details,
         )
     finally:
         with contextlib.suppress(ValueError, OSError):

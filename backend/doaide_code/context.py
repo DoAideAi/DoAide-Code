@@ -144,10 +144,15 @@ class Ranking:
             lang = LANG.get(Path(c.path).suffix, "")
             block = f"\n## File: {c.path}\n```{lang}\n{text}\n```"
             terms = self.terms | self.import_names if c.imported else self.terms
+            # For a test request, the best-matching existing test shows where tests live and how
+            # they are written (live: without one, the 32b wrote a unittest file next to the code,
+            # importing the package by a path that does not resolve).
+            example = self.wants_tests and _is_test(c.path.lower()) and not any(_is_test(p.lower()) for p in included)
             if named and not c.explicit and (
                 budget - used < NAMED_REMAINDER
                 or not more
                 and not c.imported
+                and not example
                 and (not any(i in text for i in self.idents) or (_is_test(c.path.lower()) and not self.wants_tests))
             ):
                 # The named files took the budget (the rest would only be excerpts), or this file

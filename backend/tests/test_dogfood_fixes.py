@@ -206,3 +206,36 @@ def test_where_questions_must_name_a_place():
     assert not names_no_place("where is the escalation decided?", "In `runner.py`, in `_vet()`.")
     assert not names_no_place("where is it decided?", "backend/doaide_code/runner.py decides it.")
     assert not names_no_place("what is escalation?", "When an answer fails its checks.")
+
+
+def test_an_edit_to_a_bare_file_name_goes_to_the_projects_only_file_by_that_name(tmp_path):
+    from doaide_code.changes import Edit, build_changeset
+
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "history.py").write_text("def fit():\n    return 1\n")
+    changeset = build_changeset(tmp_path, [Edit("history.py", "    return 1\n", "    return 2\n")])
+    assert not changeset.all_problems and list(changeset.files) == ["app/history.py"]
+    # Two candidates: no guess.
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "history.py").write_text("def fit():\n    return 1\n")
+    assert build_changeset(tmp_path, [Edit("history.py", "    return 1\n", "    return 2\n")]).all_problems
+
+
+def test_a_new_test_file_outside_the_tests_folder_still_runs(tmp_path):
+    from doaide_code.verify import related_tests
+
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "test_new.py").write_text("def test_x():\n    assert True\n")
+    assert related_tests(tmp_path, tmp_path, ["pkg/test_new.py"]) == ["pkg/test_new.py"]
+
+
+def test_a_test_request_naming_a_file_is_shown_an_existing_test(tmp_path):
+    from doaide_code.context import rank_files
+
+    (tmp_path / "app").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "app" / "classify.py").write_text("def without_urls(text):\n    return text\n")
+    (tmp_path / "tests" / "test_routes.py").write_text("from app.classify import classify\n\ndef test_route():\n    assert classify\n")
+    _, files = rank_files(tmp_path, "write a test for without_urls in classify.py").render(20_000, max_files=3)
+    assert files == ["app/classify.py", "tests/test_routes.py"]
