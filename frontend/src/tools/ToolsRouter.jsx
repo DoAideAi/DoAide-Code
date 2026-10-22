@@ -32,6 +32,7 @@ const PAGES = {
   'timestamp-converter': lazy(() => import('./TimestampPage.jsx')),
   'lorem-ipsum': lazy(() => import('./LoremPage.jsx')),
   'string-utilities': lazy(() => import('./StringPage.jsx')),
+  'json-path-finder': lazy(() => import('./JsonPathPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {

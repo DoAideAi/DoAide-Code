@@ -192,6 +192,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'json-path-finder',
+    label: 'JSON path',
+    title: 'JSON Path Finder',
+    heading: 'Find the JSONPath of any value',
+    description:
+      'Paste JSON, click any value in the tree, and copy its JSONPath expression or JavaScript accessor — quoting awkward keys for you. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
