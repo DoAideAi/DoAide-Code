@@ -22,6 +22,10 @@
       "destination": "/api-docs/index.html"
     },
     {
+      "source": "/compare/:slug([a-z0-9-]+)",
+      "destination": "/compare/:slug/index.html"
+    },
+    {
       "source": "/embed",
       "destination": "/embed.html"
     },

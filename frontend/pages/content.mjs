@@ -196,4 +196,103 @@ const { answer } = await res.json()</code></pre>
       ],
     ],
   },
+  {
+    slug: 'compare/doaide-code-vs-github-copilot',
+    title: 'DoAide Code vs GitHub Copilot (2026): Which Do You Actually Need?',
+    description:
+      'An honest comparison of DoAide Code and GitHub Copilot: price, autocomplete vs review, privacy, setup, and when each one wins. Spoiler: they solve different problems and combine well.',
+    h1: 'DoAide Code vs GitHub Copilot',
+    updated: '2026-10-22',
+    body: `<p class="meta">Updated 2026-10-22</p>
+<h1>DoAide Code vs GitHub Copilot</h1>
+<p>Short answer: they are different kinds of tool. <strong>GitHub Copilot</strong> is an autocomplete engine that writes code <em>as you type</em> inside your editor, for a monthly subscription. <strong>DoAide Code</strong> is a free review-and-understand layer — paste code and get a senior-style review, an explanation, a conversion or a test suite, no account needed — plus an assistant that works on your whole local repo, trying free models first. Many developers use both: Copilot to write faster, DoAide Code to check what got written.</p>
+<h2 id="table">Side by side</h2>
+<table>
+<tr><th></th><th>DoAide Code</th><th>GitHub Copilot</th></tr>
+<tr><td>Core job</td><td>Review, explain, convert, test and debug code you already have</td><td>Suggest code as you type; chat in the editor</td></tr>
+<tr><td>Price</td><td>Free tools, no sign-up; assistant routes to free local models first</td><td>Free tier with monthly limits; paid from $10/month</td></tr>
+<tr><td>Setup</td><td>None — open a URL</td><td>Editor extension + GitHub account</td></tr>
+<tr><td>Code review</td><td>Structured review with severities and fixes, built in</td><td>Via chat prompts; PR review on paid plans</td></tr>
+<tr><td>Unit test generation</td><td>One click, idiomatic framework</td><td>Via chat prompts</td></tr>
+<tr><td>Language conversion</td><td>Dedicated tool, any pair</td><td>Via chat prompts</td></tr>
+<tr><td>Autocomplete while typing</td><td>No</td><td>Yes — its core strength</td></tr>
+<tr><td>Works without sending your repo to a vendor</td><td>Yes — paste only the snippet; the assistant keeps the repo local</td><td>Editor context is sent to the service</td></tr>
+<tr><td>Account required</td><td>No</td><td>Yes (GitHub)</td></tr>
+</table>
+<h2 id="copilot-wins">Where Copilot wins</h2>
+<p>If you write a lot of boilerplate-heavy code in a supported editor, Copilot's inline completions are genuinely fast — it shines at finishing the line you started, filling in repetitive patterns, and drafting functions from a comment. Nothing on DoAide Code competes with keystroke-level autocomplete, and we don't pretend otherwise.</p>
+<h2 id="doaide-wins">Where DoAide Code wins</h2>
+<ul>
+<li><strong>Price and friction:</strong> the review, explain, convert, bug-finding and test tools are free with no account — useful on a locked-down work machine, a college lab PC, or a friend's laptop.</li>
+<li><strong>Checking code, not just writing it:</strong> autocomplete tools generate plausible code; DoAide Code's <a href="/tools/code-review">review</a> and <a href="/tools/find-bugs">bug finder</a> are built to interrogate it. Reviewing Copilot's output is a textbook use.</li>
+<li><strong>Understanding unfamiliar code:</strong> <a href="/tools/explain-code">Explain code</a> gives a structured walkthrough without any editor setup.</li>
+<li><strong>Privacy posture:</strong> you choose exactly which snippet leaves your machine; the full assistant works on your local clone and tries free local models first.</li>
+</ul>
+<h2 id="together">Using them together</h2>
+<p>A workflow we see a lot: Copilot drafts code in the editor → paste the finished function into the <a href="/tools/code-review">free AI review</a> → fix what it flags → <a href="/tools/generate-tests">generate the tests</a> → commit. The writing tool and the checking tool are different muscles; this uses both.</p>
+<a class="cta" href="/tools/code-review">Review your code free — no sign-up</a>
+<h2 id="faq">Frequently asked questions</h2>
+<details><summary>Is DoAide Code a replacement for GitHub Copilot?</summary><p>Only if what you want from Copilot is review, explanation, conversion or tests — those are free on DoAide Code. If you want inline autocomplete while typing, Copilot is the right tool and DoAide Code complements it.</p></details>
+<details><summary>Is DoAide Code really free?</summary><p>The tools at code.doaide.com/tools are free with no sign-up, under fair-use rate limits. The full assistant minimizes cost by trying free local models before Claude.</p></details>
+<details><summary>Which is better for students?</summary><p>Students usually start with DoAide Code: zero setup, zero cost, and the review/explain tools teach you why code is wrong, not just what to type. GitHub also offers Copilot free for verified students.</p></details>`,
+    faqs: [
+      [
+        'Is DoAide Code a replacement for GitHub Copilot?',
+        'Only if what you want is review, explanation, conversion or tests — those are free on DoAide Code without an account. For inline autocomplete while typing, Copilot is the right tool; many developers use both.',
+      ],
+      [
+        'What does DoAide Code cost compared to GitHub Copilot?',
+        'The DoAide Code tools are free with no sign-up. GitHub Copilot has a limited free tier and paid plans from $10/month.',
+      ],
+    ],
+  },
+  {
+    slug: 'compare/doaide-code-vs-chatgpt',
+    title: 'DoAide Code vs ChatGPT for Coding (2026): Honest Comparison',
+    description:
+      'DoAide Code vs ChatGPT for code review, debugging, conversion and tests: purpose-built prompts vs general chat, sign-up friction, privacy, and when a general chatbot is actually better.',
+    h1: 'DoAide Code vs ChatGPT for coding',
+    updated: '2026-10-22',
+    body: `<p class="meta">Updated 2026-10-22</p>
+<h1>DoAide Code vs ChatGPT for coding</h1>
+<p>You can paste code into ChatGPT and ask "review this" — so why would anyone use a dedicated tool? Because for the recurring coding tasks (review, explain, find bugs, convert, optimize, generate tests), a purpose-built tool asks the model the right question every time, skips the sign-in, and gives you a workflow — language detection, share links, snippet history, embeds — instead of a chat transcript. For everything else, a general chatbot is genuinely better. Here is the honest split.</p>
+<h2 id="table">Side by side</h2>
+<table>
+<tr><th></th><th>DoAide Code</th><th>ChatGPT</th></tr>
+<tr><td>Scope</td><td>Seven focused code tools + developer utilities</td><td>General assistant: anything, including code</td></tr>
+<tr><td>Sign-up</td><td>None</td><td>Account required</td></tr>
+<tr><td>Prompting</td><td>Built in — tuned per task, consistent output shape</td><td>You write (and rewrite) the prompt yourself</td></tr>
+<tr><td>Price for these tasks</td><td>Free, fair-use limits</td><td>Free tier with limits; Plus from $20/month</td></tr>
+<tr><td>Review quality consistency</td><td>Same structured review every time</td><td>Varies with how you ask</td></tr>
+<tr><td>Dev utilities (diff, regex, JSON, formatter)</td><td>Built in, run in your browser</td><td>Not its job</td></tr>
+<tr><td>Long back-and-forth about design</td><td>Not the paste-in tools' job</td><td>Excellent</td></tr>
+<tr><td>Whole-project work</td><td>The assistant works on your local repo</td><td>Paste-limited (or separate products)</td></tr>
+</table>
+<h2 id="chatgpt-wins">Where ChatGPT wins</h2>
+<p>Open-ended questions. "Should I use PostgreSQL or MongoDB for this?", "design a schema for a food-delivery app", "why might this architecture not scale?" — conversational, context-heavy, iterative discussions are what a general chatbot is for. The same goes for mixing code with everything else: writing docs, drafting emails about the bug, learning concepts with follow-up questions.</p>
+<h2 id="doaide-wins">Where DoAide Code wins</h2>
+<ul>
+<li><strong>Zero friction:</strong> no account, no login wall, no app — a URL that works on any machine, including the lab computer and the locked-down office laptop.</li>
+<li><strong>The prompt is the product:</strong> the <a href="/tools/code-review">review tool</a> always checks correctness, security, performance and readability with severities and fixes; <a href="/tools/generate-tests">test generation</a> always covers happy path, edges and errors in the idiomatic framework. No prompt engineering, no "as an AI" preamble, no variance.</li>
+<li><strong>A workflow, not a transcript:</strong> one URL per tool, shareable links that carry the code, WhatsApp sharing, recent-snippet history, <a href="/tools/embed-code">embeddable widgets</a>, and in-browser utilities (diff, regex, JSON, formatter) beside the AI tools.</li>
+<li><strong>Repo-scale work stays local:</strong> the full assistant edits your working directory on your laptop instead of you pasting a project into a chat window.</li>
+</ul>
+<h2 id="pick">Which should you use?</h2>
+<p>Use ChatGPT (or any general chatbot) to <em>think</em> — design discussions, concept learning, open questions. Use DoAide Code to <em>check and produce</em> — the five-times-a-day mechanical tasks where you want the same rigorous answer with zero setup. They are not competitors so much as different rooms in the same workshop.</p>
+<a class="cta" href="/tools">Try the free code tools</a>
+<h2 id="faq">Frequently asked questions</h2>
+<details><summary>Is DoAide Code just ChatGPT with a skin?</summary><p>No. Each tool ships a task-specific prompt, input validation, language handling and output formatting, runs on fast server-side models, and sits next to non-AI utilities that run entirely in your browser. You never write or tune a prompt.</p></details>
+<details><summary>Can ChatGPT do everything DoAide Code does?</summary><p>Mostly yes, if you sign in, write good prompts and don't mind variance between runs. The point of DoAide Code is that the recurring tasks take one paste and one click, free and without an account.</p></details>
+<details><summary>Which is better for debugging?</summary><p>For "here is a function, find what breaks it", DoAide Code's <a href="/tools/find-bugs">Find bugs</a> is faster and more consistent. For "my app misbehaves and I don't know where to look", a conversation — with ChatGPT or with DoAide Code's full assistant on your repo — fits better.</p></details>`,
+    faqs: [
+      [
+        'Is DoAide Code better than ChatGPT for code review?',
+        'For the recurring task — paste a function, get a structured review with severities and fixes — yes: no account, no prompt writing, consistent output. For open-ended design discussions, a general chatbot like ChatGPT is better.',
+      ],
+      [
+        'Do I need an account for DoAide Code like I do for ChatGPT?',
+        'No. Every tool on code.doaide.com/tools works without sign-up, with fair-use rate limits.',
+      ],
+    ],
+  },
 ]
