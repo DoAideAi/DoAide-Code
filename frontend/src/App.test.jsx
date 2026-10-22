@@ -227,7 +227,7 @@ describe('App', () => {
     expect(screen.getByLabelText('Message').disabled).toBe(false)
 
     await act(async () => fireEvent.click(screen.getByText('Set up laptop')))
-    expect(screen.getByTestId('setup-page')).toBeTruthy()
+    expect(await screen.findByTestId('setup-page')).toBeTruthy()
     await act(async () => fireEvent.click(screen.getByText(/Show the command instead/)))
     expect(screen.getByTestId('agent-command').textContent).toBe(
       'DOAIDE_HUB_URL=wss://code.doaide.com/agent DOAIDE_HUB_TOKEN=agent-tok doaide-code agent',
@@ -587,7 +587,7 @@ describe('detected models', () => {
     expect(dot().className).toContain('bg-emerald-400')
     await act(async () => fireEvent.click(screen.getByTestId('models-toggle')))
     await flush()
-    expect(screen.getByTestId('model-tool-ollama').textContent).toContain('Ollama:llama3:latest, codellama:7b')
+    expect((await screen.findByTestId('model-tool-ollama')).textContent).toContain('Ollama:llama3:latest, codellama:7b')
     expect(screen.getByTestId('model-tool-claude').textContent).toContain('Claude CLI:signed in · v2.1.0')
     expect(screen.getByTestId('model-tool-codex').textContent).toContain('Codex CLI:not found')
     expect(screen.getByTestId('model-tool-codex').textContent).toContain('npm install -g @openai/codex')
@@ -713,7 +713,7 @@ describe('usage dashboard', () => {
     await boot(true)
     await act(async () => fireEvent.click(screen.getByTestId('usage-toggle')))
     await flush()
-    expect(screen.getByTestId('usage-headline').textContent).toContain('handled 80% of 5 tasks')
+    expect((await screen.findByTestId('usage-headline')).textContent).toContain('handled 80% of 5 tasks')
     expect(screen.getByTestId('usage-headline').textContent).toContain('$0.04 saved')
     expect(screen.getAllByTestId('day-bar')).toHaveLength(7)
     const rows = [...screen.getByTestId('by-model').querySelectorAll('tbody tr')].map((r) => r.textContent)
@@ -783,7 +783,7 @@ describe('how it works', () => {
     await boot(true)
     expect(screen.getByTestId('how-toggle').textContent).toBe('How it works')
     await act(async () => fireEvent.click(screen.getByTestId('how-toggle')))
-    const page = screen.getByTestId('how-page')
+    const page = await screen.findByTestId('how-page')
     expect(screen.queryByTestId('composer')).toBeNull()
     const steps = [...screen.getByTestId('how-steps').querySelectorAll('li')].map((li) => li.textContent)
     expect(steps[0]).toContain('Ollama')
@@ -1070,6 +1070,6 @@ describe('command palette', () => {
     fireEvent.change(screen.getByTestId('palette-input'), { target: { value: 'settings' } })
     await act(async () => fireEvent.keyDown(screen.getByTestId('palette-input'), { key: 'Enter' }))
     expect(screen.queryByTestId('command-palette')).toBeNull()
-    expect(screen.getByTestId('settings-page')).toBeTruthy()
+    expect(await screen.findByTestId('settings-page')).toBeTruthy()
   })
 })

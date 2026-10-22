@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   checkToken,
   clearSession,
@@ -29,29 +29,35 @@ import {
 import Composer from './components/Composer.jsx'
 import ConnectionBanner from './components/ConnectionBanner.jsx'
 import ConversationSidebar from './components/ConversationSidebar.jsx'
-import FileViewer from './components/FileViewer.jsx'
 import GettingStarted from './components/GettingStarted.jsx'
-import SettingsPage from './components/SettingsPage.jsx'
 import CommandPalette from './components/CommandPalette.jsx'
 import { paletteItems } from './palette.js'
 import { saveTheme } from './theme.js'
 import { exportConversation } from './export.js'
 import { clearUnsent, echoed, recordUnsent, unsent } from './drafts.js'
-import HowItWorksPage from './components/HowItWorksPage.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
 import { NoModelsBanner } from './components/Models.jsx'
-import ModelsPage from './components/ModelsPage.jsx'
 import MessageList, { oldestServerId } from './components/MessageList.jsx'
 import SearchBar, { jumpTo } from './components/SearchBar.jsx'
-import SetupPage from './components/SetupPage.jsx'
 import Landing from './components/Landing.jsx'
 import TopBar from './components/TopBar.jsx'
-import UsagePage from './components/UsagePage.jsx'
 import useNotificationSound from './hooks/useNotificationSound.js'
 import useShortcuts, { loadKeys, shortcutLabel } from './hooks/useShortcuts.js'
 import useTabTitle from './hooks/useTabTitle.js'
 import { connect } from './socket.js'
 import { statusColor, useChat } from './store.js'
+
+// Pages away from the chat load on first use, keeping them out of the first download.
+const FileViewer = lazy(() => import('./components/FileViewer.jsx'))
+const HowItWorksPage = lazy(() => import('./components/HowItWorksPage.jsx'))
+const ModelsPage = lazy(() => import('./components/ModelsPage.jsx'))
+const SettingsPage = lazy(() => import('./components/SettingsPage.jsx'))
+const SetupPage = lazy(() => import('./components/SetupPage.jsx'))
+const UsagePage = lazy(() => import('./components/UsagePage.jsx'))
+
+function PageLoading() {
+  return <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-zinc-500">Loading…</div>
+}
 
 // Sign in once: a saved access token, else trade the saved refresh token for a new one,
 // else loopback login, else Google. The refresh token never expires, so after the first
@@ -503,6 +509,7 @@ export default function App() {
           }}
         />
       )}
+      <Suspense fallback={<PageLoading />}>
       {page === 'models' && token ? (
         <ModelsPage
           load={loadComparison}
@@ -568,6 +575,7 @@ export default function App() {
           />
         </>
       )}
+      </Suspense>
       </div>
     </div>
   )
