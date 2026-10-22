@@ -242,6 +242,18 @@ class Store:
             "SELECT * FROM sessions WHERE user_email = ? ORDER BY updated_at DESC LIMIT 1", (user_email,)
         )
 
+    def list_sessions(self, user_email: str, limit: int = 50) -> list[dict[str, Any]]:
+        return self._all(
+            "SELECT * FROM sessions WHERE user_email = ? ORDER BY updated_at DESC LIMIT ?",
+            (user_email, limit),
+        )
+
+    def search_messages(self, session_id: str, query: str) -> list[dict[str, Any]]:
+        return self._all(
+            "SELECT * FROM messages WHERE session_id = ? AND content LIKE ? ORDER BY created_at",
+            (session_id, f"%{query}%"),
+        )
+
     def update_session(self, session_id: str, *, project_id: int | None = None, title: str | None = None) -> None:
         if project_id is not None:
             self._exec("UPDATE sessions SET project_id = ? WHERE id = ?", (project_id, session_id))

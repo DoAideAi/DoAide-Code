@@ -3,9 +3,11 @@ import {
   checkToken,
   clearSession,
   createAgentToken,
+  createSession,
   downloadInstaller,
   fetchConfig,
   fetchModelComparison,
+  fetchSessions,
   fetchTaskHistory,
   fetchUsage,
   googleLogin,
@@ -15,18 +17,22 @@ import {
   refreshSession,
   saveSession,
   setupStatus,
+  switchSession,
 } from './api.js'
 import Composer from './components/Composer.jsx'
 import ConnectionBanner from './components/ConnectionBanner.jsx'
+import ConversationSidebar from './components/ConversationSidebar.jsx'
 import HowItWorksPage from './components/HowItWorksPage.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
 import { NoModelsBanner } from './components/Models.jsx'
 import ModelsPage from './components/ModelsPage.jsx'
 import MessageList from './components/MessageList.jsx'
+import SearchBar from './components/SearchBar.jsx'
 import SetupPage from './components/SetupPage.jsx'
 import SignIn from './components/SignIn.jsx'
 import TopBar from './components/TopBar.jsx'
 import UsagePage from './components/UsagePage.jsx'
+import useNotificationSound from './hooks/useNotificationSound.js'
 import { connect } from './socket.js'
 import { statusColor, useChat } from './store.js'
 
@@ -141,6 +147,71 @@ export default function App() {
   const loadComparison = useCallback((days) => fetchModelComparison(token, days), [token])
   const loadHistory = useCallback(() => fetchTaskHistory(token), [token])
 
+  // Sidebar state
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sessions, setSessions] = useState([])
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [activeSessionId, setActiveSessionId] = useState(null)
+
+  // Search state
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  // Notification sound
+  const { muted, toggleMute, checkAndPlay } = useNotificationSound()
+
+  // Check for notification sound on message changes
+  useEffect(() => {
+    checkAndPlay(messages)
+  }, [messages, checkAndPlay])
+
+  // Load sessions when sidebar opens
+  const loadSessions = useCallback(async () => {
+    if (!token) return
+    setSessionsLoading(true)
+    try {
+      const data = await fetchSessions(token)
+      setSessions(data.sessions)
+    } catch {
+      // Ignore errors loading sessions.
+    } finally {
+      setSessionsLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => {
+    if (sidebarOpen) loadSessions()
+  }, [sidebarOpen, loadSessions])
+
+  // Track active session from snapshot
+  useEffect(() => {
+    // The store doesn't expose session_id, but we get it from the snapshot event.
+    // We track it separately.
+  }, [])
+
+  const handleNewChat = useCallback(async () => {
+    if (!token) return
+    try {
+      await createSession(token)
+      // Reload the snapshot (the new session is now the latest)
+      const snapshot = await switchSession(token, '')
+      apply(snapshot)
+      loadSessions()
+    } catch {
+      // Ignore errors creating session.
+    }
+  }, [token, apply, loadSessions])
+
+  const handleSelectSession = useCallback(async (sessionId) => {
+    if (!token) return
+    try {
+      const snapshot = await switchSession(token, sessionId)
+      apply(snapshot)
+      setActiveSessionId(sessionId)
+    } catch {
+      // Ignore errors switching session.
+    }
+  }, [token, apply])
+
   // Every device can read and send; on the hub, prompts are queued and run by the laptop.
   useEffect(() => {
     if (!token) return
@@ -196,7 +267,17 @@ export default function App() {
   const send = (text) => socket.current?.send({ type: 'send', text }) ?? false
   const online = connection === 'open'
   return (
-    <div className="flex h-[100dvh] flex-col">
+    <div className="flex h-[100dvh]">
+      <ConversationSidebar
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSelect={handleSelectSession}
+        onNewChat={handleNewChat}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        loading={sessionsLoading}
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
       <TopBar
         project={project}
         color={statusColor(connection, serverStatus, mode, agentOnline)}
@@ -206,7 +287,15 @@ export default function App() {
         onUsage={token ? toggle('usage') : null}
         onModels={token ? toggle('models') : null}
         onHow={toggle('how')}
+        onToggleSidebar={() => setSidebarOpen((p) => !p)}
+        onNewChat={handleNewChat}
+        onSearch={() => setSearchOpen((p) => !p)}
+        muted={muted}
+        onToggleMute={toggleMute}
       />
+      {searchOpen && (
+        <SearchBar messages={messages} open={searchOpen} onClose={() => setSearchOpen(false)} />
+      )}
       {page === 'models' && token ? (
         <ModelsPage
           load={loadComparison}
@@ -242,6 +331,7 @@ export default function App() {
           />
         </>
       )}
+      </div>
     </div>
   )
 }

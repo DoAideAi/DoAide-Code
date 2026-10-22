@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -200,8 +201,32 @@ def create_app(
         return {"projects": store.list_projects(), "active": active["name"] if active else None}
 
     @app.get("/api/session")
-    async def session(user: User = Depends(current_user)) -> dict:
+    async def session(session_id: str | None = None, user: User = Depends(current_user)) -> dict:
+        if session_id:
+            s = store.get_session(session_id)
+            if s and s["user_email"] == user.email:
+                # Touch updated_at so latest_session picks this one.
+                store._exec("UPDATE sessions SET updated_at = ? WHERE id = ?", (time.time(), session_id))
         return chat.snapshot(user.email)
+
+    @app.get("/api/sessions")
+    async def list_sessions(limit: int = 50, user: User = Depends(current_user)) -> dict:
+        sessions = store.list_sessions(user.email, limit)
+        return {"sessions": [{"id": s["id"], "title": s["title"], "created_at": s["created_at"], "updated_at": s["updated_at"]} for s in sessions]}
+
+    @app.post("/api/sessions")
+    async def create_session(user: User = Depends(current_user)) -> dict:
+        project = store.active_project(user.email)
+        s = store.create_session(user.email, project["id"] if project else None)
+        return {"id": s["id"], "title": s["title"], "created_at": s["created_at"], "updated_at": s["updated_at"]}
+
+    @app.get("/api/sessions/{session_id}/messages")
+    async def session_messages(session_id: str, user: User = Depends(current_user)) -> dict:
+        s = store.get_session(session_id)
+        if not s or s["user_email"] != user.email:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Session not found")
+        from .chat import public_message
+        return {"messages": [public_message(m) for m in store.list_messages(session_id)]}
 
     @app.post("/api/messages", status_code=status.HTTP_202_ACCEPTED)
     async def post_message(body: SendMessage, user: User = Depends(current_user)) -> dict:

@@ -129,3 +129,22 @@ export function fetchTaskHistory(token, limit = 200) {
 export function fetchUsage(token, days = 7) {
   return get(`/api/usage?days=${days}&tz=${new Date().getTimezoneOffset()}`, token)
 }
+
+// Multi-conversation support
+export function fetchSessions(token, limit = 50) {
+  return get(`/api/sessions?limit=${limit}`, token)
+}
+
+export function createSession(token) {
+  return fetch('/api/sessions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  }).then((r) => {
+    if (!r.ok) throw new Error(`Create session failed (${r.status})`)
+    return r.json()
+  })
+}
+
+export function switchSession(token, sessionId) {
+  return get(`/api/session?session_id=${encodeURIComponent(sessionId)}`, token)
+}

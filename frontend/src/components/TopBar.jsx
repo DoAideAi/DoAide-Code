@@ -22,6 +22,11 @@ const ICONS = {
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
   sun: 'M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
   moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z',
+  sidebar: 'M4 6h16M4 12h16M4 18h16',
+  newchat: 'M12 5v14M5 12h14',
+  search: 'M21 21l-4.35-4.35M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16z',
+  bell: 'M18 8A6 6 0 1 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0',
+  bellOff: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0M1 1l22 22',
 }
 
 function Icon({ name, always = false }) {
@@ -96,12 +101,20 @@ export default function TopBar({
   onHow = null,
   localUrl = null,
   onRefresh = () => window.location.reload(),
+  onToggleSidebar = null,
+  onNewChat = null,
+  onSearch = null,
+  muted = true,
+  onToggleMute = null,
 }) {
   const ready = usableTools(models).length
   const presence = busy && color === 'green' ? 'Working…' : PRESENCE[color]
   return (
     <header className="flex shrink-0 items-center justify-between gap-2 border-b border-line/[0.06] bg-surface/90 px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur sm:px-4">
       <div className="flex min-w-0 items-center gap-3">
+        {onToggleSidebar && (
+          <IconButton testid="sidebar-toggle" label="Conversations" icon="sidebar" onClick={onToggleSidebar} />
+        )}
         <div className="relative shrink-0">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-sm font-semibold text-white">
             D
@@ -134,6 +147,15 @@ export default function TopBar({
           >
             Open on this laptop (faster)
           </a>
+        )}
+        {onNewChat && (
+          <IconButton testid="new-chat" label="New chat" icon="newchat" onClick={onNewChat} />
+        )}
+        {onSearch && (
+          <IconButton testid="search-toggle" label="Search" icon="search" onClick={onSearch} />
+        )}
+        {onToggleMute && (
+          <IconButton testid="mute-toggle" label={muted ? 'Unmute notifications' : 'Mute notifications'} icon={muted ? 'bellOff' : 'bell'} onClick={onToggleMute} />
         )}
         {onHow && (
           <Link testid="how-toggle" icon="how" onClick={onHow}>
