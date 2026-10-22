@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { TOOLS, applyMeta, readShared, runTool, shareLink, toolForPath, whatsappUrl } from './codeTools.js'
+import { TOOLS, applyMeta, readShared, runTool, shareLink, toolForPath, toolTitle, whatsappUrl } from './codeTools.js'
+import { UTIL_TOOLS } from './utilTools.js'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -76,5 +77,23 @@ describe('code tools', () => {
     expect(data.name).toBe(TOOLS[0].title)
     expect(data.url).toBe(`https://code.doaide.com/tools/${TOOLS[0].slug}`)
     expect(data.offers.price).toBe('0')
+  })
+
+  it('titles AI tools as AI tools and utilities as online tools', () => {
+    expect(toolTitle(TOOLS[0])).toBe('Explain Code: Free AI Tool | DoAide Code')
+    expect(toolTitle(UTIL_TOOLS[0])).toMatch(/: Free Online Tool \| DoAide Code$/)
+  })
+
+  it('injects one FAQPage JSON-LD block, swaps it on tool switch, removes it without FAQs', () => {
+    document.head.innerHTML = '<meta name="description" content=""><link rel="canonical" href="">'
+    applyMeta(TOOLS[2])
+    applyMeta(TOOLS[0])
+    const scripts = document.querySelectorAll('script[data-tool-faq-jsonld]')
+    expect(scripts).toHaveLength(1)
+    const data = JSON.parse(scripts[0].textContent)
+    expect(data['@type']).toBe('FAQPage')
+    expect(data.mainEntity[0].name).toContain('free')
+    applyMeta({ ...TOOLS[0], slug: 'no-such-tool' })
+    expect(document.querySelectorAll('script[data-tool-faq-jsonld]')).toHaveLength(0)
   })
 })

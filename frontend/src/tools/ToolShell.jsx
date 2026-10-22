@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { applyMeta } from './codeTools.js'
+import { TOOL_FAQS } from './toolFaqs.js'
 import { copyText } from '../copy.js'
 import { currentTheme, followSystem, onThemeChange, saveTheme } from '../theme.js'
 import FeedbackWidget from './FeedbackWidget.jsx'
@@ -40,6 +41,23 @@ export function ThemeToggle() {
         <path d={theme === 'dark' ? SUN : MOON} />
       </svg>
     </button>
+  )
+}
+
+// The tool's FAQs, visible on the page to match the FAQPage JSON-LD applyMeta emits.
+export function ToolFaqs({ slug }) {
+  const faqs = TOOL_FAQS[slug]
+  if (!faqs) return null
+  return (
+    <section aria-label="Frequently asked questions" data-testid="tool-faqs" className="mt-2 flex flex-col gap-2">
+      <h2 className="text-sm font-medium text-zinc-200">Frequently asked questions</h2>
+      {faqs.map(([q, a]) => (
+        <details key={q} className="rounded-lg border border-zinc-800 px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium text-zinc-300">{q}</summary>
+          <p className="pt-2 text-sm text-zinc-400">{a}</p>
+        </details>
+      ))}
+    </section>
   )
 }
 
@@ -87,6 +105,7 @@ export default function ToolShell({ tool, children }) {
         <div className="mt-4">
           <FeedbackWidget key={tool.slug} tool={tool.slug} />
         </div>
+        <ToolFaqs slug={tool.slug} />
         <section className="mt-2 flex flex-col gap-2 rounded-lg border border-zinc-800 p-4 text-sm text-zinc-400">
           <h2 className="text-sm font-medium text-zinc-200">Want AI help with this code?</h2>
           <p>

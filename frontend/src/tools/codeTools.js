@@ -2,6 +2,7 @@
 // Answers come from /api/public/code-tool (Gemini on the server).
 
 import { OFFLINE_ERROR, requestError } from '../errors.js'
+import { TOOL_FAQS } from './toolFaqs.js'
 
 export const SITE = 'https://code.doaide.com'
 
@@ -172,9 +173,14 @@ export async function fetchToolStats() {
   }
 }
 
+// The browser-tab/search-result title for a tool page; utilities are not AI tools and say so.
+export function toolTitle(tool) {
+  return `${tool.title}: ${tool.action ? 'Free AI Tool' : 'Free Online Tool'} | DoAide Code`
+}
+
 // Title, description, canonical URL and JSON-LD for the tool on screen.
 export function applyMeta(tool, doc = document) {
-  doc.title = `${tool.title}: Free AI Tool | DoAide Code`
+  doc.title = toolTitle(tool)
   const set = (selector, attr, value) => doc.querySelector(selector)?.setAttribute(attr, value)
   const url = `${SITE}/tools/${tool.slug}`
   set('meta[name="description"]', 'content', tool.description)
@@ -202,4 +208,27 @@ export function applyMeta(tool, doc = document) {
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
     publisher: { '@type': 'Organization', name: 'DoAide', url: 'https://doaide.com' },
   })
+  // One FAQPage block mirroring the FAQs rendered on the page, also swapped when switching tools.
+  let faqScript = doc.querySelector('script[data-tool-faq-jsonld]')
+  const faqs = TOOL_FAQS[tool.slug]
+  if (!faqs) {
+    faqScript?.remove()
+    return
+  }
+  if (!faqScript) {
+    faqScript = doc.createElement('script')
+    faqScript.type = 'application/ld+json'
+    faqScript.setAttribute('data-tool-faq-jsonld', '')
+    doc.head.appendChild(faqScript)
+  }
+  faqScript.textContent = JSON.stringify(faqJsonLd(faqs))
+}
+
+// The FAQPage structured-data block for one tool's questions.
+export function faqJsonLd(faqs) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
+  }
 }
