@@ -198,3 +198,13 @@ async def test_a_free_edit_that_cannot_be_read_goes_to_sonnet(repo, store):
     assert outcome.executor == "claude-sonnet"
     assert outcome.meta()["route"]["escalated_from"]["reason"] == f"its edit failed checks ({UNNAMED_EDIT})"
     assert "def new" in (repo / "app.py").read_text()
+
+
+async def test_a_second_docstring_is_reported():
+    from doaide_code.changes import check_file
+
+    two = 'def log_task():\n    """New."""\n    """Old."""\n    return 1\n'
+    [issue] = await check_file("m.py", two)
+    assert "log_task has two docstrings" in issue
+    assert await check_file("m.py", 'def log_task():\n    """Only one."""\n    x = "not a docstring"\n') == []
+    assert (await check_file("m.py", '"""Module."""\n"""Again."""\n'))[0].startswith("m.py:2: the module")

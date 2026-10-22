@@ -8,6 +8,7 @@ the preview, so nothing is overwritten blindly.
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import difflib
 import hashlib
@@ -365,6 +366,7 @@ async def check_file(path: str, content: str) -> list[str]:
             compile(content, path, "exec")
         except SyntaxError as exc:
             return [f"{path}:{exc.lineno}: SyntaxError: {exc.msg}"]
+        issues += _second_docstrings(path, content)
         if ruff := ruff_binary():
             # Errors that break code (syntax, undefined names) and the damage local models do when
             # they paste a module's header into its middle: a re-import or redefinition (F811), an
@@ -397,6 +399,25 @@ async def check_file(path: str, content: str) -> list[str]:
             detail = next((line for line in out.splitlines() if "Error" in line), "syntax error")
             issues.append(f"{path}: {detail.strip()}")
     return issues
+
+
+def _second_docstrings(path: str, content: str) -> list[str]:
+    """A function, class or module that starts with two string statements: an edit asked to add
+    a docstring that put one above the existing one (live: 32b on "add a docstring to log_task");
+    the second string does nothing, and linters do not flag it."""
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        first, second = (node.body + [None, None])[:2]
+        if all(isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant) and isinstance(n.value.value, str) for n in (first, second)):
+            name = getattr(node, "name", "the module")
+            found.append(f"{path}:{second.lineno}: {name} has two docstrings; replace the existing one instead of adding another")
+    return found
 
 
 def _normalise(issue: str) -> str:
