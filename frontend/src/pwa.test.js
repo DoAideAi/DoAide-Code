@@ -39,4 +39,10 @@ describe('PWA files', () => {
     expect(sw).toContain("caches.match(OFFLINE)")
     expect(read('offline.html')).toContain("You're offline")
   })
+
+  it('serves offline.html as a real file (no clean-URL redirect) while the SPA keeps its rewrite', () => {
+    const config = JSON.parse(read('serve.json'))
+    expect(config.cleanUrls).toBe(false)
+    expect(config.rewrites).toEqual([{ source: '**', destination: '/index.html' }])
+  })
 })
