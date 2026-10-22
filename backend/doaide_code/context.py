@@ -54,6 +54,8 @@ STOPWORDS = {
 RELATIVE_CUTOFF = 0.3
 # With named files in the context, other files are added only if this much budget is left.
 NAMED_REMAINDER = 4000
+# An excerpt window's size in lines, at most (plus one radius).
+MAX_WINDOW_LINES = 60
 # Characters kept for the names of matching files a small model is not shown.
 POINTER_ROOM = 1000
 # Project files imported by the named files: one level deep, at most this many.
@@ -156,7 +158,7 @@ class Ranking:
                 max_files is not None
                 and not (c.explicit and used + len(block) <= budget)
                 and len(block) > budget // 3
-                and (cut := _excerpt(text, terms, budget // 3))
+                and (cut := _excerpt(text, terms, budget // 3, self.idents))
             ):
                 block = f"\n## File: {c.path} (excerpts)\n```{lang}\n{cut}\n```"
             if used + len(block) > budget:
@@ -167,7 +169,7 @@ class Ranking:
                 if room < 1500:
                     continue
                 # Too big to send whole: the parts that mention the request's terms.
-                excerpt = _excerpt(text, terms, room)
+                excerpt = _excerpt(text, terms, room, self.idents)
                 if excerpt:
                     block = f"\n## File: {c.path} (excerpts)\n```{lang}\n{excerpt}\n```"
                 elif c.explicit:
@@ -261,7 +263,7 @@ def git_context(root: Path, max_chars: int = 12_000) -> str:
     return f"{title}\n```diff\n{diff}\n```"
 
 
-def _excerpt(text: str, terms: set[str], limit: int, radius: int = 12) -> str:
+def _excerpt(text: str, terms: set[str], limit: int, idents: set[str] = frozenset(), radius: int = 12) -> str:
     """Line windows around matches of `terms`, best-matching first, within `limit` characters;
     "" when nothing matches. Each window starts with its line number, but lines are verbatim:
     models copy prefixed lines into code and into SEARCH text, which then fails to match."""
@@ -269,21 +271,33 @@ def _excerpt(text: str, terms: set[str], limit: int, radius: int = 12) -> str:
     hits = [i for i, line in enumerate(lines) if any(t in line.lower() for t in terms)]
     if not hits:
         return ""
+    # Each definition of a name the request asks about gets a window of its own (from just above
+    # it), so merging with the matches around it cannot make it too big to send.
+    defined = [definition_re(i) for i in idents]
+    starts = [n for n, line in enumerate(lines) if any(d.search(line) for d in defined)]
+    own = [[max(0, n - 2), min(len(lines), n + 2 * radius)] for n in starts]
     windows: list[list[int]] = []
     for i in hits:
-        if windows and i - radius <= windows[-1][1]:
+        if any(a <= i < b for a, b in own):
+            continue
+        # Merged while small: a word on every line would make one window too big to send at all.
+        if windows and i - radius <= windows[-1][1] and windows[-1][1] - windows[-1][0] < MAX_WINDOW_LINES:
             windows[-1][1] = min(len(lines), i + radius + 1)
         else:
             windows.append([max(0, i - radius), min(len(lines), i + radius + 1)])
-    # Windows with the most distinct terms first.
+    # Definitions first, then the windows with the most distinct terms (live: "what does
+    # _edit_summary do?" got runner.py's many windows mentioning "edit" and "summary", not the
+    # function).
+    windows = own + windows
+
     def weight(w: list[int]) -> int:
         chunk = "\n".join(lines[w[0] : w[1]]).lower()
-        return sum(t in chunk for t in terms)
+        return sum(t in chunk for t in terms) + (100 if w in own else 0)
 
     chosen: list[list[int]] = []
     used = 0
     for w in sorted(windows, key=weight, reverse=True):
-        size = sum(len(lines[i]) + 1 for i in range(w[0], w[1])) + 20
+        size = sum(len(lines[i]) + 1 for i in range(w[0], w[1])) + len(f"# ... (from line {w[0] + 1})") + 1
         if used + size > limit:
             continue
         chosen.append(w)

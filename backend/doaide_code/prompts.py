@@ -102,11 +102,19 @@ WHY_REMINDER = "(Answer in 1-2 short sentences with the reason the code's commen
 WHY_QUESTION = re.compile(r"^\s*(?:but\s+)?why\b", re.I)
 
 
+# "How do I reverse a list in python?": the code is the answer (live: "use the reverse() method or
+# slicing", with no `items[::-1]`).
+HOWTO_REMINDER = "(Answer in 1-2 short sentences and show the code inline, like `items[::-1]`.)"
+HOWTO_QUESTION = re.compile(r"^\s*how\s+(?:do|can|should)\s+(?:i|you|we)\b|^\s*how\s+to\b", re.I)
+
+
 def local_reminder(prompt: str) -> str:
     """The reminder after a local question: a short list for "which files" questions, the code's
     own reason for "why" questions, else brevity."""
     if LIST_QUESTION.search(prompt):
         return LIST_REMINDER
+    if HOWTO_QUESTION.search(prompt):
+        return HOWTO_REMINDER
     return WHY_REMINDER if WHY_QUESTION.search(prompt) else LOCAL_REMINDER
 
 LOCAL_BASE = f"""{IDENTITY}
@@ -192,7 +200,7 @@ def few_shot(style: str, kind: str) -> list[tuple[str, str]]:
 
 def _version() -> str:
     styles = [system_prompt(s, k) for s in ("local", "claude", "codex") for k in KIND_GUIDANCE]
-    return hashlib.sha256("\n".join([*styles, *FEW_SHOT_ANSWER, *FEW_SHOT_EDIT, *FEW_SHOT_DEBUG, LOCAL_REMINDER, LIST_REMINDER, WHY_REMINDER]).encode()).hexdigest()[:12]
+    return hashlib.sha256("\n".join([*styles, *FEW_SHOT_ANSWER, *FEW_SHOT_EDIT, *FEW_SHOT_DEBUG, LOCAL_REMINDER, LIST_REMINDER, WHY_REMINDER, HOWTO_REMINDER]).encode()).hexdigest()[:12]
 
 
 PROMPT_VERSION = _version()

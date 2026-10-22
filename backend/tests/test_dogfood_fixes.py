@@ -72,3 +72,20 @@ def test_edit_summaries_drop_lead_ins_to_hidden_blocks():
         "Fix the path in the body text.\n\nFix the same typo in the table."
     )
     assert _edit_summary("Added a --version flag.") == "Added a --version flag."
+
+
+def test_excerpts_of_a_large_file_include_the_definition_asked_about():
+    from doaide_code.context import _excerpt
+
+    filler = "\n".join(f"x{i} = edit_summary_like_word_edit({i})  # edit summary" for i in range(400))
+    text = f"{filler}\n\ndef _edit_summary(prose):\n    return prose.strip()\n\n{filler}"
+    cut = _excerpt(text, {"edit", "summary", "_edit_summary"}, 3000, {"_edit_summary"})
+    assert "def _edit_summary(prose):" in cut and len(cut) <= 3000
+
+
+def test_how_to_code_questions_ask_for_inline_code():
+    from doaide_code.prompts import HOWTO_REMINDER, LOCAL_REMINDER, local_reminder
+
+    assert local_reminder("how do I reverse a list in python?") == HOWTO_REMINDER
+    assert local_reminder("How can I read a file in JavaScript") == HOWTO_REMINDER
+    assert local_reminder("how does the router pick a model?") == LOCAL_REMINDER

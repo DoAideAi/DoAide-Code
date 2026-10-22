@@ -9,6 +9,20 @@ from doaide_code.executors import OllamaExecutor
 from doaide_code.imports import parse_imports, resolve, suffix_index
 
 
+def test_suffix_index():
+    files = {"a/b/c.py", "x/b/c.py", "a/d.py"}
+    index = suffix_index(files)
+    # Every suffix level is indexed
+    assert set(index["a/b/c.py"]) == {"a/b/c.py"}
+    assert set(index["b/c.py"]) == {"a/b/c.py", "x/b/c.py"}
+    assert set(index["c.py"]) == {"a/b/c.py", "x/b/c.py"}
+    assert set(index["d.py"]) == {"a/d.py"}
+    # Full path is also present
+    assert set(index["a/d.py"]) == {"a/d.py"}
+    # Unknown key is absent
+    assert "z.py" not in index
+
+
 def test_parse_python_and_js_imports():
     py = "import os, app.util as u\nfrom .billing import charge, refund\nfrom . import tax\nfrom app.x import (\n    a,\n    b,\n)\n"
     specs = parse_imports("app/api.py", py)
