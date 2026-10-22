@@ -43,7 +43,7 @@ function CopyLink({ text, label, testid }) {
           setTimeout(() => setDone(false), 1500)
         }
       }}
-      className="min-h-[36px] rounded-md border border-zinc-800 px-3 text-xs text-zinc-300 hover:bg-zinc-900"
+      className="min-h-[44px] rounded-md border border-zinc-800 px-3 text-xs text-zinc-300 hover:bg-zinc-900 sm:min-h-[36px]"
     >
       {done ? 'Copied' : label}
     </button>
@@ -103,7 +103,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
         <a href="/" className="text-sm font-medium text-zinc-200 hover:text-zinc-50">
           DoAide Code
         </a>
-        <a href="/" className="min-h-[36px] rounded-md border border-zinc-800 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-900">
+        <a href="/" className="flex min-h-[44px] items-center rounded-md border border-zinc-800 px-3 text-xs text-zinc-300 hover:bg-zinc-900 sm:min-h-[36px]">
           Sign in
         </a>
       </nav>
@@ -113,7 +113,8 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
           <p className="text-sm text-zinc-400">{tool.description}</p>
         </header>
 
-        <div role="tablist" aria-label="Tools" className="flex gap-1 overflow-x-auto">
+        {/* On phones the tab row bleeds to the screen edges, so it scrolls under them. */}
+        <div role="tablist" aria-label="Tools" className="-mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           {TOOLS.map((t) => (
             <a
               key={t.slug}
@@ -121,7 +122,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
               aria-selected={t === tool}
               href={`/tools/${t.slug}`}
               onClick={choose(t)}
-              className={`shrink-0 rounded-md px-3 py-2 text-sm ${
+              className={`flex min-h-[44px] shrink-0 items-center rounded-md px-3 text-sm sm:min-h-[36px] ${
                 t === tool ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
               }`}
             >
@@ -144,6 +145,8 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
             language={language}
             theme={editorTheme}
           />
+          {/* Selects and the counter on one line; actions on their own line on phones, where they
+              share the width and stay 44px tall for thumbs. */}
           <div className="flex flex-wrap items-center gap-2">
             <label className="sr-only" htmlFor="tool-language">
               Language
@@ -153,7 +156,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
               data-testid="tool-language"
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="min-h-[40px] rounded-md border border-zinc-800 bg-surface px-2 text-sm text-zinc-300"
+              className="min-h-[44px] rounded-md border border-zinc-800 bg-surface px-2 text-sm text-zinc-300 sm:min-h-[40px]"
             >
               {LANGUAGES.map((l) => (
                 <option key={l}>{l}</option>
@@ -170,7 +173,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
                   data-testid="tool-target"
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
-                  className="min-h-[40px] rounded-md border border-zinc-800 bg-surface px-2 text-sm text-zinc-300"
+                  className="min-h-[44px] rounded-md border border-zinc-800 bg-surface px-2 text-sm text-zinc-300 sm:min-h-[40px]"
                 >
                   {TARGET_LANGUAGES.map((l) => (
                     <option key={l}>{l}</option>
@@ -189,16 +192,17 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
                 setEditorTheme(e.target.value)
                 saveEditorTheme(e.target.value)
               }}
-              className="min-h-[40px] rounded-md border border-zinc-800 bg-surface px-2 text-sm text-zinc-300"
+              className="min-h-[44px] rounded-md border border-zinc-800 bg-surface px-2 text-sm text-zinc-300 sm:min-h-[40px]"
             >
               {Object.keys(EDITOR_THEMES).map((name) => (
                 <option key={name}>{name}</option>
               ))}
             </select>
-            <span className={`text-xs tabular-nums ${tooLong ? 'text-red-400' : 'text-zinc-500'}`}>
+            <span className={`ml-auto text-xs tabular-nums ${tooLong ? 'text-red-400' : 'text-zinc-500'}`}>
               {code.length.toLocaleString()} / {MAX_CODE_CHARS.toLocaleString()}
             </span>
-            <div className="flex-1" />
+          </div>
+          <div className="flex items-center gap-2">
             {/* Always there (inactive until there is code), so the Run button never jumps. */}
             <a
               data-testid="tool-whatsapp"
@@ -206,18 +210,19 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
               aria-disabled={!code.trim()}
               target="_blank"
               rel="noopener noreferrer"
-              className={`flex min-h-[40px] items-center rounded-md border border-emerald-700/60 px-3 text-sm text-emerald-300 hover:bg-emerald-900/30 ${
+              className={`flex min-h-[44px] flex-1 items-center justify-center rounded-md border border-emerald-700/60 px-3 text-sm text-emerald-300 hover:bg-emerald-900/30 sm:min-h-[40px] sm:flex-none ${
                 code.trim() ? '' : 'pointer-events-none opacity-40'
               }`}
             >
               Share on WhatsApp
             </a>
+            <div className="hidden flex-1 sm:block" />
             <button
               type="button"
               data-testid="tool-run"
               onClick={run}
               disabled={loading || tooLong}
-              className="min-h-[40px] rounded-md bg-sky-600 px-4 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-[44px] flex-1 rounded-md bg-sky-600 px-4 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[40px] sm:flex-none"
             >
               {loading ? 'Thinking…' : tool.button}
             </button>

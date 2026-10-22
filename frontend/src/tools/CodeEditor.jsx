@@ -40,7 +40,9 @@ export function autoIndent(value, start) {
   return '\n' + indent + (/[{([:]\s*$/.test(line) ? '  ' : '')
 }
 
-const FONT = 'whitespace-pre font-mono text-[13px] leading-relaxed'
+// 16px on phones (below 16, iOS zooms the page when the editor is focused), 13px from sm up.
+// One constant for the gutter, the overlay and the textarea, so they always line up.
+const FONT = 'whitespace-pre font-mono text-[16px] leading-relaxed sm:text-[13px]'
 
 export default function CodeEditor({ id, testid, value, onChange, onRun, placeholder, language = '', theme: themeName }) {
   const taRef = useRef(null)
