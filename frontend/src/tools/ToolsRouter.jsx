@@ -23,6 +23,7 @@ const PAGES = {
   'code-playground': lazy(() => import('./PlaygroundPage.jsx')),
   'jwt-decoder': lazy(() => import('./JwtPage.jsx')),
   'cron-builder': lazy(() => import('./CronPage.jsx')),
+  base64: lazy(() => import('./Base64Page.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {

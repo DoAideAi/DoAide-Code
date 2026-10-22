@@ -111,6 +111,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'base64',
+    label: 'Base64',
+    title: 'Base64 Encoder & Decoder',
+    heading: 'Base64 encode and decode',
+    description:
+      'Encode text to Base64 or decode it back as you type — UTF-8 safe, URL-safe variant included, forgiving of missing padding. Runs in your browser, nothing is uploaded. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
