@@ -31,28 +31,7 @@ export function codeLines(value) {
 }
 
 // Copies `text`; false when the browser refuses (no clipboard API and the fallback failed).
-export async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    // Older browsers and non-secure pages: a hidden textarea and the copy command.
-    const area = document.createElement('textarea')
-    area.value = text
-    area.setAttribute('readonly', '')
-    area.style.position = 'fixed'
-    area.style.opacity = '0'
-    document.body.appendChild(area)
-    area.select()
-    try {
-      return document.execCommand('copy')
-    } catch {
-      return false
-    } finally {
-      area.remove()
-    }
-  }
-}
+export { copyText } from '../copy.js'
 
 const COPY_HEADER = 'rounded px-1.5 py-0.5 font-sans text-[11px] text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100'
 const COPY_INLINE = 'rounded-full bg-shade/25 px-2.5 py-1 font-sans text-xs text-zinc-400 hover:text-zinc-200'

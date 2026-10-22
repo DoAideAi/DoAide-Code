@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react'
 import { CodeBlock, copyText, splitFences } from '../components/MessageList.jsx'
 import { Markdown } from '../markdown.jsx'
 import CodeEditor, { EDITOR_THEMES, saveEditorTheme, savedEditorTheme } from './CodeEditor.jsx'
+import ToolTabs from './ToolTabs.jsx'
 import {
   LANGUAGES,
   MAX_CODE_CHARS,
   TARGET_LANGUAGES,
-  TOOLS,
   applyMeta,
   fetchToolStats,
   readShared,
@@ -80,7 +80,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
-  const choose = (next) => (event) => {
+  const choose = (next, event) => {
     event.preventDefault()
     if (next === tool) return
     window.history.pushState(null, '', `/tools/${next.slug}`)
@@ -130,23 +130,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
           )}
         </header>
 
-        {/* On phones the tab row bleeds to the screen edges, so it scrolls under them. */}
-        <div role="tablist" aria-label="Tools" className="-mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-          {TOOLS.map((t) => (
-            <a
-              key={t.slug}
-              role="tab"
-              aria-selected={t === tool}
-              href={`/tools/${t.slug}`}
-              onClick={choose(t)}
-              className={`flex min-h-[44px] shrink-0 items-center rounded-md px-3 text-sm sm:min-h-[36px] ${
-                t === tool ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
-              }`}
-            >
-              {t.label}
-            </a>
-          ))}
-        </div>
+        <ToolTabs activeSlug={tool.slug} onChoose={choose} />
 
         <div className="flex flex-col gap-2">
           <label htmlFor="tool-code" className="sr-only">
