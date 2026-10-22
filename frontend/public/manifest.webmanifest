@@ -1,0 +1,16 @@
+{
+  "name": "DoAide Code",
+  "short_name": "DoAide Code",
+  "description": "AI coding assistant that tries free models first, plus free code tools: explain, review, find bugs, convert, optimize, generate tests.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f1013",
+  "theme_color": "#0f1013",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
