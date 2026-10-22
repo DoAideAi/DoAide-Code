@@ -9,6 +9,7 @@ const CodeToolsPage = lazy(() => import('./CodeToolsPage.jsx'))
 const PAGES = {
   'diff-checker': lazy(() => import('./DiffPage.jsx')),
   'code-formatter': lazy(() => import('./FormatterPage.jsx')),
+  'regex-tester': lazy(() => import('./RegexPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {
