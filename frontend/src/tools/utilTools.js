@@ -66,6 +66,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'markdown-editor',
+    label: 'Markdown',
+    title: 'Markdown Editor & Preview',
+    heading: 'Write Markdown, preview it live',
+    description:
+      'Type Markdown and see it rendered side by side: headings, lists, links and syntax-highlighted code blocks. Copy the HTML or download the .md file. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
