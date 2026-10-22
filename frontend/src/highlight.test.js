@@ -36,3 +36,34 @@ describe('highlight', () => {
     ])
   })
 })
+
+describe('language coverage added in round 5', () => {
+  it('SQL: -- comments, /* */ comments and case-insensitive keywords', () => {
+    expect(kinds('SELECT name FROM users -- active only', 'sql')).toEqual([
+      ['keyword', 'SELECT'],
+      ['keyword', 'FROM'],
+      ['comment', '-- active only'],
+    ])
+    expect(kinds('select 1 /* why */', 'sql')).toContainEqual(['comment', '/* why */'])
+  })
+
+  it('SQL keywords stay out of other languages, and -- stays a decrement in JS', () => {
+    expect(kinds('const left = 1; left--', 'js')).toEqual([['keyword', 'const'], ['number', '1']])
+  })
+
+  it('Lua and Haskell use -- comments; Elixir and Julia use #', () => {
+    expect(kinds('local x = 1 -- count', 'lua')).toContainEqual(['comment', '-- count'])
+    expect(kinds('x = 1 -- count', 'haskell')).toContainEqual(['comment', '-- count'])
+    expect(kinds('x = 1 # count', 'elixir')).toContainEqual(['comment', '# count'])
+    expect(kinds('x = 1 # count', 'julia')).toContainEqual(['comment', '# count'])
+  })
+
+  it('shell block keywords colour too', () => {
+    expect(kinds('if true; then x; fi', 'bash')).toEqual([
+      ['keyword', 'if'],
+      ['keyword', 'true'],
+      ['keyword', 'then'],
+      ['keyword', 'fi'],
+    ])
+  })
+})
