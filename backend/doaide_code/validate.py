@@ -25,7 +25,8 @@ from pathlib import Path
 from typing import Any
 
 from .changes import _run, parse_edits
-from .prompts import HOWTO_QUESTION, LIST_QUESTION
+from .classify import without_urls
+from .prompts import HOWTO_QUESTION, LIST_QUESTION, WHERE_QUESTION
 
 _FENCE = re.compile(r"^```([\w+-]*)[^\n]*\n(.*?)^```", re.M | re.S)
 _NEEDS_FILES = re.compile(
@@ -260,6 +261,31 @@ def off_topic_reason(prompt: str, answer: str) -> str | None:
     if len(words) >= 3 and not shared:
         return "the answer shares no words with the request"
     return None
+
+
+def invented_paths(prompt: str, answer: str, known: set[str] | frozenset[str], root: Path | None = None) -> list[str]:
+    """Project paths an answer names that are not in the project (`known`: its scanned files; also
+    looked up under `root`, for files the scan skips such as node_modules). Paths with
+    a folder only, outside code blocks; none for how-to answers, which may propose new files.
+    Live (7b, a "which files" question): a plausible path under the right folder that does not exist."""
+    if not known or HOWTO_QUESTION.search(prompt):
+        return []
+    prose = without_urls(_FENCE.sub(" ", answer))
+    found = []
+    for m in _PATH.finditer(prose):
+        path = m.group(0).strip("./")
+        if "/" not in path or path in found:
+            continue
+        if path not in known and not any(k.endswith("/" + path) for k in known) and not (root and (root / path).exists()):
+            found.append(path)
+    return found
+
+
+def names_no_place(prompt: str, answer: str) -> bool:
+    """A "where is X?" answer that names no file and no code identifier."""
+    if not WHERE_QUESTION.search(prompt):
+        return False
+    return not (_PATH.search(answer) or re.search(r"`[^`\n]+`|\b\w+\(\)|\b[a-z]+_[a-z0-9_]+\b", answer))
 
 
 async def check_code_blocks(answer: str) -> list[dict[str, Any]]:

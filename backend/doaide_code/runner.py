@@ -48,6 +48,8 @@ from .validate import (
     FORMAT_SLIPS,
     NO_EDIT,
     incomplete_reason,
+    invented_paths,
+    names_no_place,
     off_topic_reason,
 )
 
@@ -373,14 +375,15 @@ async def _run_job(
         code_checks: list[dict] | None = None
         verified = False
         if trial:
-            problem, code_checks, fix = await _vet(job, outcome.content, decision.kind)
+            known = set(ranking.mtimes) if ranking is not None else set()
+            problem, code_checks, fix = await _vet(job, outcome.content, decision.kind, known)
             if problem and fix:
                 # A concrete, fixable problem (code that does not parse, an edit that does not
                 # apply): one more free try with the error spelled out, before paying for Sonnet.
                 repaired = await _second_try(executor, run, job, outcome.content, fix, store, source)
                 if repaired is not None:
                     outcome.add_usage(repaired.usage or Usage())
-                    again, again_checks, _ = await _vet(job, repaired.content, decision.kind)
+                    again, again_checks, _ = await _vet(job, repaired.content, decision.kind, known)
                     if again is None:
                         retry_note = f"fixed by {executor.name} on a second try ({problem})"
                         outcome.content, problem, code_checks = repaired.content, None, again_checks
@@ -617,7 +620,7 @@ def _escalation(candidates: list[Executor]) -> Executor | None:
     return next((e for e in candidates[1:] if not is_local(e)), None)
 
 
-async def _vet(job: Job, answer: str, kind: str) -> tuple[str | None, list[dict], str | None]:
+async def _vet(job: Job, answer: str, kind: str, known: set[str] = frozenset()) -> tuple[str | None, list[dict], str | None]:
     """Whether a local answer is good enough to show: complete, its code parses, its edits apply
     and it is on topic. Returns the first problem (None when it passes), the code checks, and
     for problems the model can fix itself, the prompt asking it to."""
@@ -646,6 +649,15 @@ async def _vet(job: Job, answer: str, kind: str) -> tuple[str | None, list[dict]
         return f"its edit failed checks ({UNNAMED_EDIT})", code_checks, None
     if reason := capability_claim(answer) or off_topic_reason(job.prompt, answer):
         return reason, code_checks, None
+    if kind not in EDIT_KINDS and (invented := invented_paths(job.prompt, answer, known, job.cwd)):
+        fix = (
+            f"{job.prompt}\n\nIn your previous answer, {invented[0]} is not a file in this project. "
+            "Answer again, naming only files shown above."
+        )
+        return f"it names a file that is not in the project ({invented[0]})", code_checks, fix
+    if known and names_no_place(job.prompt, answer):
+        fix = f"{job.prompt}\n\nYour previous answer did not say where. Name the file and the function."
+        return "it does not say which file", code_checks, fix
     return None, code_checks, None
 
 

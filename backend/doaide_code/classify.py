@@ -57,10 +57,15 @@ def without_urls(text: str) -> str:
 _QUESTION = re.compile(r"^\s*(?:in [^,:?]+[,:]\s*)?(what|how|why|when|is|are|can|does|do|which|who|define|difference between)\b", re.I)
 # A file path or code identifier: a short non-question that names one is an instruction.
 _NAMES_CODE = re.compile(r"[\w-]+\.[a-z]{1,5}\b|`[^`]+`|\b_*[A-Za-z]+_\w+\b|\b[a-z]+[A-Z]\w*\b")
-# "How do I add a new executor?" asks for the steps, not for the change: answered as an edit, the
-# 32b wrote a new file that failed checks and Sonnet was paid to explain ($0.09). "How do I fix X"
-# still wants the fix.
-_HOWTO = re.compile(r"^\s*how\s+(?:do|can|should|would)\s+(?:i|we|you|one)\b|^\s*how\s+to\b", re.I)
+# Questions whose verb is what they ask about, not an instruction: "how do I add a new X?" wants
+# the steps (live, answered as an edit: the 32b wrote a new file that failed checks and Sonnet was
+# paid to explain, $0.09), "what does f() remove?" wants an explanation (as an edit of a big file
+# it went straight to Sonnet). "How do I fix X" and "can you add X?" still want the change.
+_ASKS_ABOUT = re.compile(
+    r"^\s*(?:in [^,:?]+[,:]\s*)?(?:how\s+(?:do|can|should|would)\s+(?:i|we|you|one)\b|how\s+to\b|"
+    r"(?:what|which|where|why|when|who|does|did|is|are|was|were)\b)",
+    re.I,
+)
 _WHY = re.compile(r"^\s*(?:in [^,:?]+[,:]\s*)?why\b", re.I)
 # "calculate"/"compute" only with a number in the request: "what does charge() compute" is code.
 _MATH = re.compile(r"^[\s\d+\-*/%^().,=?x×÷]+$|\b(?:calculate|compute)\b(?=.*\d)|\b(convert \d|how much is|what is \d)", re.I)
@@ -72,9 +77,8 @@ _DIFF_REQUEST = re.compile(r"\b(recent changes?|what (?:did i|i) change|what cha
 
 # Signs a request is about this project rather than general knowledge: a file path, a code
 # identifier (snake_case, UPPER_CASE, camelCase, Class.method, call or backticks), or words pointing
-# at the codebase. Live: "what is MAX_RETRIES used for?", "why does Ranking.render ...?" and "which
-# files handle the response cache?" got no project files, and the 7b answered "app/cache.py" (the
-# worked example's file) and quoted a comment that does not exist.
+# at the codebase. Live: questions naming a constant, a Class.method or asking which files do
+# something got no project files, and the 7b named the worked example's file or invented a comment.
 _PROJECT = re.compile(
     r"[\w-]+\.[a-z]{1,5}\b|`[^`]+`|\b[a-z]+_[a-z0-9_]+\b|\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b|\b[a-z]+[A-Z]\w*\b|"
     r"\b[A-Z][a-z0-9]+[A-Z]\w*\b|\b[A-Z]\w+\.[a-z_]\w+\b|\b\w+\(\)|"
@@ -143,9 +147,9 @@ def classify_task(prompt: str) -> TaskProfile:
         kind = "edit"
         reasons.append("instruction (+3)")
 
-    if kind == "edit" and _HOWTO.search(text) and not re.search(r"\bfix\b", text, re.I):
+    if kind == "edit" and _ASKS_ABOUT.search(text) and not re.search(r"\bfix\b", text, re.I):
         kind = "explain"
-        reasons.append("how-to question: steps, not a change")
+        reasons.append("a question about the change, not a request for it")
 
     about_project = kind not in {"question", "math"} or bool(_PROJECT.search(local))
     if kind == "question" and about_project and _WHY.search(text):

@@ -108,6 +108,12 @@ HOWTO_REMINDER = "(Answer in 1-2 short sentences and show the code inline, like 
 HOWTO_QUESTION = re.compile(r"^\s*how\s+(?:do|can|should)\s+(?:i|you|we)\b|^\s*how\s+to\b", re.I)
 
 
+# "Where is X done?" is answered with a place: a file and a function (live: the 7b said only
+# when X happens, naming neither).
+WHERE_REMINDER = "(Name the file and the function, like `app/auth.py` in `login()`, in 1-2 short sentences.)"
+WHERE_QUESTION = re.compile(r"^\s*(?:in [^,:?]+[,:]\s*)?where\s+(?:is|does|do|are|did|was)\b", re.I)
+
+
 def local_reminder(prompt: str, has_context: bool = True) -> str:
     """The reminder after a local question: a short list for "which files" questions, the code's
     own reason for "why" questions, else brevity. Without project files there are no files to list
@@ -116,6 +122,8 @@ def local_reminder(prompt: str, has_context: bool = True) -> str:
         return LIST_REMINDER
     if HOWTO_QUESTION.search(prompt):
         return HOWTO_REMINDER
+    if has_context and WHERE_QUESTION.search(prompt):
+        return WHERE_REMINDER
     return WHY_REMINDER if has_context and WHY_QUESTION.search(prompt) else LOCAL_REMINDER
 
 LOCAL_BASE = f"""{IDENTITY}
@@ -202,7 +210,7 @@ def few_shot(style: str, kind: str, has_context: bool = True) -> list[tuple[str,
 
 def _version() -> str:
     styles = [system_prompt(s, k) for s in ("local", "claude", "codex") for k in KIND_GUIDANCE]
-    return hashlib.sha256("\n".join([*styles, *FEW_SHOT_ANSWER, *FEW_SHOT_EDIT, *FEW_SHOT_DEBUG, LOCAL_REMINDER, LIST_REMINDER, WHY_REMINDER, HOWTO_REMINDER]).encode()).hexdigest()[:12]
+    return hashlib.sha256("\n".join([*styles, *FEW_SHOT_ANSWER, *FEW_SHOT_EDIT, *FEW_SHOT_DEBUG, LOCAL_REMINDER, LIST_REMINDER, WHY_REMINDER, HOWTO_REMINDER, WHERE_REMINDER]).encode()).hexdigest()[:12]
 
 
 PROMPT_VERSION = _version()

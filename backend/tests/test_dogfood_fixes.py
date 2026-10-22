@@ -144,3 +144,65 @@ def test_not_defined_in_the_provided_code_means_files_were_missing():
 
     answer = "The `MAX_RETRIES` variable isn't defined in the provided code. It's unclear what it's used for without more context."
     assert incomplete_reason(answer, "question") == NEEDS_FILES_REASON
+
+
+def test_an_answer_naming_a_file_that_is_not_in_the_project_is_caught():
+    from doaide_code.validate import invented_paths
+
+    known = {"backend/doaide_code/db.py", "backend/doaide_code/runner.py", "README.md"}
+    answer = "- `backend/doaide_code/cache.py`\n- `backend/doaide_code/db.py`\n- `doaide_code/runner.py`"
+    assert invented_paths("which files handle the cache?", answer, known) == ["backend/doaide_code/cache.py"]
+    # How-to answers may name files to create; code blocks and URLs are not claims about the project.
+    assert invented_paths("how do I add a cache?", answer, known) == []
+    assert invented_paths("which files?", "See https://x.dev/a/b.py and\n```\nnew/thing.py\n```", known) == []
+    assert invented_paths("which files?", answer, set()) == []
+
+
+async def test_a_local_answer_naming_a_missing_file_gets_one_free_retry(tmp_path):
+    from doaide_code.runner import _vet
+    from doaide_code.executors import Job
+
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "db.py").write_text("x = 1\n")
+    job = Job("which files handle the cache?", cwd=tmp_path)
+    problem, _, fix = await _vet(job, "- `app/cache.py` stores answers.", "question", {"app/db.py"})
+    assert problem and "app/cache.py" in problem and "not a file in this project" in fix
+    assert (await _vet(job, "- `app/db.py` stores the cached answers.", "question", {"app/db.py"}))[0] is None
+
+
+def test_files_defining_a_term_outrank_files_that_only_mention_it(tmp_path):
+    from doaide_code.context import rank_files
+
+    (tmp_path / "notes.py").write_text("# the response cache is keyed by prompt\nx = 1\n")
+    (tmp_path / "store.py").write_text("def cache_get(key):\n    return response\n")
+    ranking = rank_files(tmp_path, "which files handle the response cache?")
+    assert [c.path for c in ranking.candidates][0] == "store.py"
+    assert "handle" not in ranking.terms
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    ["what does trim_reply remove?", "where does the runner update the route?", "In app/x.py, what does update() change?"],
+)
+def test_questions_about_a_change_are_explained_not_edited(prompt):
+    from doaide_code.classify import classify_task
+
+    assert classify_task(prompt).kind == "explain"
+
+
+def test_requests_for_a_change_are_still_edits():
+    from doaide_code.classify import classify_task
+
+    assert classify_task("can you add a docstring to log_task?").kind == "edit"
+    assert classify_task("In app/x.py, add a FOO flag").kind == "edit"
+
+
+def test_where_questions_must_name_a_place():
+    from doaide_code.prompts import WHERE_REMINDER, local_reminder
+    from doaide_code.validate import names_no_place
+
+    assert local_reminder("where is the escalation to Sonnet decided?") == WHERE_REMINDER
+    assert names_no_place("where is the escalation decided?", "It happens when an answer fails its checks.")
+    assert not names_no_place("where is the escalation decided?", "In `runner.py`, in `_vet()`.")
+    assert not names_no_place("where is it decided?", "backend/doaide_code/runner.py decides it.")
+    assert not names_no_place("what is escalation?", "When an answer fails its checks.")

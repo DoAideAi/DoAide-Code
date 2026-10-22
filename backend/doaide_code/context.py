@@ -49,6 +49,8 @@ STOPWORDS = {
     "return", "def", "class", "import", "function", "const", "let", "var", "self", "none", "null", "true",
     "false", "async", "await", "print", "export", "default", "public", "private", "static", "void", "int",
     "str", "string", "see", "why", "who",
+    # Question verbs: "which files handle X?", "what is X used for?" are about X.
+    "handle", "handles", "handled", "handling", "used", "uses", "work", "works", "happen", "happens", "mean", "means",
 }
 # Files scoring below this fraction of the best match are dropped as noise.
 RELATIVE_CUTOFF = 0.3
@@ -326,6 +328,10 @@ def _terms(text: str) -> set[str]:
     return {w for w in words if w not in STOPWORDS}
 
 
+# Names a file defines (lowercased content): functions, classes, JS bindings, methods.
+_DEFINES = re.compile(r"^\s*(?:async\s+)?(?:def|class|function|func|fn)\s+(\w+)|^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=", re.M)
+
+
 def definition_re(name: str) -> re.Pattern[str]:
     """A line defining `name`: def/class/function, a JS const/let/var, or a top-level assignment."""
     n = re.escape(name)
@@ -385,6 +391,8 @@ def rank_files(root: Path, request: str) -> Ranking:
     mentioned = mentioned_paths(request, root)
     ranking.idents = _idents(request, mentioned)
     present: dict[str, set[str]] = {}
+    # Terms in the names a file defines: where the code lives, not where a comment mentions it.
+    defined: dict[str, set[str]] = {}
     all_paths = {rel for rel, _ in files}
     explicit: set[str] = set()
     defines: list[str] = []
@@ -405,6 +413,9 @@ def rank_files(root: Path, request: str) -> Ranking:
                 continue
             content = raw.lower()
             found |= {t for t in terms if t in content}
+            if found:
+                names = " ".join(m.group(1) or m.group(2) for m in _DEFINES.finditer(content))
+                defined[rel] = {t for t in found if t in names}
             if named := [i for i in ranking.idents if i in raw]:
                 if any(definition_re(i).search(raw) for i in named):
                     defines.append(rel)
@@ -426,7 +437,7 @@ def rank_files(root: Path, request: str) -> Ranking:
     ranking.wants_tests = wants_tests
     for rel, found in present.items():
         lower = rel.lower()
-        score = sum(idf.get(t, 0) * (3 if t in lower else 1) for t in found)
+        score = sum(idf.get(t, 0) * (3 if t in lower else 2 if t in defined.get(rel, ()) else 1) for t in found)
         if _is_test(lower):
             # Tests repeat the names they test; the source is what explains them, unless the
             # request is about the tests.
