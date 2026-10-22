@@ -54,6 +54,12 @@ export function applyEvent(state, event) {
       const older = event.messages.filter((m) => !known.has(m.id))
       return { ...state, messages: [...older, ...state.messages], hasMore: Boolean(event.has_more) }
     }
+    case 'clear-view': {
+      // Ctrl+L: an empty screen, as in a terminal. The conversation goes on (the models still see
+      // it) and "Load earlier messages" brings it back. A reply still being written stays.
+      const live = state.messages.filter((m) => m.status === 'streaming' || m.status === 'queued')
+      return { ...state, messages: live, hasMore: state.hasMore || live.length < state.messages.length }
+    }
     case 'delta':
       return {
         ...state,

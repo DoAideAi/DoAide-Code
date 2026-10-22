@@ -108,6 +108,18 @@ describe('hub events', () => {
     expect(s.hasMore).toBe(false)
   })
 
+  it('clear-view empties the screen but keeps a reply being written, and offers the rest back', () => {
+    let s = applyEvent(initialChat, {
+      type: 'snapshot', session_id: 's', project: null, status: 'busy',
+      messages: [msg('a', 'user', 'a'), msg('b', 'assistant', '', 'streaming')],
+    })
+    s = applyEvent(s, { type: 'clear-view' })
+    expect(s.messages.map((m) => m.id)).toEqual(['b'])
+    expect(s.hasMore).toBe(true)
+    const empty = applyEvent(initialChat, { type: 'clear-view' })
+    expect(empty.hasMore).toBe(false)
+  })
+
   it('a short snapshot is kept whole, and new messages still append after it', () => {
     let s = applyEvent(initialChat, { type: 'snapshot', session_id: 's', project: null, status: 'idle', messages: [msg('a', 'user', 'hi')] })
     expect(s.messages.map((m) => m.id)).toEqual(['a'])

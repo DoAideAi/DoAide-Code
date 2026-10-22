@@ -55,13 +55,14 @@ function Link({ testid, icon, onClick, children }) {
 }
 
 // An icon button on every screen size.
-function IconButton({ testid, label, icon, onClick }) {
+function IconButton({ testid, label, icon, onClick, hint = null }) {
   return (
     <button
       type="button"
       data-testid={testid}
       aria-label={label}
-      title={label}
+      title={hint ? `${label} (${hint})` : label}
+      aria-keyshortcuts={hint ? hint.replace('⌘', 'Meta+') : undefined}
       onClick={onClick}
       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100"
     >
@@ -104,6 +105,7 @@ export default function TopBar({
   onRefresh = () => window.location.reload(),
   onToggleSidebar = null,
   onNewChat = null,
+  newChatHint = null,
   onSearch = null,
   muted = true,
   onToggleMute = null,
@@ -150,7 +152,7 @@ export default function TopBar({
           </a>
         )}
         {onNewChat && (
-          <IconButton testid="new-chat" label="New chat" icon="newchat" onClick={onNewChat} />
+          <IconButton testid="new-chat" label="New chat" icon="newchat" onClick={onNewChat} hint={newChatHint} />
         )}
         {onSearch && (
           <IconButton testid="search-toggle" label="Search" icon="search" onClick={onSearch} />

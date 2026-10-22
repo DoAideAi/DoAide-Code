@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { MOD_KEY } from '../hooks/useShortcuts.js'
 
 // Split text into prose and ``` fenced code segments. An unclosed fence (mid-stream) is code.
 export function splitFences(text) {
@@ -510,6 +511,9 @@ function Welcome({ onSend }) {
       <div>
         <p className="text-lg font-medium text-zinc-100">What can I help with?</p>
         <p className="mt-1 text-sm text-zinc-500">Ask anything about your code. Type /help for commands.</p>
+        <p data-testid="shortcut-hints" className="mt-2 hidden text-xs text-zinc-600 sm:block">
+          {MOD_KEY}K new chat · {MOD_KEY}L clear · Esc stop
+        </p>
       </div>
       {onSend && (
         <div className="flex flex-wrap justify-center gap-2">

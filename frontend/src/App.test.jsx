@@ -81,6 +81,7 @@ function mockFetch() {
       }
       case '/api/sessions/s/messages': {
         const before = new URLSearchParams(query).get('before')
+        if (before === null) return reply({ messages: [{ id: '1', role: 'assistant', content: 'hi there', status: 'done' }], has_more: false })
         return before === '1'
           ? reply({ messages: [{ id: '0', role: 'user', content: 'an older question', status: 'done' }], has_more: false })
           : reply({ detail: 'bad cursor' }, false, 400)
@@ -873,5 +874,56 @@ describe('conversation history', () => {
     await flush()
     expect(screen.getByTestId('conv-t').className).toContain('bg-sky-600/20')
     expect(screen.getByTestId('conv-s').className).not.toContain('bg-sky-600/20')
+  })
+})
+
+describe('keyboard shortcuts', () => {
+  const press = (k, mods = {}) => act(async () => fireEvent.keyDown(window, { key: k, ...mods }))
+
+  it('Ctrl+K starts a new chat', async () => {
+    await boot(true)
+    await press('k', { ctrlKey: true })
+    await flush()
+    const created = fetch.mock.calls.filter(([url, init]) => url === '/api/sessions' && init?.method === 'POST')
+    expect(created).toHaveLength(1)
+  })
+
+  it('Ctrl+L clears the view; Load earlier messages brings the conversation back', async () => {
+    await boot(true)
+    await press('l', { ctrlKey: true })
+    expect(screen.queryByText('hi there')).toBeNull()
+    fireEvent.click(screen.getByTestId('load-earlier'))
+    await flush()
+    expect(screen.getByText('hi there')).toBeTruthy()
+  })
+
+  it('Escape stops a running reply, and does nothing when idle', async () => {
+    const ws = await boot(true)
+    await press('Escape')
+    expect(ws.sent.some((m) => m.type === 'stop')).toBe(false)
+    await act(async () => {
+      ws.emit({ type: 'status', state: 'busy' })
+      ws.emit({ type: 'message', message: { id: 'r', role: 'assistant', content: '', status: 'streaming' } })
+    })
+    await press('Escape')
+    expect(ws.sent.filter((m) => m.type === 'stop')).toHaveLength(1)
+  })
+
+  it('Escape in a message box with text clears the text and does not stop the reply', async () => {
+    const ws = await boot(true)
+    await act(async () => {
+      ws.emit({ type: 'status', state: 'busy' })
+      ws.emit({ type: 'message', message: { id: 'r', role: 'assistant', content: '', status: 'streaming' } })
+    })
+    const box = screen.getByLabelText('Message')
+    fireEvent.change(box, { target: { value: 'draft' } })
+    fireEvent.keyDown(box, { key: 'Escape' })
+    expect(box.value).toBe('')
+    expect(ws.sent.some((m) => m.type === 'stop')).toBe(false)
+  })
+
+  it('the new chat button names its shortcut', async () => {
+    await boot(true)
+    expect(screen.getByTestId('new-chat').title).toMatch(/New chat \((Ctrl\+|⌘)K\)/)
   })
 })
