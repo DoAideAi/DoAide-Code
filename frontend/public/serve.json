@@ -10,7 +10,15 @@
       "destination": "/guides/index.html"
     },
     {
-      "source": "**",
+      "source": "/tools",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/tools/:slug([a-z0-9-]+)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/",
       "destination": "/index.html"
     }
   ]

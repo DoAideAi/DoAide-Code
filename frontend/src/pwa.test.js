@@ -43,11 +43,15 @@ describe('PWA files', () => {
   it('serves offline.html as a real file (no clean-URL redirect) while the SPA keeps its rewrite', () => {
     const config = JSON.parse(read('serve.json'))
     expect(config.cleanUrls).toBe(false)
-    // Static guides are matched before the SPA catch-all.
+    // No '**' catch-all: serve gives a '**' rewrite precedence over every
+    // other rule (order does not matter), which swallowed /guides. The SPA
+    // only deep-links / and /tools, so those are rewritten explicitly.
     expect(config.rewrites).toEqual([
       { source: '/guides/:slug([a-z0-9-]+)', destination: '/guides/:slug/index.html' },
       { source: '/guides', destination: '/guides/index.html' },
-      { source: '**', destination: '/index.html' },
+      { source: '/tools', destination: '/index.html' },
+      { source: '/tools/:slug([a-z0-9-]+)', destination: '/index.html' },
+      { source: '/', destination: '/index.html' },
     ])
   })
 })
