@@ -26,6 +26,8 @@ MAX_TIER = 3
 JEV_MIN_CONFIDENCE = 0.55
 # Tasks scoring this high (or Opus-tier ones) skip the free local attempt: it would only cost time.
 LOCAL_FIRST_MAX_SCORE = 10
+# Settings key for the executor chosen with `/model` (absent: automatic routing).
+PIN_KEY = "model"
 
 
 def is_local(executor: Executor) -> bool:
@@ -85,6 +87,8 @@ class RouterBrain:
         self.cache_ttl = cache_ttl
         self.jev = jev
         self.offline = offline
+        # The executor chosen with `/model`, tried first for every task; None routes automatically.
+        self.pinned: str | None = None
 
     async def classify(self, message: str, *, project: str | None = None) -> RouteDecision:
         if not self.offline and self.jev is not None and self.jev.enabled:
@@ -102,8 +106,23 @@ class RouterBrain:
     async def models(self, *, force: bool = False) -> dict[str, Any]:
         """What this machine can run, detected from the installed tools (never from a model)."""
         if self.detector is not None:
-            return await self.detector.detect(force=force)
-        return executor_report({e.name: await e.available() for e in self.executors})
+            report = await self.detector.detect(force=force)
+        else:
+            report = executor_report({e.name: await e.available() for e in self.executors})
+        return {**report, "executors": self._choices(report), "pinned": self.pinned}
+
+    def _choices(self, report: dict[str, Any]) -> list[dict[str, Any]]:
+        """The executors `/model` can choose, usable when their tool is (per this report)."""
+        usable = {t["id"]: t["usable"] for t in report["tools"]}
+        return [
+            {
+                "name": e.name,
+                "tier": e.tier,
+                "model": getattr(e, "model", None),
+                "usable": usable.get(e.tool or e.name, True),
+            }
+            for e in self.executors
+        ]
 
     async def _usable(self, executor: Executor) -> bool:
         if self.detector is not None and executor.tool:
@@ -137,8 +156,19 @@ class RouterBrain:
         """Try-then-escalate order: one free local attempt (the fast model for simple tasks, the
         coder model otherwise), then the paid executors with Sonnet first, then the other local
         model as a last resort. Obviously complex tasks start on the paid executors instead.
-        Returns the order and, when the local attempt was skipped, why."""
+        Returns the order and, when the local attempt was skipped, why.
+        An executor chosen with `/model` goes first; the usual order follows as its fallback."""
         pool = await self.candidates(decision.tier)
+        if self.pinned:
+            chosen = next((e for e in self.executors if e.name == self.pinned), None)
+            if chosen is not None and await self._usable(chosen):
+                return [chosen, *(e for e in pool if e is not chosen)], f"{chosen.name} chosen with /model"
+            pool, note = await self._auto(decision, pool)
+            unavailable = f"{self.pinned} (chosen with /model) is unavailable"
+            return pool, f"{unavailable}; {note}" if note else unavailable
+        return await self._auto(decision, pool)
+
+    async def _auto(self, decision: RouteDecision, pool: list[Executor]) -> tuple[list[Executor], str | None]:
         local = [e for e in pool if is_local(e)]
         paid = [e for e in pool if not is_local(e)]
         if not local or not paid:
@@ -149,3 +179,23 @@ class RouterBrain:
         # Escalate to Sonnet-class first; Haiku (tier 1) only if none of those is available.
         paid.sort(key=lambda e: (e.tier < 2, e.tier))
         return [first, *paid, *(e for e in local if e is not first)], None
+
+
+async def model_command(router: RouterBrain, store: Any, text: str) -> str:
+    """`/model` shows the choice, `/model <name>` tries that executor first for every task, and
+    `/model auto` goes back to automatic routing. Saved in the laptop's settings."""
+    parts = text.split()
+    names = [e.name for e in router.executors]
+    if len(parts) < 2:
+        current = router.pinned or "auto (cheapest model that passes the checks)"
+        return f"Model: {current}\nChoose with /model <name> or /model auto. Names: {', '.join(names)}"
+    name = parts[1].strip().lower()
+    if name in {"auto", "default", "none"}:
+        router.pinned = None
+        store.set_setting(PIN_KEY, None)
+        return "Model: auto. Each task goes to the cheapest model that passes the checks."
+    if name not in names:
+        return f"Unknown model {parts[1]!r}. Names: {', '.join(names)}, or auto."
+    router.pinned = name
+    store.set_setting(PIN_KEY, name)
+    return f"Model: {name}. Tasks try it first; if its answer fails the checks, the usual order takes over."

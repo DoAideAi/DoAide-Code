@@ -8,11 +8,11 @@ import json
 import uuid
 from typing import Any
 
-from .commands import is_command, is_models_command, run_command
+from .commands import is_command, is_model_choice, is_models_command, run_command
 from .detect import format_report
 from .db import Store
 from .executors import Job, Turn
-from .router import RouterBrain
+from .router import PIN_KEY, RouterBrain, model_command
 from .history import HISTORY_MESSAGES
 from .runner import Outcome, run_job
 from .sync import SyncHub, draft_event
@@ -44,6 +44,7 @@ class ChatService:
         self.store = store
         self.workspace = workspace
         self.router = router
+        router.pinned = store.get_setting(PIN_KEY)
         self.hub = hub
         self._tasks: dict[str, asyncio.Task] = {}
         self._error: dict[str, bool] = {}
@@ -107,6 +108,12 @@ class ChatService:
         session = self.current_session(user_email)
         user_msg = self.store.add_message(session["id"], "user", text)
         await self.hub.publish(user_email, {"type": "message", "message": public_message(user_msg)})
+
+        if is_model_choice(text):
+            reply = self.store.add_message(session["id"], "system", await model_command(self.router, self.store, text))
+            await self.hub.publish(user_email, {"type": "message", "message": public_message(reply)})
+            await self.hub.publish(user_email, {"type": "models", "models": await self.router.models()})
+            return
 
         if is_models_command(text):
             models = await self.router.models(force=True)

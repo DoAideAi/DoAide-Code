@@ -235,7 +235,7 @@ def same_report(a: dict[str, Any] | None, b: dict[str, Any] | None) -> bool:
     """Equal apart from when they were checked."""
     if a is None or b is None:
         return a is b
-    return a.get("tools") == b.get("tools")
+    return a.get("tools") == b.get("tools") and a.get("pinned") == b.get("pinned")
 
 
 def format_report(report: dict[str, Any]) -> str:

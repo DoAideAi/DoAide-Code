@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
+import ModelPicker from './ModelPicker.jsx'
 
 // Grows with the text up to about eight lines, then scrolls.
 const MAX_HEIGHT = 192
@@ -16,7 +17,7 @@ export const PROMPTS = [
   'where is ',
   'refactor ',
 ]
-export const COMMANDS = ['/help', '/models', '/projects', '/switch-project ', '/new', '/undo', '/usage', '/status', '/workspace']
+export const COMMANDS = ['/help', '/model ', '/models', '/projects', '/switch-project ', '/new', '/undo', '/usage', '/status', '/workspace']
 const MAX_SUGGESTIONS = 5
 
 export function suggestionsFor(text) {
@@ -26,7 +27,7 @@ export function suggestionsFor(text) {
   return pool.filter((s) => s.startsWith(typed) && s.trim() !== typed.trim()).slice(0, MAX_SUGGESTIONS)
 }
 
-export default function Composer({ busy, disabled, onSend, onStop }) {
+export default function Composer({ busy, disabled, onSend, onStop, models = null, onChooseModel = null }) {
   const [text, setText] = useState('')
   // The highlighted suggestion; -1 when none is (Enter then sends what was typed).
   const [active, setActive] = useState(-1)
@@ -162,6 +163,11 @@ export default function Composer({ busy, disabled, onSend, onStop }) {
           </button>
         )}
       </div>
+      {models?.executors?.length > 0 && (
+        <div className="mx-auto -mt-1.5 flex max-w-2xl px-4 pb-1.5 sm:px-5">
+          <ModelPicker models={models} onChoose={onChooseModel} />
+        </div>
+      )}
     </footer>
   )
 }

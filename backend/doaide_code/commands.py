@@ -26,6 +26,7 @@ HELP = """Commands:
 /workspace [<path>|reset]    show or change the default workspace folder
 /undo [<id>]                 restore files DoAide changed (latest change if no id)
 /models                      which models and CLIs this laptop can use (detected, not guessed)
+/model [<name>|auto]         show or choose the model tried first (auto: cheapest that passes)
 /usage                       tokens and cost today, this week, and this month
 /new                         clear the chat and start over
 /help                        show this help"""
@@ -86,6 +87,12 @@ def discard_changes(store: Store, changeset_id: str | None = None) -> CommandRes
 
 def is_command(text: str) -> bool:
     return text.lstrip().startswith("/")
+
+
+def is_model_choice(text: str) -> bool:
+    """`/model [name|auto]` sets the router's choice, so the chat and the agent answer it too."""
+    parts = text.split()
+    return bool(parts) and parts[0].lower() == "/model"
 
 
 def is_models_command(text: str) -> bool:

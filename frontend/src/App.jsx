@@ -392,6 +392,8 @@ export default function App() {
             disabled={connection !== 'open'}
             onSend={send}
             onStop={() => socket.current?.send({ type: 'stop' })}
+            models={online ? models : null}
+            onChooseModel={online && !busy ? (name) => send(`/model ${name}`) : null}
           />
         </>
       )}

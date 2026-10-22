@@ -25,14 +25,14 @@ from typing import Any
 
 from .benchmark import report as benchmark_report
 from .chat import public_message
-from .commands import is_command, is_models_command, run_command
+from .commands import is_command, is_model_choice, is_models_command, run_command
 from .detect import format_report, same_report
 from .config import Settings
 from .db import Store
 from .executors import Job, Turn
 from .files import FileAccessError, list_dir, read_file
 from .mcp_server import LaptopTools, handle_relayed
-from .router import RouterBrain
+from .router import PIN_KEY, RouterBrain, model_command
 from .runner import Outcome, build_router, run_job
 from .sync import MirrorHub, draft_event
 from .workspace import DEFAULT_WORKSPACE, working_root
@@ -63,6 +63,7 @@ class LaptopAgent:
         # reports through whichever connection is current when it finishes.
         self._send: Send | None = None
         self.router = router
+        router.pinned = store.get_setting(PIN_KEY)
         self.workspace = workspace
         # Projects and the active project are kept per laptop owner in the local database.
         self.owner = owner_email
@@ -206,6 +207,11 @@ class LaptopAgent:
             # The connection current at each send, not necessarily the one the job arrived on.
             await self.emit(event, arrived_on)
         job_id, text = message["id"], message["text"]
+        if is_model_choice(text):
+            content = await model_command(self.router, self.store, text)
+            await send({"type": "done", "id": job_id, "role": "system", "status": "done", "content": content})
+            await self.send_models(send)
+            return
         if is_models_command(text):
             models = await self.router.models(force=True)
             await send({"type": "done", "id": job_id, "role": "system", "status": "done", "content": format_report(models)})
