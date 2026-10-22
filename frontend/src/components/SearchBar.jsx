@@ -52,7 +52,12 @@ function SearchResult({ message, query, onClick }) {
   )
 }
 
-export default function SearchBar({ messages, open, onClose }) {
+// Scrolls the chat to a message (MessageList wraps each one in a `msg-<id>` anchor).
+export function jumpTo(id) {
+  document.getElementById(`msg-${id}`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+}
+
+export default function SearchBar({ messages, open, onClose, hasMore = false }) {
   const [query, setQuery] = useState('')
   const inputRef = useRef(null)
 
@@ -73,12 +78,14 @@ export default function SearchBar({ messages, open, onClose }) {
 
   if (!open) return null
 
-  const results = query.trim().length >= 2
+  // Surrounding spaces are not part of what was asked: "fix " still finds "fix".
+  const term = query.trim()
+  const results = term.length >= 2
     ? messages.filter(
         (m) =>
           m.content &&
           m.role !== 'system' &&
-          m.content.toLowerCase().includes(query.toLowerCase()),
+          m.content.toLowerCase().includes(term.toLowerCase()),
       )
     : []
 
@@ -109,19 +116,28 @@ export default function SearchBar({ messages, open, onClose }) {
           </svg>
         </button>
       </div>
-      {query.trim().length >= 2 && (
+      {term.length >= 2 && (
         <div className="mx-auto max-h-64 max-w-2xl overflow-y-auto px-2 pb-2">
           {results.length === 0 ? (
             <div className="py-4 text-center text-xs text-zinc-500">No matches found</div>
           ) : (
             <div className="space-y-0.5">
               {results.map((m) => (
-                <SearchResult key={m.id} message={m} query={query} onClick={onClose} />
+                <SearchResult
+                  key={m.id}
+                  message={m}
+                  query={term}
+                  onClick={() => {
+                    jumpTo(m.id)
+                    onClose()
+                  }}
+                />
               ))}
             </div>
           )}
           <div className="py-1 text-center text-[11px] text-zinc-500">
             {results.length} result{results.length !== 1 ? 's' : ''}
+            {hasMore && ' in the loaded messages; load earlier ones to search them too'}
           </div>
         </div>
       )}

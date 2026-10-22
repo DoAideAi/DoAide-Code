@@ -592,7 +592,12 @@ export default function MessageList({ messages, onSend = null, onRetry = null, h
         {messages.length === 0 && <Welcome onSend={onSend} />}
         {messages.map((m, i) => {
           const prompt = onRetry && m.status === 'error' ? promptFor(messages, i) : null
-          return <Message key={m.id} message={m} onRetry={prompt ? () => onRetry(prompt) : null} />
+          return (
+            // The anchor search results jump to.
+            <div key={m.id} id={`msg-${m.id}`} className="scroll-mt-4">
+              <Message message={m} onRetry={prompt ? () => onRetry(prompt) : null} />
+            </div>
+          )
         })}
         <div ref={end} />
       </div>

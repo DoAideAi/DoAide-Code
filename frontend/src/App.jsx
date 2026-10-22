@@ -305,7 +305,7 @@ export default function App() {
         onSwitchProject={online && !busy ? (name) => send(`/switch-project ${name}`) : null}
       />
       {searchOpen && (
-        <SearchBar messages={messages} open={searchOpen} onClose={() => setSearchOpen(false)} />
+        <SearchBar messages={messages} hasMore={hasMore} open={searchOpen} onClose={() => setSearchOpen(false)} />
       )}
       {page === 'models' && token ? (
         <ModelsPage

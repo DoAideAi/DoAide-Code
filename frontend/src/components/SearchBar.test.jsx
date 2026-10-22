@@ -66,6 +66,34 @@ describe('SearchBar', () => {
     expect(screen.queryByText(/result/)).toBeNull()
   })
 
+  it('ignores spaces around the query', () => {
+    render(<SearchBar messages={messages} open={true} onClose={() => {}} />)
+    fireEvent.change(screen.getByTestId('search-input'), { target: { value: '  login ' } })
+    expect(screen.getByText('2 results')).toBeTruthy()
+  })
+
+  it('says when older messages are not loaded, and so not searched', () => {
+    const { rerender } = render(<SearchBar messages={messages} open={true} onClose={() => {}} />)
+    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'login' } })
+    expect(screen.queryByText(/load earlier/)).toBeNull()
+    rerender(<SearchBar messages={messages} hasMore open={true} onClose={() => {}} />)
+    expect(screen.getByText(/load earlier ones to search them too/)).toBeTruthy()
+  })
+
+  it('clicking a result scrolls to that message and closes', () => {
+    const anchor = document.createElement('div')
+    anchor.id = `msg-${messages[0].id}`
+    anchor.scrollIntoView = vi.fn()
+    document.body.appendChild(anchor)
+    const onClose = vi.fn()
+    render(<SearchBar messages={messages} open={true} onClose={onClose} />)
+    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'login' } })
+    fireEvent.click(screen.getAllByRole('button').find((b) => b.textContent.startsWith('You')))
+    expect(anchor.scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' })
+    expect(onClose).toHaveBeenCalledOnce()
+    anchor.remove()
+  })
+
   it('calls onClose when close button is clicked', () => {
     const onClose = vi.fn()
     render(<SearchBar messages={messages} open={true} onClose={onClose} />)
