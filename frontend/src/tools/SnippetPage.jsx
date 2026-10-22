@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { highlight, TOKEN_CLASS } from '../highlight.js'
 import { MAX_SHARED_CODE, SITE, TOOLS, shareLink } from './codeTools.js'
 import { fetchSnippet, snippetIdForPath } from './snippetShare.js'
-import { BUTTON, CopyButton } from './ToolShell.jsx'
+import { BUTTON, CopyButton, ThemeToggle } from './ToolShell.jsx'
 import { UTIL_TOOLS } from './utilTools.js'
 
 const FONT = 'whitespace-pre font-mono text-[16px] leading-relaxed sm:text-[13px]'
@@ -67,9 +67,12 @@ export default function SnippetPage({ path = window.location.pathname }) {
         <a href="/" className="text-sm font-medium text-zinc-200 hover:text-zinc-50">
           DoAide Code
         </a>
-        <a href="/tools" className="flex min-h-[44px] items-center rounded-md border border-zinc-800 px-3 text-xs text-zinc-300 hover:bg-zinc-900 sm:min-h-[36px]">
-          Free code tools
-        </a>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <a href="/tools" className="flex min-h-[44px] items-center rounded-md border border-zinc-800 px-3 text-xs text-zinc-300 hover:bg-zinc-900 sm:min-h-[36px]">
+            Free code tools
+          </a>
+        </div>
       </nav>
       <main className="mx-auto flex max-w-5xl flex-col gap-4 px-4 pb-12 pt-4">
         {error ? (

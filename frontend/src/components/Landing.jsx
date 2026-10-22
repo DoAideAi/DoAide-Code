@@ -3,6 +3,7 @@ import { TOOLS, fetchToolStats } from '../tools/codeTools.js'
 import { UTIL_TOOLS } from '../tools/utilTools.js'
 import SignIn from './SignIn.jsx'
 import Testimonials from './Testimonials.jsx'
+import { ThemeToggle } from '../tools/ToolShell.jsx'
 
 // The signed-out page: what DoAide Code is, and the sign-in button. Static, so it is also what
 // search engines and link previews describe (with the tags in index.html).
@@ -41,13 +42,16 @@ export default function Landing({ clientId, onCredential, error }) {
     }
   }, [])
   return (
-    <div data-testid="landing" className="h-[100dvh] overflow-y-auto">
+    <div data-testid="landing" className="relative h-[100dvh] overflow-y-auto">
       <a
         href="#landing-main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-10 focus:rounded-md focus:bg-zinc-800 focus:px-3 focus:py-2 focus:text-sm focus:text-zinc-100"
       >
         Skip to main content
       </a>
+      <div className="absolute right-4 top-3">
+        <ThemeToggle />
+      </div>
       <main id="landing-main" tabIndex={-1} className="mx-auto flex max-w-4xl flex-col gap-12 px-4 py-12 focus:outline-none sm:py-16">
         <header className="flex flex-col items-center gap-4 text-center">
           <h1 className="text-3xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">
