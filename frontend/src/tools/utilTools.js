@@ -66,6 +66,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'code-complexity',
+    label: 'Complexity',
+    title: 'Code Complexity Analyzer',
+    heading: 'Measure code complexity',
+    description:
+      'Paste code and get cyclomatic complexity per function, lines of code, comment ratio and nesting depth — with the functions worth refactoring flagged first. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'markdown-editor',
     label: 'Markdown',
     title: 'Markdown Editor & Preview',
