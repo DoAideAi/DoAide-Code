@@ -11,6 +11,9 @@ export const initialChat = {
   models: null,
 }
 
+// Messages kept from a snapshot (page load, session switch): the latest few, not the whole chat.
+export const SNAPSHOT_MESSAGES = 10
+
 // A message without its draft: the local model's unchecked attempt, replaced by the answer.
 function withoutDraft(m) {
   if (!('draft' in m)) return m
@@ -25,7 +28,7 @@ export function applyEvent(state, event) {
       return {
         ...state,
         project: event.project,
-        messages: event.messages,
+        messages: (event.messages ?? []).slice(-SNAPSHOT_MESSAGES),
         serverStatus: event.status,
         mode: event.mode ?? 'local',
         agentOnline: Boolean(event.agent_online),

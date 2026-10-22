@@ -19,7 +19,7 @@ import logging
 import uuid
 from typing import Any, Protocol
 
-from .chat import HISTORY_TURNS, public_message
+from .chat import HISTORY_TURNS, SNAPSHOT_MESSAGES, public_message
 from .commands import is_command, is_models_command
 from .db import Store
 from .sync import SyncHub, draft_event
@@ -150,7 +150,7 @@ class RelayService:
             "mode": "hub",
             "agent_online": self.agent_online(user_email),
             "models": self._models.get(user_email),
-            "messages": [public_message(m) for m in self.store.list_messages(session["id"])],
+            "messages": [public_message(m) for m in self.store.list_messages(session["id"], SNAPSHOT_MESSAGES)],
         }
 
     async def _publish_status(self, user_email: str) -> None:

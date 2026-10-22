@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { footer, hideEdits, splitFences } from './components/MessageList.jsx'
-import { applyEvent, initialChat, statusColor, usableTools } from './store.js'
+import { SNAPSHOT_MESSAGES, applyEvent, initialChat, statusColor, usableTools } from './store.js'
 
 const msg = (id, role, content, status = 'done') => ({ id, role, content, status, created_at: 0 })
 
@@ -80,6 +80,21 @@ describe('hub events', () => {
   it('local snapshots default to local mode', () => {
     const s = applyEvent(initialChat, { type: 'snapshot', session_id: 's', project: null, status: 'idle', messages: [] })
     expect(s.mode).toBe('local')
+  })
+
+  it('a snapshot keeps only the latest messages, oldest first', () => {
+    const messages = Array.from({ length: 40 }, (_, i) => msg(`m${i}`, i % 2 ? 'assistant' : 'user', `#${i}`))
+    const s = applyEvent(initialChat, { type: 'snapshot', session_id: 's', project: null, status: 'idle', messages })
+    expect(s.messages).toHaveLength(SNAPSHOT_MESSAGES)
+    expect(s.messages[0].id).toBe(`m${40 - SNAPSHOT_MESSAGES}`)
+    expect(s.messages.at(-1).id).toBe('m39')
+  })
+
+  it('a short snapshot is kept whole, and new messages still append after it', () => {
+    let s = applyEvent(initialChat, { type: 'snapshot', session_id: 's', project: null, status: 'idle', messages: [msg('a', 'user', 'hi')] })
+    expect(s.messages.map((m) => m.id)).toEqual(['a'])
+    s = applyEvent(s, { type: 'message', message: msg('b', 'assistant', 'hello') })
+    expect(s.messages.map((m) => m.id)).toEqual(['a', 'b'])
   })
 })
 

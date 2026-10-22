@@ -227,8 +227,8 @@ def create_app(
         s = store.get_session(session_id)
         if not s or s["user_email"] != user.email:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Session not found")
-        from .chat import public_message
-        return {"messages": [public_message(m) for m in store.list_messages(session_id)]}
+        from .chat import SNAPSHOT_MESSAGES, public_message
+        return {"messages": [public_message(m) for m in store.list_messages(session_id, SNAPSHOT_MESSAGES)]}
 
     @app.post("/api/messages", status_code=status.HTTP_202_ACCEPTED)
     async def post_message(body: SendMessage, user: User = Depends(current_user)) -> dict:

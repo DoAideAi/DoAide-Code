@@ -20,6 +20,8 @@ from .workspace import DEFAULT_WORKSPACE, working_root
 
 # Messages sent with each job; runner.py fits them to each model (history.py).
 HISTORY_TURNS = HISTORY_MESSAGES
+# Messages a snapshot (page load, session switch) sends: the latest few, not the whole chat.
+SNAPSHOT_MESSAGES = 10
 
 
 def public_message(row: dict[str, Any]) -> dict[str, Any]:
@@ -70,7 +72,7 @@ class ChatService:
             "project": project["name"] if project else None,
             "status": self.status(user_email),
             "mode": "local",
-            "messages": [public_message(m) for m in self.store.list_messages(session["id"])],
+            "messages": [public_message(m) for m in self.store.list_messages(session["id"], SNAPSHOT_MESSAGES)],
         }
 
     async def _status(self, user_email: str) -> None:
