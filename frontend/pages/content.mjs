@@ -54,4 +54,49 @@ export const pages = [
       ],
     ],
   },
+  {
+    slug: 'github',
+    title: 'Use DoAide Code with GitHub: Review PRs and Repos with Free AI',
+    description:
+      'How to use DoAide Code with your GitHub repositories: AI review before you raise a PR, explaining unfamiliar repo code, diffing branches, and the assistant working on local clones.',
+    h1: 'DoAide Code + GitHub',
+    updated: '2026-10-22',
+    body: `<p class="meta">Updated 2026-10-22</p>
+<h1>DoAide Code + GitHub</h1>
+<p>DoAide Code fits around a GitHub workflow at two levels: the free paste-in tools polish the code you are about to push, and the full assistant works directly on your local clones — so everything it does flows through your normal <code>git commit</code> and <code>git push</code>, reviewed by you.</p>
+<a class="cta" href="/tools/code-review">Review code before your next PR</a>
+<h2 id="before-pr">Before you raise a pull request</h2>
+<p>The cheapest review comment is the one that never gets written. Before opening a PR:</p>
+<ol>
+<li><strong>Review the change:</strong> paste the function or file you touched into the <a href="/tools/code-review">AI code review tool</a>. Fix correctness and security findings first.</li>
+<li><strong>Diff what you changed:</strong> paste the old and new version into the <a href="/tools/diff-checker">diff checker</a> for a clean side-by-side you can sanity-check (or screenshot into the PR description).</li>
+<li><strong>Cover it with tests:</strong> the <a href="/tools/generate-tests">unit test generator</a> turns the new function into a runnable suite — PRs with tests merge faster.</li>
+<li><strong>Explain it to reviewers:</strong> run <a href="/tools/explain-code">Explain code</a> on a gnarly change and paste the summary into the PR description. Reviewers love you for it.</li>
+</ol>
+<h2 id="reading-repos">Understanding a repository you just cloned</h2>
+<p>Dropped into an unfamiliar codebase — a new job, an open-source project, a teammate's branch? Work file by file: copy the entry point into <a href="/tools/explain-code">Explain code</a>, then follow the imports. For suspicious functions, <a href="/tools/find-bugs">Find bugs</a> tells you whether that edge case you noticed is real. It is the fastest way to turn "I have no idea what this does" into a mental map.</p>
+<h2 id="assistant">The assistant: your clones, your commits</h2>
+<p>DoAide Code's assistant works on repositories the way you do: on a local clone. Point it at a project directory on your laptop and it reads the code, makes edits there, and leaves <strong>you</strong> to review the diff and commit. There is no GitHub OAuth app to authorize and no bot pushing to your branches — your repo never leaves your machine, and everything that reaches GitHub went through your own <code>git push</code>.</p>
+<p>A typical loop: ask for a change → the assistant edits your working directory → <code>git diff</code> (or your editor's git pane) shows exactly what changed → commit, push, open the PR. It tries free local models first and uses Claude only when needed, so most tasks cost nothing.</p>
+<a class="cta" href="/">See how the assistant works</a>
+<h2 id="faq">Frequently asked questions</h2>
+<details><summary>Does DoAide Code need access to my GitHub account?</summary><p>No. The free tools take pasted code, and the assistant works on local clones. Nothing connects to your GitHub account, and nothing pushes on your behalf.</p></details>
+<details><summary>Can DoAide Code review a whole pull request?</summary><p>The free tool reviews what you paste — for a focused PR, that is usually the changed file or functions. The assistant can work across a whole local clone, including changes spanning files.</p></details>
+<details><summary>Can I use it on private repositories?</summary><p>Yes — because it works on your local clone, private repos work exactly like public ones. Only the snippets you paste into the free tools are sent for analysis.</p></details>
+<details><summary>Is there a GitHub App or bot that comments on PRs?</summary><p>Not today. DoAide Code is deliberately pull-based: you bring it code and decide what to do with its answers. A PR-review bot is on the roadmap.</p></details>`,
+    faqs: [
+      [
+        'Does DoAide Code need access to my GitHub account?',
+        'No. The free tools take pasted code, and the assistant works on local clones. Nothing connects to your GitHub account, and nothing pushes on your behalf.',
+      ],
+      [
+        'Can I use DoAide Code on private repositories?',
+        'Yes — it works on your local clone, so private repos work exactly like public ones. Only the snippets you paste into the free tools are sent for analysis.',
+      ],
+      [
+        'Is there a GitHub App or bot that comments on PRs?',
+        'Not today. DoAide Code is pull-based: you bring it code and decide what to do with its answers. A PR-review bot is on the roadmap.',
+      ],
+    ],
+  },
 ]
