@@ -1,9 +1,10 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { explainFailure } from '../errors.js'
 import { TOKEN_CLASS, highlight, langFor } from '../highlight.js'
 import { parseDiff } from '../diff.js'
 import { Markdown } from '../markdown.jsx'
 import { loadKeys, shortcutLabel } from '../hooks/useShortcuts.js'
+import useTypewriter from '../hooks/useTypewriter.js'
 
 // Split text into prose and ``` fenced code segments. An unclosed fence (mid-stream) is code.
 export function splitFences(text) {
@@ -436,8 +437,20 @@ function Failure({ onRetry }) {
   )
 }
 
+// Keeps the bottom in view while a reply types out (if the reader is already near it).
+const Follow = createContext(null)
+
 function Reply({ message, onRetry }) {
   const streaming = message.status === 'streaming'
+  // The faded draft the reader saw: the answer it became is not typed out a second time.
+  const draftSeen = useRef('')
+  if (message.draft) draftSeen.current = message.draft
+  const content = useTypewriter(message.content ?? '', streaming, draftSeen.current)
+  const typing = content.length < (message.content ?? '').length
+  const follow = useContext(Follow)
+  useEffect(() => {
+    if (typing || streaming) follow?.()
+  }, [content, typing, streaming, follow])
   const foot = footer(message.meta)
   const changes = message.meta?.changes
   const status = replyStatus(message)
@@ -473,14 +486,14 @@ function Reply({ message, onRetry }) {
           )}
           {explained ? (
             <Explained failure={explained} />
-          ) : message.content ? (
-            <Body content={message.content} />
+          ) : content ? (
+            <Body content={content} />
           ) : null}
           {error && !message.content && <p>The task stopped with an error before it answered.</p>}
-          {streaming && message.content && (
+          {(streaming || typing) && content && (
             <span className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-zinc-400 align-middle" />
           )}
-          {changes?.files?.length > 0 && <ChangeSet changes={changes} />}
+          {changes?.files?.length > 0 && !typing && <ChangeSet changes={changes} />}
         </div>
         <div className="mt-1 flex max-w-full flex-wrap items-center gap-x-1.5 px-1 text-[11px] text-zinc-500 [overflow-wrap:anywhere]">
           <span data-testid="reply-status" className={status.tone}>
@@ -675,6 +688,10 @@ export default function MessageList({
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: 'end' })
   }, [last?.id, last?.content, pending])
+  const follow = useCallback(() => {
+    const el = scroller.current
+    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 200) el.scrollTop = el.scrollHeight
+  }, [])
   useLayoutEffect(() => {
     const el = scroller.current
     if (el && fromBottom.current !== null) el.scrollTop = el.scrollHeight - fromBottom.current
@@ -694,6 +711,7 @@ export default function MessageList({
 
   return (
     <main ref={scroller} className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+      <Follow.Provider value={follow}>
       <div className="mx-auto flex max-w-2xl flex-col gap-4 px-3 py-5 text-[15px] sm:px-4">
         {hasMore && onLoadEarlier && <LoadEarlier onLoad={loadEarlier} />}
         {messages.length === 0 && !pending && <Welcome onSend={onSend} intro={welcome} />}
@@ -709,6 +727,7 @@ export default function MessageList({
         {pending && <Pending />}
         <div ref={end} />
       </div>
+      </Follow.Provider>
     </main>
   )
 }
