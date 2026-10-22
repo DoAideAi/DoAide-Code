@@ -15,7 +15,7 @@ function Row({ entry, depth, expanded, active, onClick }) {
       aria-expanded={dir ? expanded : undefined}
       onClick={onClick}
       style={{ paddingLeft: `${8 + depth * 14}px` }}
-      className={`flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[13px] ${
+      className={`flex w-full items-center gap-1.5 rounded-md py-2 pr-2 sm:py-1 text-left text-[13px] ${
         active ? 'bg-sky-600/20 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
       }`}
     >

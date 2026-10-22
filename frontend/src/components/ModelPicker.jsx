@@ -59,7 +59,7 @@ export default function ModelPicker({ models, onChoose = null }) {
         disabled={!onChoose}
         title={onChoose ? 'Choose the model' : 'Model'}
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-200 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+        className="flex items-center gap-1 rounded-full px-2 py-1.5 text-xs sm:py-0.5 text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-200 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
       >
         <span>{modelLabel(pinned)}</span>
         {onChoose && (

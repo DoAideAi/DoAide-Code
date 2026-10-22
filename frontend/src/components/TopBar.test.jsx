@@ -85,3 +85,33 @@ describe('project switcher', () => {
     expect(await screen.findByText(/Couldn’t load projects/)).toBeTruthy()
   })
 })
+
+describe('phone header', () => {
+  it('keeps the secondary buttons out of the phone header and in the More menu', () => {
+    const onUsage = vi.fn()
+    render(<TopBar project="alpha" color="green" busy={false} onUsage={onUsage} onSettings={() => {}} onSearch={() => {}} />)
+    expect(screen.getByTestId('usage-toggle').parentElement.className).toMatch(/^hidden .*sm:flex/)
+    expect(screen.getByTestId('more-toggle').parentElement.className).toContain('sm:hidden')
+    fireEvent.click(screen.getByTestId('more-toggle'))
+    expect([...screen.getByTestId('more-menu').children].map((b) => b.textContent)).toEqual(['Search', 'Usage', 'Settings'])
+    fireEvent.click(screen.getByTestId('more-usage'))
+    expect(onUsage).toHaveBeenCalledOnce()
+    expect(screen.queryByTestId('more-menu')).toBeNull()
+  })
+
+  it('Escape closes the menu without reaching the app', () => {
+    const appEscape = vi.fn()
+    window.addEventListener('keydown', appEscape)
+    render(<TopBar project="alpha" color="green" busy={false} onSearch={() => {}} />)
+    fireEvent.click(screen.getByTestId('more-toggle'))
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    window.removeEventListener('keydown', appEscape)
+    expect(screen.queryByTestId('more-menu')).toBeNull()
+    expect(appEscape).not.toHaveBeenCalled()
+  })
+
+  it('has no More button when there is nothing to put in it', () => {
+    render(<TopBar project="alpha" color="green" busy={false} />)
+    expect(screen.queryByTestId('more-toggle')).toBeNull()
+  })
+})
