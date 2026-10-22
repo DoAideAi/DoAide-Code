@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { TOOLS, fetchToolStats } from '../tools/codeTools.js'
 import { UTIL_TOOLS } from '../tools/utilTools.js'
+import HeroDemo from './HeroDemo.jsx'
 import SignIn from './SignIn.jsx'
 import Testimonials from './Testimonials.jsx'
 import { ThemeToggle } from '../tools/ToolShell.jsx'
@@ -61,6 +62,7 @@ export default function Landing({ clientId, onCredential, error }) {
             DoAide Code routes every task to the cheapest model that can handle it: a local model on your laptop,
             then Claude only when the local answer isn't good enough. Chat from your laptop or your phone.
           </p>
+          <HeroDemo />
           <SignIn clientId={clientId} onCredential={onCredential} error={error} embedded />
           <p className="text-xs text-zinc-500">Free to use. Sign in with Google to connect your laptop.</p>
         </header>
