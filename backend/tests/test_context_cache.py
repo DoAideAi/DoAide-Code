@@ -102,7 +102,9 @@ async def test_local_models_get_files_and_cli_agents_get_a_map(repo, store):
     # request mentions whole (a Read round re-sends everything).
     assert "- app/auth/session.py" in cli.jobs[0].context and "## File: app/auth/session.py (complete" in cli.jobs[0].context
     await run_job(RouterBrain([cli], offline=True), store, Job("fix the session refresh", cwd=repo), Outcome(), on_delta)
-    assert "- app/auth/session.py" in cli.jobs[1].context and "def refresh_session" not in cli.jobs[1].context
+    # By prompt: "ok" is no edit, so each run also asks once more for edit blocks (a job of its own).
+    third = next(j for j in cli.jobs if j.prompt == "fix the session refresh")
+    assert "- app/auth/session.py" in third.context and "def refresh_session" not in third.context
 
 
 # Direct answers

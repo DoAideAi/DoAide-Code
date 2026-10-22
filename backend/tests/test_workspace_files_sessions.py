@@ -250,8 +250,10 @@ def test_one_conversation_that_new_clears(client, token):
         ws.send_json({"type": "send", "text": "/new"})
         cleared = drain_until(ws, "snapshot")[-1]
         assert cleared["session_id"] != first["session_id"] and cleared["messages"] == []
-        # No switching back: there is no session list, and "open" is ignored.
-        assert client.get("/api/sessions", headers=auth(token)).status_code in {404, 405}
+        # Both conversations are listed (the sidebar), the new one active; "open" over the socket
+        # is ignored (the sidebar switches through /api/session?session_id=).
+        listed = [s["id"] for s in client.get("/api/sessions", headers=auth(token)).json()["sessions"]]
+        assert {first["session_id"], cleared["session_id"]} <= set(listed)
         ws.send_json({"type": "open", "session_id": first["session_id"]})
         ws.send_json({"type": "ping"})
         assert ws.receive_json() == {"type": "pong"}
