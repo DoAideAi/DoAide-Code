@@ -181,7 +181,7 @@ def create_app(
         if not overall.allow("*"):
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "The free tools are busy right now. Try again later.")
         try:
-            answer = await codetools.generate(prompt, api_key=settings.gemini_api_key, model=settings.gemini_model)
+            answer = await codetools.generate(prompt, api_key=settings.gemini_api_key, models=settings.gemini_models)
         except codetools.ToolError as exc:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
         return {"answer": answer}

@@ -27,23 +27,33 @@ def test_rate_limiter_window():
 
 
 @pytest.mark.anyio
-async def test_generate_reads_text_and_maps_errors():
+async def test_generate_falls_back_and_maps_errors():
+    tried = []
+
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.params["key"] == "k" and "gemini-x" in request.url.path
-        if b"busy" in request.content:
-            return httpx.Response(429)
-        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": "It adds."}]}}]})
+        assert request.url.params["key"] == "k"
+        model = request.url.path.rsplit("/", 1)[-1].split(":")[0]
+        tried.append(model)
+        if model == "busy":
+            return httpx.Response(503)
+        if model == "broken":
+            return httpx.Response(400)
+        parts = [{"text": "pondering", "thought": True}, {"text": "It adds."}]
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": parts}}]})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        assert await codetools.generate("add", api_key="k", model="gemini-x", client=client) == "It adds."
+        assert await codetools.generate("add", api_key="k", models=("busy", "ok"), client=client) == "It adds."
+        assert tried == ["busy", "ok"]
         with pytest.raises(codetools.ToolError, match="busy"):
-            await codetools.generate("busy", api_key="k", model="gemini-x", client=client)
+            await codetools.generate("x", api_key="k", models=("busy", "busy"), client=client)
+        with pytest.raises(codetools.ToolError, match="error"):
+            await codetools.generate("x", api_key="k", models=("broken", "ok"), client=client)
 
 
 def test_endpoint_needs_no_sign_in_and_is_rate_limited(settings, executors, monkeypatch):
     seen = []
 
-    async def fake_generate(prompt, *, api_key, model):
+    async def fake_generate(prompt, *, api_key, models):
         seen.append((prompt, api_key))
         return "## Summary\nAdds two numbers."
 

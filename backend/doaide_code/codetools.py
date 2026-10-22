@@ -69,30 +69,46 @@ def build_prompt(action: str, code: str, language: str = "") -> str:
     )
 
 
-async def generate(prompt: str, *, api_key: str, model: str, client: httpx.AsyncClient | None = None) -> str:
-    """One Gemini call; the text of its answer."""
+# Worth trying the next model: overloaded, rate limited, or retired.
+RETRY_NEXT = {404, 429, 500, 503}
+
+
+async def generate(
+    prompt: str, *, api_key: str, models: tuple[str, ...], client: httpx.AsyncClient | None = None
+) -> str:
+    """The text of the first model's answer; the next model is tried when one is unavailable."""
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 4096},
+        # Thinking tokens count against the output limit, so leave room for both.
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 8192},
     }
     owned = client is None
     client = client or httpx.AsyncClient(timeout=60)
+    error = ToolError("The AI service could not be reached. Try again in a moment.")
     try:
-        resp = await client.post(GEMINI_URL.format(model=model), params={"key": api_key}, json=body)
-    except httpx.HTTPError as exc:
-        raise ToolError("The AI service could not be reached. Try again in a moment.") from exc
+        for model in models:
+            try:
+                resp = await client.post(GEMINI_URL.format(model=model), params={"key": api_key}, json=body)
+            except httpx.HTTPError:
+                continue
+            if resp.status_code in RETRY_NEXT:
+                error = ToolError("The AI service is busy. Try again in a minute.")
+                continue
+            if resp.status_code != 200:
+                raise ToolError("The AI service returned an error. Try again in a moment.")
+            return _answer_text(resp)
+        raise error
     finally:
         if owned:
             await client.aclose()
-    if resp.status_code == 429:
-        raise ToolError("The AI service is busy. Try again in a minute.")
-    if resp.status_code != 200:
-        raise ToolError("The AI service returned an error. Try again in a moment.")
+
+
+def _answer_text(resp: httpx.Response) -> str:
     try:
         parts = resp.json()["candidates"][0]["content"]["parts"]
     except (KeyError, IndexError, ValueError) as exc:
         raise ToolError("The AI service returned no answer. Try a smaller snippet.") from exc
-    text = "".join(p.get("text", "") for p in parts).strip()
+    text = "".join(p.get("text", "") for p in parts if not p.get("thought")).strip()
     if not text:
         raise ToolError("The AI service returned no answer. Try a smaller snippet.")
     return text

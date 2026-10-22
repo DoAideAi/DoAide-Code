@@ -91,7 +91,14 @@ class Settings:
     # The free code tools (codetools.py) on the public site: a server-side Gemini key, never sent
     # to the browser. Empty turns the tools off.
     gemini_api_key: str = field(default_factory=lambda: os.environ.get("GEMINI_API_KEY", "").strip())
-    gemini_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_GEMINI_MODEL", "gemini-2.5-flash").strip())
+    # Tried in order: the next one answers when a model is overloaded or retired.
+    gemini_models: tuple[str, ...] = field(
+        default_factory=lambda: tuple(
+            m.strip()
+            for m in os.environ.get("DOAIDE_GEMINI_MODELS", "gemini-3.6-flash,gemini-3.8-flash,gemini-3.5-flash-lite").split(",")
+            if m.strip()
+        )
+    )
 
     @property
     def is_hub(self) -> bool:
