@@ -121,6 +121,11 @@ export function fetchModelComparison(token, days = 30) {
   return get(`/api/models/compare?days=${days}`, token)
 }
 
+// The latest Tasks API results (newest first): model, cost, response time, checks, escalation.
+export function fetchTaskHistory(token, limit = 200) {
+  return get(`/api/v1/tasks/history?limit=${limit}`, token)
+}
+
 export function fetchUsage(token, days = 7) {
   return get(`/api/usage?days=${days}&tz=${new Date().getTimezoneOffset()}`, token)
 }

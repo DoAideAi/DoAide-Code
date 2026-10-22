@@ -6,6 +6,7 @@ import {
   downloadInstaller,
   fetchConfig,
   fetchModelComparison,
+  fetchTaskHistory,
   fetchUsage,
   googleLogin,
   loadSession,
@@ -137,6 +138,7 @@ export default function App() {
   const toggle = (name) => () => setPage((p) => (p === name ? null : name))
   const loadUsage = useCallback((days) => fetchUsage(token, days), [token])
   const loadComparison = useCallback((days) => fetchModelComparison(token, days), [token])
+  const loadHistory = useCallback(() => fetchTaskHistory(token), [token])
 
   // Every device can read and send; on the hub, prompts are queued and run by the laptop.
   useEffect(() => {
@@ -202,7 +204,7 @@ export default function App() {
           onClose={() => setPage(null)}
         />
       ) : page === 'usage' && token ? (
-        <UsagePage load={loadUsage} onClose={() => setPage(null)} />
+        <UsagePage load={loadUsage} loadHistory={loadHistory} onClose={() => setPage(null)} />
       ) : page === 'how' ? (
         <HowItWorksPage onClose={() => setPage(null)} />
       ) : setupOpen && token ? (

@@ -110,8 +110,104 @@ function DailyChart({ daily }) {
   )
 }
 
+// Totals over Tasks API results (GET /api/v1/tasks/history): how many, what they cost per model,
+// how long they took on average, and how often the free answer had to be escalated.
+export function taskStats(tasks) {
+  const timed = tasks.filter((t) => t.response_time_seconds != null)
+  const byModel = new Map()
+  for (const t of tasks) {
+    const name = t.model || t.executor || 'unknown'
+    const row = byModel.get(name) ?? { model: name, tasks: 0, cost_usd: 0, seconds: 0, timed: 0 }
+    row.tasks += 1
+    row.cost_usd += t.cost_usd || 0
+    if (t.response_time_seconds != null) {
+      row.seconds += t.response_time_seconds
+      row.timed += 1
+    }
+    byModel.set(name, row)
+  }
+  return {
+    tasks: tasks.length,
+    cost_usd: tasks.reduce((sum, t) => sum + (t.cost_usd || 0), 0),
+    avg_seconds: timed.length ? timed.reduce((sum, t) => sum + t.response_time_seconds, 0) / timed.length : null,
+    escalation_rate: tasks.length ? tasks.filter((t) => t.escalated).length / tasks.length : 0,
+    by_model: [...byModel.values()]
+      .map((m) => ({ model: m.model, tasks: m.tasks, cost_usd: m.cost_usd, avg_seconds: m.timed ? m.seconds / m.timed : null }))
+      .sort((a, b) => b.cost_usd - a.cost_usd || b.tasks - a.tasks),
+  }
+}
+
+function seconds(value) {
+  return value == null ? '–' : `${value < 10 ? value.toFixed(1) : Math.round(value)}s`
+}
+
+// Task performance from the Tasks API history (loaded once; it is not split by period).
+function TaskPerformance({ loadHistory }) {
+  const [tasks, setTasks] = useState(null)
+  const [error, setError] = useState(null)
+  useEffect(() => {
+    let active = true
+    loadHistory()
+      .then((r) => active && setTasks(r.tasks ?? []))
+      .catch((e) => active && setError(e.message || 'Could not load task history'))
+    return () => {
+      active = false
+    }
+  }, [loadHistory])
+  if (error) return <p className="text-sm text-red-300">{error}</p>
+  if (!tasks) return <p className="text-sm text-zinc-500">Loading task history…</p>
+  const s = taskStats(tasks)
+  return (
+    <section data-testid="task-performance" className="flex flex-col gap-3">
+      <div>
+        <h2 className="text-sm font-medium text-zinc-300">Task performance</h2>
+        <p className="text-[11px] text-zinc-500">The last {s.tasks} tasks sent through the Tasks API (Dispatch and scripts).</p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Tile label="Total tasks" value={s.tasks} />
+        <Tile label="Total cost" value={formatCost(s.cost_usd)} />
+        <Tile label="Avg response" value={seconds(s.avg_seconds)} />
+        <Tile
+          label="Escalated"
+          value={`${Math.round(s.escalation_rate * 100)}%`}
+          note="free answer failed its checks"
+        />
+      </div>
+      <div className="overflow-x-auto">
+        <table data-testid="task-cost-by-model" className="w-full text-left text-xs tabular-nums">
+          <thead className="text-zinc-500">
+            <tr>
+              <th className="py-1 font-normal">Model</th>
+              <th className="py-1 font-normal">Tasks</th>
+              <th className="py-1 font-normal">Avg time</th>
+              <th className="py-1 text-right font-normal">Cost</th>
+            </tr>
+          </thead>
+          <tbody className="text-zinc-300">
+            {s.by_model.map((m) => (
+              <tr key={m.model} className="border-t border-zinc-900">
+                <td className="py-1.5">{m.model}</td>
+                <td>{m.tasks}</td>
+                <td>{seconds(m.avg_seconds)}</td>
+                <td className="text-right">{formatCost(m.cost_usd)}</td>
+              </tr>
+            ))}
+            {s.by_model.length === 0 && (
+              <tr>
+                <td colSpan={4} className="py-2 text-zinc-500">
+                  No tasks yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
 // Tokens and cost by day and model, which model handled each task, and what free models saved.
-export default function UsagePage({ load, onClose }) {
+export default function UsagePage({ load, loadHistory = null, onClose }) {
   const [days, setDays] = useState(7)
   const [report, setReport] = useState(null)
   const [error, setError] = useState(null)
@@ -180,6 +276,7 @@ export default function UsagePage({ load, onClose }) {
               <Tile label="Tokens" value={formatTokens(t.tokens_in + t.tokens_out)} note={`${formatTokens(t.tokens_out)} out`} />
             </div>
             <DailyChart daily={report.daily} />
+            {loadHistory && <TaskPerformance loadHistory={loadHistory} />}
             <section>
               <h2 className="mb-2 text-sm font-medium text-zinc-300">By model</h2>
               <table data-testid="by-model" className="w-full text-left text-xs tabular-nums">

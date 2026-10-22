@@ -113,6 +113,8 @@ function mockFetch() {
         return reply(localServer)
       case '/api/models/compare':
         return reply(COMPARE)
+      case '/api/v1/tasks/history':
+        return reply({ tasks: HISTORY })
       case '/api/usage': {
         const days = Number(new URLSearchParams(query).get('days'))
         return reply({ ...USAGE, days, daily: USAGE.daily.slice(0, days) })
@@ -620,6 +622,13 @@ const USAGE = {
   ],
 }
 
+const HISTORY = [
+  { id: 'a', model: 'sonnet', executor: 'claude-sonnet', cost_usd: 0.05, response_time_seconds: 20, escalated: true },
+  { id: 'b', model: 'qwen2.5-coder:7b', executor: 'ollama', cost_usd: 0, response_time_seconds: 2, escalated: false },
+  { id: 'c', model: 'qwen2.5-coder:7b', executor: 'ollama', cost_usd: 0, response_time_seconds: 4, escalated: false },
+  { id: 'd', model: null, executor: 'direct', cost_usd: 0, response_time_seconds: null, escalated: false },
+]
+
 describe('usage dashboard', () => {
   it('shows savings, totals, a daily chart, cost by model and the model behind each task', async () => {
     await boot(true)
@@ -635,6 +644,15 @@ describe('usage dashboard', () => {
     const recent = screen.getByTestId('recent-tasks').textContent
     expect(recent).toContain('refactor auth across all files')
     expect(recent).toContain('Claude Code ·explain runner.py')
+
+    // Task performance, from the Tasks API history.
+    const perf = screen.getByTestId('task-performance').textContent
+    expect(perf).toContain('Total tasks4')
+    expect(perf).toContain('Total cost$0.05')
+    expect(perf).toContain('Avg response8.7s')
+    expect(perf).toContain('Escalated25%')
+    const costs = [...screen.getByTestId('task-cost-by-model').querySelectorAll('tbody tr')].map((r) => r.textContent)
+    expect(costs).toEqual(['sonnet120s$0.05', 'qwen2.5-coder:7b23.0s$0', 'direct1–$0'])
 
     await act(async () => fireEvent.mouseEnter(screen.getAllByTestId('day-bar')[6]))
     expect(screen.getByTestId('chart-tooltip').textContent).toContain('5 tasks · 4 free')
