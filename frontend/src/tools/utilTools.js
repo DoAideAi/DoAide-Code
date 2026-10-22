@@ -93,6 +93,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'jwt-decoder',
+    label: 'JWT decoder',
+    title: 'JWT Decoder',
+    heading: 'Decode a JWT',
+    description:
+      'Paste a JWT to see the decoded header and payload, every registered claim explained, and whether the token is expired. Runs in your browser — the token is never uploaded or stored. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
