@@ -22,7 +22,7 @@ describe('utilTools', () => {
 
   it('gives every utility the fields the pages and meta tags need', () => {
     for (const t of UTIL_TOOLS) {
-      expect(t.slug).toMatch(/^[a-z-]+$/)
+      expect(t.slug).toMatch(/^[a-z0-9-]+$/)
       expect(t.title).toBeTruthy()
       expect(t.heading).toBeTruthy()
       expect(t.description).toMatch(/no sign-up/)

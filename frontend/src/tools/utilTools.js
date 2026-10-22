@@ -129,6 +129,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'unit-converter',
+    label: 'Unit converter',
+    title: 'Developer Unit Converter',
+    heading: 'Convert developer units',
+    description:
+      'px to rem/em at any root font size, bytes in decimal and binary, unix timestamps to dates, and colors between hex, rgb and hsl — all as you type. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
