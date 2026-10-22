@@ -183,6 +183,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'string-utilities',
+    label: 'String utils',
+    title: 'String Utilities',
+    heading: 'Convert, count and slugify strings',
+    description:
+      'camelCase, snake_case, kebab-case and five more conversions, URL slugs, reversed text, and character/word/line/byte counts — all live as you type. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
