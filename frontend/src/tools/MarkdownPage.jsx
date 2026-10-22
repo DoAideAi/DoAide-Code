@@ -3,7 +3,7 @@
 // Runs in the page; nothing is uploaded.
 
 import { useMemo, useRef, useState } from 'react'
-import { CodeBlock, splitFences } from '../components/MessageList.jsx'
+import { CodeBlock, splitFences } from '../components/CodeBlock.jsx'
 import { Markdown } from '../markdown.jsx'
 import { copyText } from '../copy.js'
 import RecentSnippets from './RecentSnippets.jsx'

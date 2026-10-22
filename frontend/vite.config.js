@@ -8,9 +8,9 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // React in its own chunk: it changes only on upgrades, so repeat visitors keep it
-        // cached across deploys of our code.
-        manualChunks: { vendor: ['react', 'react-dom'] },
+        // Libraries in their own chunk: they change only on upgrades, so repeat visitors keep
+        // them cached across deploys of our code.
+        manualChunks: { vendor: ['react', 'react-dom', 'zustand'] },
       },
     },
   },

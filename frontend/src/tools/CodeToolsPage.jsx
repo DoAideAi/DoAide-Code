@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { CodeBlock, copyText, splitFences } from '../components/MessageList.jsx'
+import { CodeBlock, splitFences } from '../components/CodeBlock.jsx'
+import { copyText } from '../copy.js'
 import { Markdown } from '../markdown.jsx'
 import CodeEditor, { EDITOR_THEMES, saveEditorTheme, savedEditorTheme } from './CodeEditor.jsx'
 import EditHistory from './EditHistory.jsx'

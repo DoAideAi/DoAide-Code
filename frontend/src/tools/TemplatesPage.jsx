@@ -2,7 +2,7 @@
 // category, preview them highlighted, copy one, or send it into the AI tools.
 
 import { useMemo, useState } from 'react'
-import { CodeBlock } from '../components/MessageList.jsx'
+import { CodeBlock } from '../components/CodeBlock.jsx'
 import { TOOLS, shareLink } from './codeTools.js'
 import ToolShell, { BUTTON, CopyButton } from './ToolShell.jsx'
 import { TEMPLATES, TEMPLATE_CATEGORIES, filterTemplates } from './templates.js'

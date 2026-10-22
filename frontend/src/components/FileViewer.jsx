@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { langFor } from '../highlight.js'
-import { CodeBlock, copyText } from './MessageList.jsx'
+import { CodeBlock } from './CodeBlock.jsx'
+import { copyText } from '../copy.js'
 
 export { langFor }
 
