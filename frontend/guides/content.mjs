@@ -280,4 +280,153 @@ export const guides = [
     ],
     cta: ['/tools/generate-tests', 'Generate unit tests free with AI'],
   },
+  {
+    slug: 'best-free-code-review-tools',
+    title: 'Best Free Code Review Tools in 2026: AI, Linters and CI Compared | DoAide Code',
+    h1: 'The best free code review tools in 2026',
+    description:
+      'The free code review stack in 2026: AI review tools, linters and static analysis, and CI-based review bots compared — what each catches, where each fits, and how to combine them for ₹0.',
+    updated: '2026-10-22',
+    intro: `<p>You no longer need a paid plan — or even a teammate — to get real code review. In 2026 the free tier covers three distinct layers: <strong>linters and static analyzers</strong> that catch mechanical issues instantly, <strong>AI review tools</strong> that read code the way a senior engineer does, and <strong>CI-based checks</strong> that gate what merges. The teams (and solo developers) with the cleanest code use all three, because they catch different things.</p>
+<p>This guide compares the layers honestly — including where our own <a href="/tools/code-review">free AI code review</a> fits and where a linter beats it.</p>`,
+    sections: [
+      [
+        'layers',
+        'The three layers of free code review',
+        `<table>
+<tr><th>Layer</th><th>Examples</th><th>Catches</th><th>Misses</th></tr>
+<tr><td>Linters & formatters</td><td>ESLint, Ruff, golangci-lint, Prettier, Black</td><td>Style drift, unused variables, suspicious constructs, known footguns — instantly, deterministically</td><td>Logic bugs, security flaws, design problems</td></tr>
+<tr><td>Static analysis & security scanner</td><td>Semgrep, CodeQL (free for open source), Bandit, npm audit</td><td>Known vulnerability patterns, tainted data flows, risky APIs</td><td>Novel logic errors, intent mismatches</td></tr>
+<tr><td>AI review</td><td><a href="/tools/code-review">DoAide Code review</a>, editor AI chats</td><td>Logic bugs, edge cases, error-handling gaps, performance problems, readability — with reasoning and fixes</td><td>Project-wide architecture unless you provide it; non-deterministic</td></tr>
+</table>
+<p>The pattern: linters are fast and certain but shallow; AI is deep but should be re-checked; security scanners are narrow but authoritative in their lane. None replaces the others.</p>`,
+      ],
+      [
+        'ai-tools',
+        'Free AI review tools compared',
+        `<p>What matters when choosing an AI reviewer in 2026:</p>
+<ul>
+<li><strong>Friction:</strong> does it need an account, an editor, an extension? <a href="/tools/code-review">DoAide Code</a> is a URL — paste, click, done. Editor-integrated chats (Copilot, Cursor and friends) need a sign-in and setup but see more context.</li>
+<li><strong>Output structure:</strong> a good review groups findings by severity and shows the fix, not just the complaint. Chat tools give you whatever your prompt earns; purpose-built tools give the same structure every time.</li>
+<li><strong>Limits:</strong> free tiers differ — DoAide Code allows 8 reviews per 10 minutes with no account; editor assistants meter monthly completions or requests.</li>
+<li><strong>Privacy:</strong> paste-based tools see only the snippet you choose. Editor integrations see your open files. Read the policy either way, and never paste secrets.</li>
+</ul>`,
+      ],
+      [
+        'ci',
+        'Free review in CI: the merge gate',
+        `<p>Whatever reviews code before a commit, CI is where standards become enforceable. The free stack that works on GitHub, GitLab and Bitbucket alike:</p>
+<ol>
+<li><strong>Lint on every push</strong> — the same config as local, so CI never argues with your editor.</li>
+<li><strong>Run the tests</strong> — a reviewer's "looks right" is worthless next to a green suite. If a module has no tests, <a href="/guides/ai-unit-test-generator">generate them</a>.</li>
+<li><strong>Scan dependencies</strong> — free vulnerability alerts (Dependabot and equivalents) catch the issues nobody reviews for.</li>
+</ol>
+<p>AI review fits <em>before</em> the push in this picture: it is the fastest of the three at the "is this logic right?" question, so running it while the code is still in your paste buffer costs the least.</p>`,
+      ],
+      [
+        'stack',
+        'A sensible ₹0 stack for a solo dev or small team',
+        `<ol>
+<li><strong>Editor:</strong> formatter + linter on save (Prettier/ESLint, Black/Ruff — pick per language).</li>
+<li><strong>Before each commit:</strong> paste changed functions into the <a href="/tools/code-review">AI review</a>; fix correctness and security findings. Thirty seconds, and it is where most real bugs die.</li>
+<li><strong>Before each PR:</strong> <a href="/tools/diff-checker">diff</a> the branch, <a href="/tools/generate-tests">generate tests</a> for new logic.</li>
+<li><strong>In CI:</strong> lint + tests + dependency alerts, all free.</li>
+<li><strong>Humans:</strong> whatever reviewer time you have goes to design and requirements — the machines above already did the mechanical pass.</li>
+</ol>`,
+      ],
+    ],
+    faqs: [
+      [
+        'What is the best free code review tool in 2026?',
+        'There is no single best — linters (ESLint, Ruff), security scanners (Semgrep, CodeQL) and AI reviewers catch different classes of problems. For instant senior-style review of a snippet with no sign-up, DoAide Code’s free AI review is the lowest-friction option; combine it with a linter and CI tests.',
+      ],
+      [
+        'Are free AI code review tools good enough for professional work?',
+        'As a first pass, yes — they reliably catch logic bugs, security smells and error-handling gaps. Professional teams still add linters for consistency, CI tests for proof, and human review for design. The free stack covers everything except human judgment.',
+      ],
+      [
+        'Do I need a GitHub account or CI pipeline to get code review?',
+        'No. Paste-based AI review works with zero setup, and linters run locally. CI adds enforcement when you work with others, but a solo developer gets most of the value from the local loop.',
+      ],
+      [
+        'Can AI code review tools see my whole repository?',
+        'Paste-based tools see only what you paste. Editor-integrated assistants see open files or more. For sensitive code, paste-based review gives you exact control over what leaves your machine.',
+      ],
+    ],
+    cta: ['/tools/code-review', 'Run a free AI code review now'],
+  },
+  {
+    slug: 'ai-code-tools-for-beginners',
+    title: 'AI Code Tools for Beginners: Learn to Code Faster in 2026 | DoAide Code',
+    h1: 'AI code tools for beginners: learn faster without learning less',
+    description:
+      'How beginners and CS students should use AI code tools in 2026: explain-first workflows, using review as a tutor, generating tests to understand edge cases — and the habits that keep you learning.',
+    updated: '2026-10-22',
+    intro: `<p>Every beginner now codes next to an AI. The difference between the students who level up fast and the ones who stall is <em>how</em> they use it: as a tutor that explains and checks, or as a vending machine that dispenses homework. This guide is the tutor setup — a set of free, no-sign-up tools and the habits that make them teach you, aimed at first-year CS students, self-taught developers and anyone switching careers into code.</p>`,
+    sections: [
+      [
+        'explain-first',
+        'Habit 1: explain before you copy',
+        `<p>Whenever you meet code you didn't write — a tutorial snippet, a Stack Overflow answer, something a chatbot generated — run it through <a href="/tools/explain-code">Explain code</a> before you use it. You get a step-by-step walkthrough: what each part does, why it is there, what the idioms mean.</p>
+<p>This single habit separates learning from copying. Reading explanations of real code teaches you patterns 10× faster than tutorials built on toy examples, because the code in front of you is the code you actually care about. If the explanation contains a term you don't know, that term is your next thing to learn.</p>`,
+      ],
+      [
+        'review-as-tutor',
+        'Habit 2: use code review as a private tutor',
+        `<p>Finished an exercise? It works? You are not done. Paste it into the <a href="/tools/code-review">AI code review</a> and read the findings. Working code that a reviewer would tear apart is the default state of beginner code — unhandled empty inputs, variables named <code>data2</code>, the same logic pasted three times.</p>
+<p>The review tells you what a senior engineer would say, with the fix. Two rules make it a tutor instead of a crutch:</p>
+<ul>
+<li><strong>Fix each finding yourself</strong>, by hand, before re-running the review. The re-run is your exam.</li>
+<li><strong>Track your repeat offenders.</strong> Flagged three times for missing error handling? That is your curriculum talking.</li>
+</ul>
+<p>When a finding confuses you, run <a href="/tools/find-bugs">Find bugs</a> on the same code — seeing the input that breaks your function is the most convincing teacher there is.</p>`,
+      ],
+      [
+        'tests-teach',
+        'Habit 3: generate tests to discover edge cases',
+        `<p>Beginners test with one happy input. The <a href="/tools/generate-tests">unit test generator</a> shows you what testing actually means: paste your function and look at what comes back — empty lists, zero, negatives, huge inputs, wrong types. Those are the edge cases experienced developers check by reflex, and reading generated suites is how the reflex forms.</p>
+<p>Run the tests. When one fails, you have found a real bug in code you believed worked — the single most educational moment programming offers.</p>`,
+      ],
+      [
+        'utilities',
+        'The non-AI utilities you should know on day one',
+        `<ul>
+<li><a href="/tools/json-formatter">JSON formatter</a> — the first time an API returns a wall of JSON, paste it here and explore it as a tree.</li>
+<li><a href="/tools/diff-checker">Diff checker</a> — "what did I change since it last worked?" answered visually.</li>
+<li><a href="/tools/regex-tester">Regex tester</a> — regex is unlearnable without live feedback; this gives you matches as you type.</li>
+<li><a href="/tools/code-formatter">Formatter</a> — consistent indentation makes bugs visible. Format before you debug.</li>
+</ul>
+<p>These run entirely in your browser — nothing is uploaded — and they are the same category of tool you will use daily in your first job.</p>`,
+      ],
+      [
+        'honest-use',
+        'Using AI honestly (assignments, interviews, your own brain)',
+        `<p>Three lines worth drawing for yourself:</p>
+<ul>
+<li><strong>Assignments:</strong> check your institution's policy. A safe default: write the solution yourself, then use review and explain tools to improve it — and be ready to explain every line in a viva, because "the AI wrote it" fails vivas.</li>
+<li><strong>Interviews:</strong> you will not have AI in most interviews. Practice solving first and reviewing after, so the solving muscle grows.</li>
+<li><strong>The 15-minute rule:</strong> struggle with a bug for 15 minutes before asking the AI. Struggle is where learning happens; the AI's job is to cap it, not to replace it.</li>
+</ul>`,
+      ],
+    ],
+    faqs: [
+      [
+        'Should beginners use AI coding tools or learn without them?',
+        'Use them — but as a tutor, not a vending machine. Explain code before copying it, review your own solutions after they work, and fix findings by hand. Learners who use AI to understand code progress faster than those who avoid it or those who paste its output unread.',
+      ],
+      [
+        'Which free AI tools should a CS student start with?',
+        'Three cover most of it: Explain code for anything you read, AI code review for everything you write, and the unit test generator to learn edge-case thinking. All are free without sign-up at code.doaide.com/tools.',
+      ],
+      [
+        'Will using AI tools make me a worse programmer?',
+        'Only if you let them do the thinking. The risk is real for pure code generation; it is near zero for explain/review/test workflows, which add feedback to code you wrote yourself — the same loop a human mentor provides.',
+      ],
+      [
+        'Is it cheating to use AI tools for college assignments?',
+        'Policies differ — check yours. Using AI to explain concepts and review your own work is usually fine; submitting generated solutions as your own usually is not, and it collapses in any viva. When in doubt, ask the instructor.',
+      ],
+    ],
+    cta: ['/tools/explain-code', 'Start with Explain code — free'],
+  },
 ]
