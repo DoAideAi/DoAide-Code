@@ -11,6 +11,13 @@ export const initialChat = {
   models: null,
 }
 
+// A message without its draft: the local model's unchecked attempt, replaced by the answer.
+function withoutDraft(m) {
+  if (!('draft' in m)) return m
+  const { draft: _draft, ...rest } = m
+  return rest
+}
+
 // Pure reducer for server events, kept separate from the store so it is easy to test.
 export function applyEvent(state, event) {
   switch (event.type) {
@@ -36,7 +43,15 @@ export function applyEvent(state, event) {
       return {
         ...state,
         messages: state.messages.map((m) =>
-          m.id === event.id ? { ...m, content: m.content + event.text } : m,
+          m.id === event.id ? { ...withoutDraft(m), content: m.content + event.text } : m,
+        ),
+      }
+    case 'draft':
+      // The free local attempt streaming in while it is checked; `clear` when it was escalated.
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.id === event.id ? (event.clear ? withoutDraft(m) : { ...m, draft: (m.draft ?? '') + event.text }) : m,
         ),
       }
     case 'done':
@@ -45,7 +60,7 @@ export function applyEvent(state, event) {
         messages: state.messages.map((m) =>
           m.id === event.id
             ? {
-                ...m,
+                ...withoutDraft(m),
                 content: event.content,
                 status: event.status,
                 role: event.role ?? m.role,

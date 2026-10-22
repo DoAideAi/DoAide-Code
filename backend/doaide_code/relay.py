@@ -22,7 +22,7 @@ from typing import Any, Protocol
 from .chat import HISTORY_TURNS, public_message
 from .commands import is_command, is_models_command
 from .db import Store
-from .sync import SyncHub
+from .sync import SyncHub, draft_event
 
 log = logging.getLogger(__name__)
 
@@ -323,6 +323,8 @@ class RelayService:
         if kind == "delta" and isinstance(event.get("text"), str):
             self._partial[user_email] = self._partial.get(user_email, "") + event["text"]
             await self.hub.publish(user_email, {"type": "delta", "id": job_id, "text": event["text"]})
+        elif kind == "draft" and isinstance(event.get("text"), str):
+            await self.hub.publish(user_email, draft_event(job_id, None if event.get("clear") else event["text"]))
         elif kind == "done":
             status = str(event["status"]) if event.get("status") in FINAL_STATUSES else "error"
             content = event["content"] if isinstance(event.get("content"), str) else ""
@@ -375,6 +377,8 @@ class RelayService:
             await self._update_changes(user_email, event)
         elif kind == "delta" and isinstance(event.get("text"), str) and self._owned(user_email, str(event.get("id"))):
             await self.hub.publish(user_email, {"type": "delta", "id": event["id"], "text": event["text"]})
+        elif kind == "draft" and isinstance(event.get("text"), str) and self._owned(user_email, str(event.get("id"))):
+            await self.hub.publish(user_email, draft_event(str(event["id"]), None if event.get("clear") else event["text"]))
         elif kind == "message" and isinstance(message := event.get("message"), dict):
             message_id, content = str(message.get("id")), message.get("content")
             role = message.get("role") if message.get("role") in {"user", "assistant", "system"} else None

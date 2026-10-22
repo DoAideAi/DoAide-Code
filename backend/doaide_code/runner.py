@@ -190,12 +190,16 @@ async def run_job(
     *,
     project: str | None = None,
     source: str = "chat",
+    on_draft: Callable[[str | None], Awaitable[None]] | None = None,
 ) -> Outcome:
     """Answer one prompt; models are always chosen by routing (try free first, then escalate).
-    The route records how long the whole task took, for the model comparison (dashboard.py)."""
+    The route records how long the whole task took, for the model comparison (dashboard.py).
+
+    `on_draft` gets the buffered local attempt as it streams (None: discard the draft, it is
+    being escalated), so the user sees progress before it passes its checks."""
     started = time.monotonic()
     try:
-        return await _run_job(router, store, job, outcome, on_delta, project=project, source=source)
+        return await _run_job(router, store, job, outcome, on_delta, project=project, source=source, on_draft=on_draft)
     finally:
         if outcome.route is not None:
             outcome.route["elapsed_ms"] = _ms(started)
@@ -211,6 +215,7 @@ async def _run_job(
     *,
     project: str | None,
     source: str,
+    on_draft: Callable[[str | None], Awaitable[None]] | None = None,
 ) -> Outcome:
     # 1. Reading a file or listing a folder needs no model at all, and questions about DoAide
     # itself (who it is, what it can do, whether it can read your files, which models it has) are
@@ -324,13 +329,14 @@ async def _run_job(
         outcome.content = ""
         try:
             used, run = await _drain_resumable(
-                executor, run, fresh, outcome, store, source, streamed, _watch(outcome) if trial else on_delta
+                executor, run, fresh, outcome, store, source, streamed, _watch(outcome, on_draft) if trial else on_delta
             )
         except _Abandoned as exc:
             store.record_executor(executor.name, ok=True, elapsed_ms=_ms(started))
             log.info("stopped %s early: %s", executor.name, exc.reason)
             escalated = _escalated_from(executor, None, exc.reason)
             outcome.content = previous
+            await _discard(on_draft)
             continue
         except ExecutorError as exc:
             store.record_executor(executor.name, ok=False, elapsed_ms=_ms(started))
@@ -339,6 +345,7 @@ async def _run_job(
             if trial:
                 escalated = _escalated_from(executor, None, f"it failed: {exc}")
                 outcome.content = previous
+                await _discard(on_draft)
                 continue
             if streamed:
                 outcome.content += f"\n\n[stopped: {exc}]"
@@ -378,6 +385,7 @@ async def _run_job(
                 escalated = _escalated_from(executor, used, problem)
                 held = (outcome.content, executor.name, outcome.route, code_checks)
                 outcome.content, outcome.status = previous, "error"
+                await _discard(on_draft)
                 continue
             await on_delta(outcome.content)
 
@@ -517,15 +525,26 @@ class _Abandoned(Exception):
         self.reason = reason
 
 
-def _watch(outcome: Outcome) -> Callable[[str], Awaitable[None]]:
-    """Delta sink for a buffered local attempt: nothing reaches the user until it passes, and
-    the attempt is stopped as soon as it shows a problem no retry would fix."""
+def _watch(
+    outcome: Outcome, on_draft: Callable[[str | None], Awaitable[None]] | None = None
+) -> Callable[[str], Awaitable[None]]:
+    """Delta sink for a buffered local attempt: nothing reaches the answer until it passes (only
+    the draft, to `on_draft`), and the attempt is stopped as soon as it shows a problem no retry
+    would fix."""
 
-    async def sink(_chunk: str) -> None:
+    async def sink(chunk: str) -> None:
         if len(outcome.content) <= 700 and (reason := early_problem(outcome.content)):
             raise _Abandoned(reason)
+        if on_draft is not None:
+            await on_draft(chunk)
 
     return sink
+
+
+async def _discard(on_draft: Callable[[str | None], Awaitable[None]] | None) -> None:
+    """Tell the UI the draft it showed is not the answer (it is being escalated)."""
+    if on_draft is not None:
+        await on_draft(None)
 
 
 async def _second_try(

@@ -49,7 +49,14 @@ class SyncHub:
 
 # Local chat events the hub mirrors for the user's other devices. A snapshot only happens on /new
 # (the conversation was cleared), so it travels as a small "cleared" event.
-MIRRORED = {"message", "delta", "done", "changes", "project", "status"}
+MIRRORED = {"message", "delta", "draft", "done", "changes", "project", "status"}
+
+
+def draft_event(message_id: str, chunk: str | None) -> dict[str, Any]:
+    """A chunk of the local model's draft (shown while it is checked), or None to drop it."""
+    if chunk is None:
+        return {"type": "draft", "id": message_id, "text": "", "clear": True}
+    return {"type": "draft", "id": message_id, "text": chunk}
 
 
 class MirrorHub(SyncHub):

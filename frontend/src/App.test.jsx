@@ -367,6 +367,16 @@ describe('Claude Code activity and diff previews', () => {
     expect(screen.getByTestId('working').textContent).toContain('Working on your laptop')
   })
 
+  it('shows the local draft faded while it is checked', async () => {
+    await boot(false, {
+      messages: [{ id: 'r', role: 'assistant', content: '', draft: 'It picks the model.', status: 'streaming', created_at: 0 }],
+    })
+    expect(screen.getByTestId('draft').textContent).toContain('It picks the model.')
+    expect(screen.getByTestId('draft').textContent).toContain('Checking this answer')
+    expect(screen.queryByTestId('working')).toBeNull()
+    expect(screen.getByTestId('reply-status').textContent).toBe('Checking…')
+  })
+
   it('shows each reply as a bubble with its progress in a few words', async () => {
     await boot(false, {
       messages: [

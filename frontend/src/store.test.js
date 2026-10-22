@@ -26,6 +26,22 @@ describe('applyEvent', () => {
     expect(s.messages[0]).toMatchObject({ content: 'Hello!', status: 'done' })
   })
 
+  it('streams a draft, drops it when cleared, and replaces it with the answer', () => {
+    let s = applyEvent(initialChat, { type: 'message', message: msg('a', 'assistant', '', 'streaming') })
+    s = applyEvent(s, { type: 'draft', id: 'a', text: 'Try ' })
+    s = applyEvent(s, { type: 'draft', id: 'a', text: 'this' })
+    expect(s.messages[0]).toMatchObject({ content: '', draft: 'Try this' })
+    s = applyEvent(s, { type: 'draft', id: 'a', text: '', clear: true })
+    expect('draft' in s.messages[0]).toBe(false)
+    s = applyEvent(s, { type: 'draft', id: 'a', text: 'Again' })
+    s = applyEvent(s, { type: 'delta', id: 'a', text: 'Answer' })
+    expect(s.messages[0].content).toBe('Answer')
+    expect('draft' in s.messages[0]).toBe(false)
+    s = applyEvent(s, { type: 'draft', id: 'a', text: 'late' })
+    s = applyEvent(s, { type: 'done', id: 'a', status: 'done', content: 'Answer' })
+    expect('draft' in s.messages[0]).toBe(false)
+  })
+
   it('does not duplicate a repeated message event', () => {
     let s = applyEvent(initialChat, { type: 'message', message: msg('a', 'user', 'x') })
     s = applyEvent(s, { type: 'message', message: msg('a', 'user', 'x') })

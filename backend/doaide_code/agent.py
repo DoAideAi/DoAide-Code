@@ -33,7 +33,7 @@ from .files import FileAccessError, list_dir, read_file
 from .mcp_server import LaptopTools, handle_relayed
 from .router import RouterBrain
 from .runner import Outcome, build_router, run_job
-from .sync import MirrorHub
+from .sync import MirrorHub, draft_event
 from .workspace import DEFAULT_WORKSPACE, working_root
 
 log = logging.getLogger(__name__)
@@ -223,6 +223,11 @@ class LaptopAgent:
             if self.local is not None:
                 await self.local.publish_local(self.owner, {"type": "delta", "id": job_id, "text": chunk})
 
+        async def on_draft(chunk: str | None) -> None:
+            await send(draft_event(job_id, chunk))
+            if self.local is not None:
+                await self.local.publish_local(self.owner, draft_event(job_id, chunk))
+
         try:
             await run_job(
                 self.router,
@@ -231,6 +236,7 @@ class LaptopAgent:
                 outcome,
                 on_delta,
                 project=project["name"] if project else None,
+                on_draft=on_draft,
             )
         except asyncio.CancelledError:
             outcome.status = "stopped"

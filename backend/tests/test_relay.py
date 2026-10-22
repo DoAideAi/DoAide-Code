@@ -191,3 +191,20 @@ def test_agent_endpoints_absent_in_local_mode(client, token):
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect(f"/agent?token={token}") as ws:
             ws.receive_json()
+
+
+def test_drafts_from_the_laptop_reach_the_browser(hub, token, agent_token):
+    with hub.websocket_connect(f"/ws?token={token}") as browser:
+        browser.receive_json()
+        browser.send_json({"type": "send", "text": "a question"})
+        drain_until(browser, "status")
+        with hub.websocket_connect(f"/agent?token={agent_token}") as laptop:
+            job = laptop.receive_json()
+            laptop.send_json({"type": "draft", "id": job["id"], "text": "Thinking"})
+            laptop.send_json({"type": "draft", "id": job["id"], "text": "", "clear": True})
+            laptop.send_json({"type": "done", "id": job["id"], "status": "done", "content": "Answer"})
+            drafts = [e for e in drain_until(browser, "done") if e["type"] == "draft"]
+    assert drafts == [
+        {"type": "draft", "id": job["id"], "text": "Thinking"},
+        {"type": "draft", "id": job["id"], "text": "", "clear": True},
+    ]

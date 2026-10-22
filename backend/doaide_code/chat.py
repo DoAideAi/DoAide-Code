@@ -15,7 +15,7 @@ from .executors import Job, Turn
 from .router import RouterBrain
 from .history import HISTORY_MESSAGES
 from .runner import Outcome, run_job
-from .sync import SyncHub
+from .sync import SyncHub, draft_event
 from .workspace import DEFAULT_WORKSPACE, working_root
 
 # Messages sent with each job; runner.py fits them to each model (history.py).
@@ -154,6 +154,9 @@ class ChatService:
         async def on_delta(chunk: str) -> None:
             await self.hub.publish(user_email, {"type": "delta", "id": reply_id, "text": chunk})
 
+        async def on_draft(chunk: str | None) -> None:
+            await self.hub.publish(user_email, draft_event(reply_id, chunk))
+
         try:
             await run_job(
                 self.router,
@@ -162,6 +165,7 @@ class ChatService:
                 outcome,
                 on_delta,
                 project=project["name"] if project else None,
+                on_draft=on_draft,
             )
         except asyncio.CancelledError:
             outcome.status = "stopped"

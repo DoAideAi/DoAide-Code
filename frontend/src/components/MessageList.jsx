@@ -297,7 +297,10 @@ function Avatar() {
 
 // The reply's progress in a few words: working, done, stopped or failed; failed checks say "needs a look".
 export function replyStatus(message) {
-  if (message.status === 'streaming') return { label: message.content ? 'Writing…' : 'Working…', tone: 'text-sky-300' }
+  if (message.status === 'streaming') {
+    const label = message.content ? 'Writing…' : message.draft ? 'Checking…' : 'Working…'
+    return { label, tone: 'text-sky-300' }
+  }
   if (message.status === 'error') return { label: 'Couldn’t finish', tone: 'text-red-300' }
   if (message.status === 'stopped') return { label: 'Stopped', tone: 'text-zinc-400' }
   if ((message.meta?.checks?.items ?? []).some((c) => !c.ok)) return { label: 'Needs a look', tone: 'text-amber-300' }
@@ -337,7 +340,17 @@ function Reply({ message, onRetry }) {
             error ? 'bg-red-500/10 text-red-200' : 'bg-zinc-800/80 text-zinc-100'
           }`}
         >
-          {streaming && !message.content && (
+          {streaming && !message.content && message.draft && (
+            // The local model's attempt as it streams: shown faded until it passes its checks.
+            <div data-testid="draft" className="opacity-60">
+              <Body content={message.draft} />
+              <div className="mt-1 text-xs text-zinc-400">
+                Checking this answer…
+                <Elapsed since={message.created_at} />
+              </div>
+            </div>
+          )}
+          {streaming && !message.content && !message.draft && (
             <div className="flex flex-col gap-0.5">
               <TypingDots />
               <div data-testid="working" className="text-xs text-zinc-400">
