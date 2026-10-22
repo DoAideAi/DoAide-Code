@@ -30,7 +30,7 @@ from .detect import format_report, same_report
 from .config import Settings
 from .db import Store
 from .executors import Job, Turn
-from .files import FileAccessError, list_dir, read_file
+from .files import FileAccessError, find_files, list_dir, read_file
 from .mcp_server import LaptopTools, handle_relayed
 from .router import PIN_KEY, RouterBrain, model_command
 from .runner import Outcome, build_router, run_job
@@ -163,6 +163,8 @@ class LaptopAgent:
                 result = await asyncio.to_thread(list_dir, root, rel)
             elif message.get("method") == "read_file":
                 result = await asyncio.to_thread(read_file, root, rel)
+            elif message.get("method") == "find_files":
+                result = await asyncio.to_thread(find_files, root, str(params.get("query") or ""))
             else:
                 return {"error": "Unknown request", "status": 400}
         except FileAccessError as exc:

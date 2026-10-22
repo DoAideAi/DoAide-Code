@@ -153,6 +153,11 @@ export function fetchFiles(token, path = '') {
   return get(`/api/files?path=${encodeURIComponent(path)}`, token)
 }
 
+// Files whose path matches `query`, best first: { files: [paths] } (the @ picker).
+export function findFiles(token, query) {
+  return get(`/api/files/find?q=${encodeURIComponent(query)}`, token)
+}
+
 export function fetchFile(token, path) {
   return get(`/api/file?path=${encodeURIComponent(path)}`, token)
 }

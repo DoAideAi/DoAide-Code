@@ -31,7 +31,7 @@ from .auth import (
     verify_token,
 )
 from .chat import ChatService
-from .files import FileAccessError, list_dir, read_file
+from .files import FileAccessError, find_files, list_dir, read_file
 from .installer import PLATFORMS, agent_package, build_installer, package_filename
 from .relay import LaptopOffline, RelayService
 from .config import Settings
@@ -340,10 +340,13 @@ def create_app(
 
     # Files (read-only) and laptop settings
 
+    browsers = {"list_files": list_dir, "read_file": read_file, "find_files": find_files}
+
     async def browse(user: User, method: str, rel: str) -> dict:
         if isinstance(chat, RelayService):
             try:
-                answer = await chat.rpc(user.email, method, {"path": rel})
+                params = {"query": rel} if method == "find_files" else {"path": rel}
+                answer = await chat.rpc(user.email, method, params)
             except LaptopOffline as exc:
                 raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Your laptop is offline") from exc
             if "error" in answer:
@@ -351,7 +354,7 @@ def create_app(
             return answer.get("result") or {}
         root, label = working_root(store, user.email, settings.workspace)
         try:
-            result = (list_dir if method == "list_files" else read_file)(root, rel)
+            result = await asyncio.to_thread(browsers[method], root, rel)
         except FileAccessError as exc:
             raise HTTPException(exc.status, str(exc)) from exc
         return {**result, "root": label}
@@ -359,6 +362,11 @@ def create_app(
     @app.get("/api/files")
     async def files(path: str = "", user: User = Depends(current_user)) -> dict:
         return await browse(user, "list_files", path)
+
+    @app.get("/api/files/find")
+    async def find(q: str = "", user: User = Depends(current_user)) -> dict:
+        """Files whose path matches `q`, best first: the message box's @ picker."""
+        return await browse(user, "find_files", q)
 
     @app.get("/api/file")
     async def file(path: str, user: User = Depends(current_user)) -> dict:

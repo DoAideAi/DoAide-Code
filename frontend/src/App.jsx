@@ -11,6 +11,7 @@ import {
   fetchModelComparison,
   fetchFile,
   fetchFiles,
+  findFiles,
   fetchProjects,
   searchConversations,
   fetchSessions,
@@ -171,6 +172,7 @@ export default function App() {
   const [openFile, setOpenFile] = useState(null)
   const loadFiles = useCallback((path) => fetchFiles(token, path), [token])
   const loadFile = useCallback((path) => fetchFile(token, path), [token])
+  const findProjectFiles = useCallback((query) => findFiles(token, query), [token])
   // Its path belongs to the old project.
   useEffect(() => setOpenFile(null), [project])
 
@@ -504,6 +506,7 @@ export default function App() {
             onStop={() => socket.current?.send({ type: 'stop' })}
             sessionId={sessionId}
             prefill={prefill}
+            findFiles={online ? findProjectFiles : null}
             models={online ? models : null}
             onChooseModel={chooseModel}
           />

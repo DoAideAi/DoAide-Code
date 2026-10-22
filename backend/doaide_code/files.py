@@ -6,6 +6,7 @@ resolved before checking, so `..` and symlinks cannot escape the root.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -69,6 +70,51 @@ def read_file(root: Path, rel: str) -> dict[str, Any]:
         "truncated": size > MAX_BYTES,
         "content": data.decode("utf-8", errors="replace"),
     }
+
+
+# Enough for any real project; a walk of a home folder by mistake stops here.
+MAX_WALK = 50_000
+
+
+def _rank(rel: str, query: str) -> int | None:
+    """Lower is better; None when `rel` does not match. The file name counts more than the folders,
+    and a prefix more than a match inside; letters in order ("rnr" for runner.py) match last."""
+    path, name = rel.lower(), rel.rsplit("/", 1)[-1].lower()
+    if not query:
+        return 0
+    if name == query or name.rsplit(".", 1)[0] == query:
+        return 0
+    if name.startswith(query):
+        return 1
+    if query in name:
+        return 2
+    if query in path:
+        return 3
+    it = iter(path)
+    return 4 if all(ch in it for ch in query) else None
+
+
+def find_files(root: Path, query: str = "", limit: int = 20) -> dict[str, Any]:
+    """Project files matching `query` (for @ mentions), best first, then shortest path."""
+    root = resolve_in_root(root, "")
+    query = query.strip().lower().lstrip("./")
+    found: list[tuple[int, int, str]] = []
+    seen = 0
+    for folder, dirs, names in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in IGNORED and not d.startswith("."))
+        base = Path(folder).relative_to(root).as_posix()
+        for name in names:
+            if name in IGNORED:
+                continue
+            rel = name if base == "." else f"{base}/{name}"
+            rank = _rank(rel, query)
+            if rank is not None:
+                found.append((rank, len(rel), rel))
+            seen += 1
+        if seen >= MAX_WALK:
+            break
+    found.sort()
+    return {"query": query, "files": [rel for _, _, rel in found[:limit]]}
 
 
 def _size(path: Path) -> int | None:

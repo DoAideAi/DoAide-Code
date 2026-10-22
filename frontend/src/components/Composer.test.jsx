@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Composer, { suggestionsFor } from './Composer.jsx'
 
@@ -97,5 +97,52 @@ describe('suggestions', () => {
     expect(box.value).toBe('ex')
     fireEvent.keyDown(box, { key: 'Escape' })
     expect(box.value).toBe('')
+  })
+})
+
+describe('@ file mentions', () => {
+  it('finds the mention at the caret, not in an email address', async () => {
+    const { mentionAt, insertMention } = await import('./Composer.jsx')
+    expect(mentionAt('look at @src/ru', 15)).toEqual({ start: 8, query: 'src/ru' })
+    expect(mentionAt('@', 1)).toEqual({ start: 0, query: '' })
+    expect(mentionAt('mail me@x.com', 13)).toBeNull()
+    expect(mentionAt('@a.py done', 10)).toBeNull()
+    expect(insertMention('fix @ru now', 7, { start: 4, query: 'ru' }, 'src/runner.py')).toEqual({
+      text: 'fix @src/runner.py now',
+      caret: 19,
+    })
+  })
+
+  it('typing @ offers project files; Enter inserts the picked one', async () => {
+    vi.useFakeTimers()
+    const findFiles = vi.fn(async (q) => ({ files: q === 'ru' ? ['src/runner.py', 'run.py'] : [] }))
+    const onSend = vi.fn(() => true)
+    render(<Composer busy={false} disabled={false} onSend={onSend} onStop={() => {}} findFiles={findFiles} />)
+    const box = screen.getByLabelText('Message')
+    expect(box.placeholder).toMatch(/@ to mention a file/)
+    fireEvent.change(box, { target: { value: 'explain @ru', selectionStart: 11 } })
+    await act(async () => vi.advanceTimersByTime(150))
+    vi.useRealTimers()
+    expect(findFiles).toHaveBeenCalledWith('ru')
+    const list = screen.getByTestId('file-mentions')
+    expect(list.textContent).toContain('runner.py')
+    fireEvent.keyDown(box, { key: 'ArrowDown' })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(box.value).toBe('explain @run.py ')
+    expect(screen.queryByTestId('file-mentions')).toBeNull()
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it('Escape closes the picker and keeps the text', async () => {
+    vi.useFakeTimers()
+    render(<Composer busy={false} disabled={false} onSend={() => true} onStop={() => {}} findFiles={async () => ({ files: ['a.py'] })} />)
+    const box = screen.getByLabelText('Message')
+    fireEvent.change(box, { target: { value: '@a', selectionStart: 2 } })
+    await act(async () => vi.advanceTimersByTime(150))
+    vi.useRealTimers()
+    expect(screen.getByTestId('file-mentions')).toBeTruthy()
+    fireEvent.keyDown(box, { key: 'Escape' })
+    expect(screen.queryByTestId('file-mentions')).toBeNull()
+    expect(box.value).toBe('@a')
   })
 })
