@@ -57,8 +57,28 @@ export function jumpTo(id) {
   document.getElementById(`msg-${id}`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
 }
 
-export default function SearchBar({ messages, open, onClose, hasMore = false }) {
+// Results from every conversation (`searchAll`), grouped by conversation, the open one first.
+export function groupResults(results, currentId) {
+  const groups = new Map()
+  for (const r of results) {
+    if (!groups.has(r.session_id)) {
+      groups.set(r.session_id, { id: r.session_id, title: r.session_title || 'Untitled conversation', current: r.session_id === currentId, results: [] })
+    }
+    groups.get(r.session_id).results.push(r)
+  }
+  return [...groups.values()].sort((a, b) => b.current - a.current)
+}
+
+function ResultList({ results, query, onPick }) {
+  return results.map((m) => <SearchResult key={m.id} message={m} query={query} onClick={() => onPick(m)} />)
+}
+
+// The search box under the header. With `searchAll(query)` it searches every conversation on the
+// server and `onOpen(sessionId, messageId)` opens a result; without it (or if the server search
+// fails) it searches the messages loaded here.
+export default function SearchBar({ messages, open, onClose, hasMore = false, searchAll = null, sessionId = null, onOpen = null }) {
   const [query, setQuery] = useState('')
+  const [remote, setRemote] = useState({ term: '', results: null, failed: false })
   const inputRef = useRef(null)
 
   useEffect(() => {
@@ -76,11 +96,28 @@ export default function SearchBar({ messages, open, onClose, hasMore = false }) 
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
-  if (!open) return null
-
   // Surrounding spaces are not part of what was asked: "fix " still finds "fix".
   const term = query.trim()
-  const results = term.length >= 2
+  useEffect(() => {
+    if (!open || !searchAll || term.length < 2) return undefined
+    let active = true
+    // Wait for a pause in typing before asking the server.
+    const timer = setTimeout(() => {
+      searchAll(term).then(
+        (body) => active && setRemote({ term, results: body.results ?? [], failed: false }),
+        () => active && setRemote({ term, results: null, failed: true }),
+      )
+    }, 250)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [open, searchAll, term])
+
+  if (!open) return null
+
+  const everywhere = searchAll && !remote.failed
+  const local = term.length >= 2
     ? messages.filter(
         (m) =>
           m.content &&
@@ -88,6 +125,18 @@ export default function SearchBar({ messages, open, onClose, hasMore = false }) 
           m.content.toLowerCase().includes(term.toLowerCase()),
       )
     : []
+  const fresh = remote.term === term ? remote.results : null
+  const groups = everywhere && fresh ? groupResults(fresh, sessionId) : null
+  const count = everywhere ? fresh?.length ?? 0 : local.length
+  const pickLocal = (m) => {
+    jumpTo(m.id)
+    onClose()
+  }
+  const pickRemote = (m) => {
+    onClose()
+    if (onOpen) onOpen(m.session_id, m.id)
+    else jumpTo(m.id)
+  }
 
   return (
     <div data-testid="search-bar" className="border-b border-line/[0.06] bg-surface/95 backdrop-blur">
@@ -102,12 +151,13 @@ export default function SearchBar({ messages, open, onClose, hasMore = false }) 
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search in conversation..."
-          className="flex-1 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
+          placeholder={searchAll ? 'Search all conversations...' : 'Search in conversation...'}
+          className="flex-1 bg-transparent text-base text-zinc-100 placeholder:text-zinc-500 focus:outline-none sm:text-sm"
         />
         <button
           type="button"
           data-testid="search-close"
+          aria-label="Close search"
           onClick={onClose}
           className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100"
         >
@@ -117,28 +167,37 @@ export default function SearchBar({ messages, open, onClose, hasMore = false }) 
         </button>
       </div>
       {term.length >= 2 && (
-        <div className="mx-auto max-h-64 max-w-2xl overflow-y-auto px-2 pb-2">
-          {results.length === 0 ? (
+        <div className="mx-auto max-h-[60vh] max-w-2xl overflow-y-auto px-2 pb-2 sm:max-h-80">
+          {everywhere && !fresh ? (
+            <div className="py-4 text-center text-xs text-zinc-500">Searching…</div>
+          ) : count === 0 ? (
             <div className="py-4 text-center text-xs text-zinc-500">No matches found</div>
+          ) : groups ? (
+            groups.map((g) => (
+              <section key={g.id} data-testid={`search-group-${g.id}`} className="pb-1">
+                <h3 className="truncate px-3 pb-0.5 pt-2 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                  {g.current ? 'This conversation' : g.title}
+                </h3>
+                <div className="space-y-0.5">
+                  <ResultList results={g.results} query={term} onPick={pickRemote} />
+                </div>
+              </section>
+            ))
           ) : (
             <div className="space-y-0.5">
-              {results.map((m) => (
-                <SearchResult
-                  key={m.id}
-                  message={m}
-                  query={term}
-                  onClick={() => {
-                    jumpTo(m.id)
-                    onClose()
-                  }}
-                />
-              ))}
+              <ResultList results={local} query={term} onPick={pickLocal} />
             </div>
           )}
-          <div className="py-1 text-center text-[11px] text-zinc-500">
-            {results.length} result{results.length !== 1 ? 's' : ''}
-            {hasMore && ' in the loaded messages; load earlier ones to search them too'}
-          </div>
+          {(!everywhere || (fresh && count > 0)) && (
+            <div className="py-1 text-center text-[11px] text-zinc-500">
+              {count} result{count !== 1 ? 's' : ''}
+              {everywhere
+                ? ` in ${groups.length} conversation${groups.length !== 1 ? 's' : ''}`
+                : remote.failed
+                  ? ' in this conversation (searching all conversations failed)'
+                  : hasMore && ' in the loaded messages; load earlier ones to search them too'}
+            </div>
+          )}
         </div>
       )}
     </div>

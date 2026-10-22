@@ -157,6 +157,12 @@ export function fetchFile(token, path) {
   return get(`/api/file?path=${encodeURIComponent(path)}`, token)
 }
 
+// Messages containing `query` in any conversation, newest first: { results: [{ id, session_id,
+// session_title, role, content (a snippet), created_at }] }.
+export function searchConversations(token, query) {
+  return get(`/api/search?q=${encodeURIComponent(query)}`, token)
+}
+
 // Multi-conversation support
 export function fetchSessions(token, limit = 50) {
   return get(`/api/sessions?limit=${limit}`, token)

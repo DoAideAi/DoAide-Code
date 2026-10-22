@@ -101,3 +101,43 @@ describe('SearchBar', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 })
+
+describe('searching all conversations', () => {
+  const results = [
+    { id: 'r1', session_id: 's2', session_title: 'Old chat', role: 'user', content: 'login broke', created_at: 2 },
+    { id: 'r2', session_id: 's1', session_title: 'Now', role: 'assistant', content: 'fixed login', created_at: 1 },
+  ]
+
+  it('groups results by conversation, the open one first, and opens the picked one', async () => {
+    const searchAll = vi.fn(async () => ({ results }))
+    const onOpen = vi.fn()
+    const onClose = vi.fn()
+    render(<SearchBar messages={[]} open onClose={onClose} searchAll={searchAll} sessionId="s1" onOpen={onOpen} />)
+    expect(screen.getByTestId('search-input').placeholder).toBe('Search all conversations...')
+    fireEvent.change(screen.getByTestId('search-input'), { target: { value: ' login ' } })
+    expect(await screen.findByText('This conversation', {}, { timeout: 1000 })).toBeTruthy()
+    expect(searchAll).toHaveBeenCalledWith('login')
+    const headings = [...document.querySelectorAll('h3')].map((h) => h.textContent)
+    expect(headings).toEqual(['This conversation', 'Old chat'])
+    expect(screen.getByText(/2 results in 2 conversations/)).toBeTruthy()
+    fireEvent.click(screen.getByText('broke', { exact: false }))
+    expect(onOpen).toHaveBeenCalledWith('s2', 'r1')
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('falls back to the loaded messages when the server search fails', async () => {
+    const searchAll = vi.fn(async () => {
+      throw new Error('offline')
+    })
+    render(<SearchBar messages={messages} open onClose={() => {}} searchAll={searchAll} sessionId="s1" />)
+    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'login' } })
+    expect(await screen.findByText(/searching all conversations failed/, {}, { timeout: 1000 })).toBeTruthy()
+  })
+
+  it('says when nothing matches anywhere', async () => {
+    render(<SearchBar messages={[]} open onClose={() => {}} searchAll={async () => ({ results: [] })} />)
+    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'zzz' } })
+    expect(await screen.findByText('No matches found', {}, { timeout: 1000 })).toBeTruthy()
+    expect(screen.queryByText(/results in/)).toBeNull()
+  })
+})

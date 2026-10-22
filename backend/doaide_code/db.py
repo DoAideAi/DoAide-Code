@@ -254,6 +254,18 @@ class Store:
             (session_id, f"%{query}%"),
         )
 
+    def search_all(self, user_email: str, query: str, limit: int = 50) -> list[dict[str, Any]]:
+        """The user's messages containing `query` (any case) in every conversation, newest first,
+        with their conversation's title. % and _ in the query are literal."""
+        pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        return self._all(
+            "SELECT m.id, m.session_id, m.role, m.content, m.created_at, s.title AS session_title "
+            "FROM messages m JOIN sessions s ON s.id = m.session_id "
+            "WHERE s.user_email = ? AND m.role IN ('user', 'assistant') AND m.content LIKE ? ESCAPE '\\' "
+            "ORDER BY m.created_at DESC LIMIT ?",
+            (user_email, pattern, limit),
+        )
+
     def update_session(self, session_id: str, *, project_id: int | None = None, title: str | None = None) -> None:
         if project_id is not None:
             self._exec("UPDATE sessions SET project_id = ? WHERE id = ?", (project_id, session_id))
@@ -552,3 +564,13 @@ class Store:
 
     def executor_stats(self) -> list[dict[str, Any]]:
         return self._all("SELECT * FROM executor_stats ORDER BY executor")
+
+
+def snippet(text: str, term: str, before: int = 60, after: int = 100) -> str:
+    """The part of `text` around the first case-insensitive match of `term`, on one line."""
+    at = text.lower().find(term.lower())
+    if at < 0:
+        at = 0
+    start, end = max(0, at - before), min(len(text), at + len(term) + after)
+    middle = " ".join(text[start:end].split())
+    return ("…" if start > 0 else "") + middle + ("…" if end < len(text) else "")

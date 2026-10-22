@@ -36,7 +36,7 @@ from .installer import PLATFORMS, agent_package, build_installer, package_filena
 from .relay import LaptopOffline, RelayService
 from .config import Settings
 from .dashboard import model_comparison, usage_report
-from .db import Store
+from .db import Store, snippet
 from .executors import Executor
 from .metrics import summary as metrics_summary
 from .router import RouterBrain
@@ -215,6 +215,16 @@ def create_app(
     async def list_sessions(limit: int = 50, user: User = Depends(current_user)) -> dict:
         sessions = store.list_sessions(user.email, limit)
         return {"sessions": [{"id": s["id"], "title": s["title"], "created_at": s["created_at"], "updated_at": s["updated_at"]} for s in sessions]}
+
+    @app.get("/api/search")
+    async def search(q: str, limit: int = 50, user: User = Depends(current_user)) -> dict:
+        """Messages containing `q` across all of the user's conversations, newest first. Each
+        result carries a snippet around the first match, not the whole message."""
+        term = q.strip()
+        if len(term) < 2:
+            return {"query": term, "results": []}
+        rows = store.search_all(user.email, term, max(1, min(limit, 200)))
+        return {"query": term, "results": [{**r, "content": snippet(r["content"], term)} for r in rows]}
 
     @app.post("/api/sessions")
     async def create_session(user: User = Depends(current_user)) -> dict:

@@ -12,6 +12,7 @@ import {
   fetchFile,
   fetchFiles,
   fetchProjects,
+  searchConversations,
   fetchSessions,
   fetchTaskHistory,
   fetchUsage,
@@ -35,7 +36,7 @@ import LaptopBanner from './components/LaptopBanner.jsx'
 import { NoModelsBanner } from './components/Models.jsx'
 import ModelsPage from './components/ModelsPage.jsx'
 import MessageList, { oldestServerId } from './components/MessageList.jsx'
-import SearchBar from './components/SearchBar.jsx'
+import SearchBar, { jumpTo } from './components/SearchBar.jsx'
 import SetupPage from './components/SetupPage.jsx'
 import SignIn from './components/SignIn.jsx'
 import TopBar from './components/TopBar.jsx'
@@ -225,6 +226,34 @@ export default function App() {
     }
   }, [token, sessionId, sessions, project, apply])
 
+  const searchAll = useCallback((query) => searchConversations(token, query), [token])
+
+  // A search result: open its conversation (if another), load back until the message is there,
+  // then scroll to it.
+  const openSearchResult = useCallback(async (targetSession, messageId) => {
+    if (!token) return
+    try {
+      let { messages: shown, hasMore: more } = useChat.getState()
+      if (targetSession !== sessionId) {
+        const snapshot = await switchSession(token, targetSession)
+        apply(snapshot)
+        shown = snapshot.messages ?? []
+        more = snapshot.has_more
+        loadSessions()
+      }
+      for (let i = 0; i < 20 && more && !shown.some((m) => m.id === messageId); i++) {
+        const page = await fetchEarlierMessages(token, targetSession, oldestServerId(shown), 100)
+        apply({ type: 'earlier', session_id: targetSession, ...page })
+        shown = [...(page.messages ?? []), ...shown]
+        more = page.has_more
+      }
+      // After the new messages are on screen.
+      setTimeout(() => jumpTo(messageId), 80)
+    } catch (err) {
+      apply({ type: 'notice', text: `Couldn't open that conversation: ${err.message}` })
+    }
+  }, [token, sessionId, apply, loadSessions])
+
   const loadEarlier = useCallback(async () => {
     // After Ctrl+L nothing is on screen: the latest page comes back first.
     const before = oldestServerId(messages)
@@ -363,7 +392,19 @@ export default function App() {
         onSwitchProject={online && !busy ? (name) => send(`/switch-project ${name}`) : null}
       />
       {searchOpen && (
-        <SearchBar messages={messages} hasMore={hasMore} open={searchOpen} onClose={() => setSearchOpen(false)} />
+        <SearchBar
+          messages={messages}
+          hasMore={hasMore}
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          searchAll={searchAll}
+          sessionId={sessionId}
+          onOpen={(sid, id) => {
+            setPage(null)
+            setOpenFile(null)
+            openSearchResult(sid, id)
+          }}
+        />
       )}
       {page === 'models' && token ? (
         <ModelsPage
