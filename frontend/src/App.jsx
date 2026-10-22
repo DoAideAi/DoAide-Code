@@ -267,6 +267,17 @@ export default function App() {
     }
   }, [token, mode])
 
+  // Sent, and not yet echoed by the server: shows "Sending…" until a message arrives (or the
+  // connection drops, or 20 s pass with nothing, so it can never stick).
+  const [awaiting, setAwaiting] = useState(false)
+  const lastId = messages.at(-1)?.id
+  useEffect(() => setAwaiting(false), [lastId, connection])
+  useEffect(() => {
+    if (!awaiting) return undefined
+    const timer = setTimeout(() => setAwaiting(false), 20_000)
+    return () => clearTimeout(timer)
+  }, [awaiting])
+
   // Busy only while a reply is actually streaming or queued, so a stale status can never leave
   // Stop showing after the answer finished.
   const busy = serverStatus === 'busy' && messages.some((m) => m.status === 'streaming' || m.status === 'queued')
@@ -282,7 +293,11 @@ export default function App() {
   // before the sign-in page).
   if (!token) return <div className="flex h-[100dvh] items-center justify-center text-sm text-zinc-500">Signing in…</div>
 
-  const send = (text) => socket.current?.send({ type: 'send', text }) ?? false
+  const send = (text) => {
+    const sent = socket.current?.send({ type: 'send', text }) ?? false
+    if (sent) setAwaiting(true)
+    return sent
+  }
   const online = connection === 'open'
   return (
     <div className="flex h-[100dvh]">
@@ -350,6 +365,7 @@ export default function App() {
             onRetry={online && !busy ? send : null}
             hasMore={hasMore}
             onLoadEarlier={loadEarlier}
+            pending={awaiting}
           />
           <Composer
             busy={busy}

@@ -509,11 +509,30 @@ function Message({ message, onRetry }) {
     return (
       <div className="flex items-end gap-2">
         <Avatar />
-        <div className="rounded-[20px] rounded-bl-md bg-zinc-800/50 px-4 py-2.5 text-sm text-zinc-400">Queued for your laptop…</div>
+        <div role="status" className="flex flex-col gap-0.5 rounded-[20px] rounded-bl-md bg-zinc-800/50 px-4 py-2.5 text-sm text-zinc-400">
+          <TypingDots />
+          <span data-testid="queued">
+            Queued for your laptop…
+            <Elapsed since={message.created_at} />
+          </span>
+        </div>
       </div>
     )
   }
   return <Reply message={message} onRetry={onRetry} />
+}
+
+// Between pressing Send and the server's echo: the message is on its way.
+function Pending() {
+  return (
+    <div className="flex items-end gap-2">
+      <Avatar />
+      <div role="status" data-testid="pending" className="flex flex-col gap-0.5 rounded-[20px] rounded-bl-md bg-zinc-800/50 px-4 py-2.5 text-xs text-zinc-400">
+        <TypingDots />
+        Sending…
+      </div>
+    </div>
+  )
 }
 
 // The prompt a reply answered: the closest user message before it.
@@ -587,7 +606,14 @@ function LoadEarlier({ onLoad }) {
   )
 }
 
-export default function MessageList({ messages, onSend = null, onRetry = null, hasMore = false, onLoadEarlier = null }) {
+export default function MessageList({
+  messages,
+  onSend = null,
+  onRetry = null,
+  hasMore = false,
+  onLoadEarlier = null,
+  pending = false,
+}) {
   const scroller = useRef(null)
   const end = useRef(null)
   const last = messages[messages.length - 1]
@@ -595,7 +621,7 @@ export default function MessageList({ messages, onSend = null, onRetry = null, h
   const fromBottom = useRef(null)
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: 'end' })
-  }, [last?.id, last?.content])
+  }, [last?.id, last?.content, pending])
   useLayoutEffect(() => {
     const el = scroller.current
     if (el && fromBottom.current !== null) el.scrollTop = el.scrollHeight - fromBottom.current
@@ -617,7 +643,7 @@ export default function MessageList({ messages, onSend = null, onRetry = null, h
     <main ref={scroller} className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
       <div className="mx-auto flex max-w-2xl flex-col gap-4 px-3 py-5 text-[15px] sm:px-4">
         {hasMore && onLoadEarlier && <LoadEarlier onLoad={loadEarlier} />}
-        {messages.length === 0 && <Welcome onSend={onSend} />}
+        {messages.length === 0 && !pending && <Welcome onSend={onSend} />}
         {messages.map((m, i) => {
           const prompt = onRetry && m.status === 'error' ? promptFor(messages, i) : null
           return (
@@ -627,6 +653,7 @@ export default function MessageList({ messages, onSend = null, onRetry = null, h
             </div>
           )
         })}
+        {pending && <Pending />}
         <div ref={end} />
       </div>
     </main>

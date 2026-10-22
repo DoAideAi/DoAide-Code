@@ -947,3 +947,36 @@ describe('keyboard shortcuts', () => {
     expect(screen.getByTestId('new-chat').title).toMatch(/New chat \((Ctrl\+|⌘)K\)/)
   })
 })
+
+describe('waiting for a reply', () => {
+  it('shows Sending… from Send until the server echoes the message', async () => {
+    const ws = await boot(true)
+    expect(screen.queryByTestId('pending')).toBeNull()
+    const box = screen.getByLabelText('Message')
+    fireEvent.change(box, { target: { value: 'explain the parser' } })
+    await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
+    expect(ws.sent.at(-1)).toEqual({ type: 'send', text: 'explain the parser' })
+    expect(screen.getByTestId('pending').textContent).toContain('Sending…')
+    await act(async () => ws.emit({ type: 'message', message: { id: 'u9', role: 'user', content: 'explain the parser', status: 'done' } }))
+    expect(screen.queryByTestId('pending')).toBeNull()
+  })
+
+  it('Sending… clears when the connection drops', async () => {
+    const ws = await boot(true)
+    const box = screen.getByLabelText('Message')
+    fireEvent.change(box, { target: { value: 'hello' } })
+    await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
+    expect(screen.getByTestId('pending')).toBeTruthy()
+    await act(async () => ws.drop(1006))
+    expect(screen.queryByTestId('pending')).toBeNull()
+  })
+
+  it('a queued task shows that it is waiting and for how long', async () => {
+    await boot(true, {
+      mode: 'hub',
+      agent_online: false,
+      messages: [{ id: 'q', role: 'assistant', content: '', status: 'queued', created_at: Date.now() / 1000 - 5 }],
+    })
+    expect(screen.getByTestId('queued').textContent).toMatch(/Queued for your laptop… \d+s/)
+  })
+})
