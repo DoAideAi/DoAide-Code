@@ -17,11 +17,12 @@ const ICONS = {
   how: 'M12 18h.01M9.1 9a3 3 0 1 1 4.2 2.7c-.8.4-1.3 1.2-1.3 2.1V14',
   models: 'M4 7h16M4 12h16M4 17h10',
   usage: 'M5 19V11M12 19V5M19 19v-6',
+  refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
 }
 
-function Icon({ name }) {
+function Icon({ name, always = false }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[18px] w-[18px] sm:hidden" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={`h-[18px] w-[18px] ${always ? '' : 'sm:hidden'}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
       <path d={ICONS[name]} />
     </svg>
   )
@@ -49,8 +50,18 @@ function Label({ children }) {
 }
 
 // A chat header: DoAide's avatar with a presence dot, its name and the project; How it works,
-// Models and Usage on the right.
-export default function TopBar({ project, color, busy, models = null, onModels = null, onUsage = null, onHow = null, localUrl = null }) {
+// Models, Usage and a refresh icon (it reloads the page, on phones and desktop) on the right.
+export default function TopBar({
+  project,
+  color,
+  busy,
+  models = null,
+  onModels = null,
+  onUsage = null,
+  onHow = null,
+  localUrl = null,
+  onRefresh = () => window.location.reload(),
+}) {
   const ready = usableTools(models).length
   const presence = busy && color === 'green' ? 'Working…' : PRESENCE[color]
   return (
@@ -105,6 +116,16 @@ export default function TopBar({ project, color, busy, models = null, onModels =
             <Label>Usage</Label>
           </Link>
         )}
+        <button
+          type="button"
+          data-testid="refresh"
+          aria-label="Refresh"
+          title="Refresh"
+          onClick={onRefresh}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100"
+        >
+          <Icon name="refresh" always />
+        </button>
       </div>
     </header>
   )

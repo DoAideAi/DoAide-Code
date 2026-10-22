@@ -189,6 +189,7 @@ describe('App', () => {
     }
     expect(screen.getByTestId('models-toggle').textContent).toBe('Models')
     expect(screen.getByTestId('usage-toggle').textContent).toBe('Usage')
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeTruthy()
   })
 
   it('fills the visible viewport so the input stays on screen on phones', async () => {
