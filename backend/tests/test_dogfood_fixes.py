@@ -96,3 +96,51 @@ def test_a_code_answer_to_a_how_to_question_is_on_topic():
 
     assert off_topic_reason("how do I reverse a list in python?", "Use `items[::-1]` or `items.reverse()`.") is None
     assert off_topic_reason("how do I reverse a list in python?", "I like turtles a lot.") is not None
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "what is MAX_RETRIES used for?",
+        "why does Ranking.render leave out the tree when a file is named?",
+        "which files handle the response cache?",
+    ],
+)
+def test_constants_methods_and_file_lists_are_about_the_project(prompt):
+    from doaide_code.classify import classify_task
+
+    assert classify_task(prompt).about_project
+
+
+def test_general_questions_stay_general():
+    from doaide_code.classify import classify_task
+
+    assert not classify_task("what is a REST API?").about_project
+    assert not classify_task("why is the sky blue?").about_project
+
+
+def test_how_to_questions_are_answered_with_steps_not_edits():
+    from doaide_code.classify import classify_task
+
+    assert classify_task("how do I add a new executor?").kind == "explain"
+    assert classify_task("how can I change the port?").kind == "explain"
+    assert classify_task("add a docstring to log_task").kind == "edit"
+    assert classify_task("how do I fix the login bug in auth.py?").kind != "explain"
+
+
+def test_questions_without_project_files_get_no_file_example_or_file_reminders():
+    from doaide_code.prompts import LIST_REMINDER, LOCAL_REMINDER, WHY_REMINDER, few_shot, local_reminder
+
+    assert few_shot("local", "question", has_context=False) == []
+    assert few_shot("local", "question") != []
+    assert few_shot("local", "edit", has_context=False) != []
+    assert local_reminder("why is the sky blue?", has_context=False) == LOCAL_REMINDER
+    assert local_reminder("why is FOO 3?") == WHY_REMINDER
+    assert local_reminder("which files handle login?") == LIST_REMINDER
+
+
+def test_not_defined_in_the_provided_code_means_files_were_missing():
+    from doaide_code.validate import NEEDS_FILES_REASON
+
+    answer = "The `MAX_RETRIES` variable isn't defined in the provided code. It's unclear what it's used for without more context."
+    assert incomplete_reason(answer, "question") == NEEDS_FILES_REASON

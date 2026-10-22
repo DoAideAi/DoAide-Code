@@ -37,6 +37,10 @@ _NEEDS_FILES = re.compile(
     # then "Other files not shown in the provided snippet."
     r"not (?:shown|visible|included) in the (?:provided |given |shared )?(?:snippet|excerpt|context|code|files?)|"
     r"other (?:files?|parts?|code) (?:are |is )?not (?:shown|visible|included)|i can only see|"
+    # Live (7b, "what is MAX_RETRIES used for?" sent without files): "isn't defined in the provided
+    # code. It's unclear what it's used for without more context."
+    r"(?:isn't|is not|wasn't|was not|aren't|are not) (?:defined|shown|present|found|included) in the (?:provided|given|shown|shared) "
+    r"(?:code|context|files?|snippets?|excerpts?)|without (?:more|further|additional) context|"
     r"(?:limited|partial) view of (?:the|your|this)|only (?:part|some) of the (?:file|code|project|director(?:y|ies)) (?:is|was) (?:shown|provided|visible))",
     re.I,
 )

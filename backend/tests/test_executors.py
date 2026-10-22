@@ -31,7 +31,7 @@ def ollama_transport(models: list[str], chunks: list[str], seen: list[dict]) -> 
 async def test_ollama_streams_chunks_with_history():
     seen: list[dict] = []
     ex = OllamaExecutor("http://ollama", "qwen3-coder", transport=ollama_transport(["qwen3-coder:latest"], ["a", "b"], seen))
-    job = Job("next", history=[Turn("user", "earlier"), Turn("assistant", "reply")])
+    job = Job("next", history=[Turn("user", "earlier"), Turn("assistant", "reply")], context="## File: a.py")
     out = [c async for c in ex.stream(job)]
     assert out[:2] == ["a", "b"]
     # Local tokens are reported at no cost.

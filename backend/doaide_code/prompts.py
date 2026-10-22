@@ -108,14 +108,15 @@ HOWTO_REMINDER = "(Answer in 1-2 short sentences and show the code inline, like 
 HOWTO_QUESTION = re.compile(r"^\s*how\s+(?:do|can|should)\s+(?:i|you|we)\b|^\s*how\s+to\b", re.I)
 
 
-def local_reminder(prompt: str) -> str:
+def local_reminder(prompt: str, has_context: bool = True) -> str:
     """The reminder after a local question: a short list for "which files" questions, the code's
-    own reason for "why" questions, else brevity."""
-    if LIST_QUESTION.search(prompt):
+    own reason for "why" questions, else brevity. Without project files there are no files to list
+    or comments to quote (asked to, the 7b invented a comment)."""
+    if has_context and LIST_QUESTION.search(prompt):
         return LIST_REMINDER
     if HOWTO_QUESTION.search(prompt):
         return HOWTO_REMINDER
-    return WHY_REMINDER if WHY_QUESTION.search(prompt) else LOCAL_REMINDER
+    return WHY_REMINDER if has_context and WHY_QUESTION.search(prompt) else LOCAL_REMINDER
 
 LOCAL_BASE = f"""{IDENTITY}
 {LOCAL_ACCESS}
@@ -190,10 +191,11 @@ def system_prompt(style: str, kind: str = "question") -> str:
     return f"{CODER_SYSTEM_PROMPT}\n\nFor this request: {guidance}"
 
 
-def few_shot(style: str, kind: str) -> list[tuple[str, str]]:
+def few_shot(style: str, kind: str, has_context: bool = True) -> list[tuple[str, str]]:
     """(user, assistant) example turns to put before the real conversation (local models only;
-    none for math, where the example would only be noise)."""
-    if style != "local" or kind == "math":
+    none for math, where the example would only be noise, nor for a question asked without project
+    files: the 7b took the example's file for one of the user's and answered "app/cache.py")."""
+    if style != "local" or kind == "math" or kind not in FEW_SHOTS and not has_context:
         return []
     return [FEW_SHOTS.get(kind, FEW_SHOT_ANSWER)]
 

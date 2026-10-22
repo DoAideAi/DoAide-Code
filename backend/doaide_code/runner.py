@@ -24,6 +24,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from .classify import classify_task
 from .changes import SEARCH_RE, apply_record, parse_edits, propose, repair_prompt, strip_edits, undo_record
 from .config import Settings
 from .metrics import log_task
@@ -177,7 +178,11 @@ def cache_key(job: Job, ranking: Ranking | None) -> str:
     history = [(t.role, t.content) for t in list(job.history)[-6:]]
     prompt = " ".join(job.prompt.split())
     fingerprint = ranking.fingerprint if ranking else str(job.cwd)
-    payload = json.dumps([PROMPT_VERSION, prompt, history, fingerprint], sort_keys=True)
+    # How the request is read: a classifier fix (say, a question now sent with project files)
+    # retires the answers given under the old reading.
+    profile = classify_task(job.prompt)
+    reading = [profile.kind, profile.about_project]
+    payload = json.dumps([PROMPT_VERSION, prompt, history, fingerprint, reading], sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 
 

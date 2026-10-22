@@ -57,6 +57,10 @@ def without_urls(text: str) -> str:
 _QUESTION = re.compile(r"^\s*(?:in [^,:?]+[,:]\s*)?(what|how|why|when|is|are|can|does|do|which|who|define|difference between)\b", re.I)
 # A file path or code identifier: a short non-question that names one is an instruction.
 _NAMES_CODE = re.compile(r"[\w-]+\.[a-z]{1,5}\b|`[^`]+`|\b_*[A-Za-z]+_\w+\b|\b[a-z]+[A-Z]\w*\b")
+# "How do I add a new executor?" asks for the steps, not for the change: answered as an edit, the
+# 32b wrote a new file that failed checks and Sonnet was paid to explain ($0.09). "How do I fix X"
+# still wants the fix.
+_HOWTO = re.compile(r"^\s*how\s+(?:do|can|should|would)\s+(?:i|we|you|one)\b|^\s*how\s+to\b", re.I)
 _WHY = re.compile(r"^\s*(?:in [^,:?]+[,:]\s*)?why\b", re.I)
 # "calculate"/"compute" only with a number in the request: "what does charge() compute" is code.
 _MATH = re.compile(r"^[\s\d+\-*/%^().,=?x×÷]+$|\b(?:calculate|compute)\b(?=.*\d)|\b(convert \d|how much is|what is \d)", re.I)
@@ -67,10 +71,15 @@ _DIFF_REQUEST = re.compile(r"\b(recent changes?|what (?:did i|i) change|what cha
                            r"uncommitted|staged|last commit|review (?:my|the|these) changes|before i commit)\b", re.I)
 
 # Signs a request is about this project rather than general knowledge: a file path, a code
-# identifier (snake_case, camelCase, dotted, call or backticks), or words pointing at the codebase.
+# identifier (snake_case, UPPER_CASE, camelCase, Class.method, call or backticks), or words pointing
+# at the codebase. Live: "what is MAX_RETRIES used for?", "why does Ranking.render ...?" and "which
+# files handle the response cache?" got no project files, and the 7b answered "app/cache.py" (the
+# worked example's file) and quoted a comment that does not exist.
 _PROJECT = re.compile(
-    r"[\w-]+\.[a-z]{1,5}\b|`[^`]+`|\b[a-z]+_[a-z0-9_]+\b|\b[a-z]+[A-Z]\w*\b|\b[A-Z][a-z0-9]+[A-Z]\w*\b|\b\w+\(\)|"
+    r"[\w-]+\.[a-z]{1,5}\b|`[^`]+`|\b[a-z]+_[a-z0-9_]+\b|\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b|\b[a-z]+[A-Z]\w*\b|"
+    r"\b[A-Z][a-z0-9]+[A-Z]\w*\b|\b[A-Z]\w+\.[a-z_]\w+\b|\b\w+\(\)|"
     r"\b(?:this|our|my|the) (?:project|repo|codebase|code|app|server|backend|frontend|module|function|file|tests?)\b|"
+    r"\b(?:which|what) (?:files?|modules?|components?|classes|functions)\b|"
     r"\b(?:where (?:is|are|do)|in (?:here|this)|we (?:use|have))\b"
 )
 
@@ -133,6 +142,10 @@ def classify_task(prompt: str) -> TaskProfile:
         score += 3
         kind = "edit"
         reasons.append("instruction (+3)")
+
+    if kind == "edit" and _HOWTO.search(text) and not re.search(r"\bfix\b", text, re.I):
+        kind = "explain"
+        reasons.append("how-to question: steps, not a change")
 
     about_project = kind not in {"question", "math"} or bool(_PROJECT.search(local))
     if kind == "question" and about_project and _WHY.search(text):

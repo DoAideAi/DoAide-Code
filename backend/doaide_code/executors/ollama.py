@@ -188,14 +188,14 @@ class OllamaExecutor(Executor):
         if not model:
             raise ExecutorError("Ollama is not reachable or has no model pulled")
         messages = [{"role": "system", "content": system_prompt("local", job.kind)}]
-        for example_user, example_answer in few_shot("local", job.kind):
+        for example_user, example_answer in few_shot("local", job.kind, bool(job.context)):
             messages += [{"role": "user", "content": example_user}, {"role": "assistant", "content": example_answer}]
         if job.summary:
             messages.append({"role": "system", "content": job.summary})
         messages += [{"role": t.role, "content": t.content} for t in job.history]
         request = user_message(job)
         if job.kind not in EDIT_KINDS:
-            request = f"{request}\n\n{local_reminder(job.prompt)}"
+            request = f"{request}\n\n{local_reminder(job.prompt, bool(job.context))}"
         messages.append({"role": "user", "content": request})
         payload = {
             "model": model,
