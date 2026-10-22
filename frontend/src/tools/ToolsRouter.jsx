@@ -30,6 +30,7 @@ const PAGES = {
   'hash-generator': lazy(() => import('./HashPage.jsx')),
   'url-encoder': lazy(() => import('./UrlPage.jsx')),
   'timestamp-converter': lazy(() => import('./TimestampPage.jsx')),
+  'lorem-ipsum': lazy(() => import('./LoremPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {

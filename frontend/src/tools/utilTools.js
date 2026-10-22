@@ -174,6 +174,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'lorem-ipsum',
+    label: 'Lorem ipsum',
+    title: 'Lorem Ipsum Generator',
+    heading: 'Generate lorem ipsum text',
+    description:
+      'Filler text by the word, sentence or paragraph in three styles — classic Latin, tech filler, plain English — copied as text or HTML paragraphs. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
