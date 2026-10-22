@@ -524,4 +524,50 @@ const { answer } = await res.json()</code></pre>
       ],
     ],
   },
+  {
+    slug: 'collaboration',
+    title: 'Real-Time Code Collaboration: The DoAide Code Vision',
+    description:
+      'How real-time collaborative coding will work in DoAide Code: shared tool sessions, live cursors, AI in the room, and code review together - and what you can already do today with share links and the embeddable widget.',
+    h1: 'Code together, with AI in the room',
+    updated: '2026-10-23',
+    body: `<p class="meta">Updated 2026-10-23</p>
+<h1>Code together, with AI in the room</h1>
+<p>Most pair programming today is one person typing while the other squints at a screen share. We are building something better into DoAide Code: real-time collaboration where two or more people look at the same code, in the same tools, with the AI as a third participant anyone can ask. This page lays out that vision, what exists today, and what is coming.</p>
+<h2 id="today">What you can already do today</h2>
+<ul>
+<li><strong><a href="/tools/share-code">Share code with a short link</a></strong> - paste a snippet, get a link like <code>code.doaide.com/s/aB3xY9kQ</code>, and whoever opens it sees the same highlighted code with one-click paths into every AI tool.</li>
+<li><strong>Share into a tool directly</strong> - every AI tool has a "Copy link to this code" button; the code rides in the link fragment, so it never touches our servers until your teammate runs the tool.</li>
+<li><strong><a href="/tools/embed-code">Embed snippets</a></strong> - put a living code widget in your blog, docs or README instead of a screenshot.</li>
+<li><strong><a href="/tools/diff-checker">Diff two versions</a></strong> - paste yours and theirs, and talk through the actual changed lines.</li>
+</ul>
+<a class="cta" href="/tools/share-code">Try sharing a snippet now</a>
+<h2 id="vision">The vision: shared sessions</h2>
+<p>A shared session is a URL. You open any tool, click <em>Invite</em>, and send the link. Then:</p>
+<ul>
+<li><strong>Live editing</strong> - both of you type into the same editor, with per-person cursors and selections, synced in milliseconds over WebSockets (the same realtime channel the DoAide assistant already uses for streaming).</li>
+<li><strong>AI in the room</strong> - either person runs Explain, Review or Find bugs; the answer streams to everyone at once, so the discussion happens around one shared result instead of two private ones.</li>
+<li><strong>Version trail</strong> - the session keeps the same undo/redo history and visual diffs the editor has today, so "wait, go back to what we had" is one click, not an argument.</li>
+<li><strong>No accounts for guests</strong> - the person you invite clicks a link and is in, the same no-sign-up principle as every tool on this site.</li>
+</ul>
+<h2 id="review">Code review, together</h2>
+<p>The same machinery makes asynchronous review better: send a snippet link with the AI review already attached, let a teammate add their own comments, and resolve them against the visual diff as the code changes. Review becomes a conversation anchored to one living snippet instead of screenshots in a chat thread.</p>
+<h2 id="when">When?</h2>
+<p>Real-time sync is in design now, building on the WebSocket infrastructure that already streams the assistant's edits live. Shared read-only sessions ship first, then live co-editing. If collaboration would change how your team works, <a href="/tools">try the tools</a> and tell us through the feedback widget on any tool page - the order of this roadmap is driven by what users ask for.</p>
+<a class="cta" href="/tools">Open the free tools</a>`,
+    faqs: [
+      [
+        'Can I collaborate on code in real time in DoAide Code?',
+        'Live co-editing is on the roadmap and in design now. Today you can share snippets by short link, hand code to teammates inside every AI tool via link fragments, and embed living snippets in docs.',
+      ],
+      [
+        'Will collaborators need an account?',
+        'The plan follows the same principle as the rest of the site: guests join a shared session from a link, no sign-up.',
+      ],
+      [
+        'How is this different from a screen share?',
+        'Everyone gets their own cursor in the same editor, the AI answers stream to all participants at once, and the session keeps a version history with visual diffs - none of which a screen share can do.',
+      ],
+    ],
+  },
 ]

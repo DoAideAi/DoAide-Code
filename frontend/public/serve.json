@@ -52,6 +52,10 @@
       "destination": "/free-code-editor-online/index.html"
     },
     {
+      "source": "/collaboration",
+      "destination": "/collaboration/index.html"
+    },
+    {
       "source": "/embed",
       "destination": "/embed.html"
     },
