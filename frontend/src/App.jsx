@@ -9,6 +9,8 @@ import {
   fetchBenchmarks,
   fetchEarlierMessages,
   fetchModelComparison,
+  fetchFile,
+  fetchFiles,
   fetchProjects,
   fetchSessions,
   fetchTaskHistory,
@@ -25,6 +27,7 @@ import {
 import Composer from './components/Composer.jsx'
 import ConnectionBanner from './components/ConnectionBanner.jsx'
 import ConversationSidebar from './components/ConversationSidebar.jsx'
+import FileViewer from './components/FileViewer.jsx'
 import HowItWorksPage from './components/HowItWorksPage.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
 import { NoModelsBanner } from './components/Models.jsx'
@@ -159,6 +162,12 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sessions, setSessions] = useState([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
+  // The file open in the viewer (in place of the chat), from the sidebar's Files tab.
+  const [openFile, setOpenFile] = useState(null)
+  const loadFiles = useCallback((path) => fetchFiles(token, path), [token])
+  const loadFile = useCallback((path) => fetchFile(token, path), [token])
+  // Its path belongs to the old project.
+  useEffect(() => setOpenFile(null), [project])
 
   // Search state
   const [searchOpen, setSearchOpen] = useState(false)
@@ -311,6 +320,13 @@ export default function App() {
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         loading={sessionsLoading}
+        loadFiles={loadFiles}
+        onOpenFile={(path) => {
+          setPage(null)
+          setOpenFile(path)
+        }}
+        openFilePath={openFile}
+        project={project}
       />
       <div className="flex min-w-0 flex-1 flex-col">
       <TopBar
@@ -352,6 +368,8 @@ export default function App() {
           onCreateToken={() => createAgentToken(token)}
           onClose={() => setSetupOpen(false)}
         />
+      ) : openFile ? (
+        <FileViewer path={openFile} load={loadFile} onClose={() => setOpenFile(null)} />
       ) : (
         <>
           {mode === 'hub' && connection === 'open' && !agentOnline && (

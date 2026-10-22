@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import FileTree from './FileTree.jsx'
 
 function formatTime(ts) {
   if (!ts) return ''
@@ -41,7 +42,14 @@ export default function ConversationSidebar({
   open,
   onClose,
   loading = false,
+  // Optional: the project's file tree, on a second tab.
+  loadFiles = null,
+  onOpenFile = null,
+  openFilePath = null,
+  project = null,
 }) {
+  const [tab, setTab] = useState('chats') // chats | files
+  const files = tab === 'files' && loadFiles
   // Close on Escape
   useEffect(() => {
     if (!open) return
@@ -66,7 +74,27 @@ export default function ConversationSidebar({
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-line/[0.06] px-3 py-3">
-          <h2 className="text-sm font-semibold text-zinc-200">Conversations</h2>
+          {loadFiles ? (
+            <div role="tablist" className="flex gap-1">
+              {[['chats', 'Chats'], ['files', 'Files']].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  data-testid={`sidebar-tab-${id}`}
+                  aria-selected={tab === id}
+                  onClick={() => setTab(id)}
+                  className={`rounded-full px-3 py-1 text-sm ${
+                    tab === id ? 'bg-zinc-800 font-semibold text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <h2 className="text-sm font-semibold text-zinc-200">Conversations</h2>
+          )}
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -93,7 +121,19 @@ export default function ConversationSidebar({
           </div>
         </div>
 
-        {/* Session list */}
+        {files ? (
+          <div className="flex-1 overflow-y-auto p-2">
+            <FileTree
+              load={loadFiles}
+              activePath={openFilePath}
+              reloadKey={project}
+              onOpen={(path) => {
+                onOpenFile(path)
+                if (window.innerWidth < 640) onClose()
+              }}
+            />
+          </div>
+        ) : (
         <div className="flex-1 overflow-y-auto p-2">
           {loading && sessions.length === 0 && (
             <div className="py-8 text-center text-xs text-zinc-500">Loading...</div>
@@ -114,6 +154,7 @@ export default function ConversationSidebar({
             <div className="py-8 text-center text-xs text-zinc-500">No conversations yet</div>
           )}
         </div>
+        )}
       </aside>
     </>
   )

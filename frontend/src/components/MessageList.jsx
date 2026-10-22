@@ -78,7 +78,7 @@ function CopyButton({ text, inline = false }) {
   )
 }
 
-function Code({ value, lang = '' }) {
+export function CodeBlock({ value, lang = '' }) {
   const tokens = useMemo(() => highlight(value, lang), [value, lang])
   return (
     <div className="group relative my-2">
@@ -122,7 +122,7 @@ function CollapsedCode({ value, lang }) {
         <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-full bg-shade/25 px-2.5 py-1 hover:text-zinc-200">
           {open ? 'Hide code' : 'Show code'} ({codeLines(value)} lines{lang ? `, ${lang}` : ''})
         </summary>
-        <Code value={value} lang={lang} />
+        <CodeBlock value={value} lang={lang} />
       </details>
       {!open && <CopyButton text={value} inline />}
     </div>
@@ -133,7 +133,7 @@ function Body({ content }) {
   return splitFences(hideEdits(content)).map((part, i) =>
     part.kind === 'code' ? (
       codeLines(part.value) <= SHOWN_CODE_LINES ? (
-        <Code key={i} value={part.value} lang={part.lang} />
+        <CodeBlock key={i} value={part.value} lang={part.lang} />
       ) : (
         <CollapsedCode key={i} value={part.value} lang={part.lang} />
       )

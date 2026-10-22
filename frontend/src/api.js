@@ -148,6 +148,15 @@ export function fetchProjects(token) {
   return get('/api/projects', token)
 }
 
+// The active project's files, read-only: a folder's entries, and one file's text.
+export function fetchFiles(token, path = '') {
+  return get(`/api/files?path=${encodeURIComponent(path)}`, token)
+}
+
+export function fetchFile(token, path) {
+  return get(`/api/file?path=${encodeURIComponent(path)}`, token)
+}
+
 // Multi-conversation support
 export function fetchSessions(token, limit = 50) {
   return get(`/api/sessions?limit=${limit}`, token)
