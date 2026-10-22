@@ -42,12 +42,43 @@ export const TOOLS = [
     description: 'Paste code and get it back with clear comments that explain what it does and why. Free, no sign-up.',
     button: 'Add comments',
   },
+  {
+    slug: 'convert-code',
+    action: 'convert',
+    label: 'Convert',
+    title: 'Convert Code',
+    heading: 'Convert code between languages',
+    description: 'Translate code from one programming language to another: Python to JavaScript, Java to Kotlin, and more. Free, no sign-up.',
+    button: 'Convert',
+    needsTarget: true,
+  },
+  {
+    slug: 'optimize-code',
+    action: 'optimize',
+    label: 'Optimize',
+    title: 'Optimize Code',
+    heading: 'Optimize your code for performance',
+    description: 'Paste code and get a faster version back, with each change explained: better algorithms first, micro-tweaks last. Free, no sign-up.',
+    button: 'Optimize',
+  },
+  {
+    slug: 'generate-tests',
+    action: 'tests',
+    label: 'Generate tests',
+    title: 'Generate Unit Tests',
+    heading: 'Generate unit tests for your code',
+    description: 'Paste a function and get runnable unit tests: happy path, edge cases and error handling, in the idiomatic framework. Free, no sign-up.',
+    button: 'Generate tests',
+  },
 ]
 
 export const LANGUAGES = [
   'Auto-detect', 'JavaScript', 'TypeScript', 'Python', 'Java', 'Go', 'Rust', 'C', 'C++', 'C#',
   'PHP', 'Ruby', 'Kotlin', 'Swift', 'SQL', 'Bash', 'HTML', 'CSS',
 ]
+
+// What Convert can convert to: every language except Auto-detect.
+export const TARGET_LANGUAGES = LANGUAGES.slice(1)
 
 export const MAX_CODE_CHARS = 12_000
 // Code carried in a share link; longer snippets are shared without it.
@@ -102,13 +133,13 @@ export function whatsappUrl(tool, code, language = '') {
   return `https://wa.me/?text=${encodeURIComponent(text)}`
 }
 
-export async function runTool(action, code, language = '') {
+export async function runTool(action, code, language = '', target = '') {
   let resp
   try {
     resp = await fetch('/api/public/code-tool', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, code, language: language === LANGUAGES[0] ? '' : language }),
+      body: JSON.stringify({ action, code, language: language === LANGUAGES[0] ? '' : language, target }),
     })
   } catch {
     throw new Error(OFFLINE_ERROR)

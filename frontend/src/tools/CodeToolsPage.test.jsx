@@ -43,6 +43,22 @@ describe('CodeToolsPage', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Free AI code review')
   })
 
+  it('converts with a chosen target language', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ answer: 'converted' }) })))
+    render(<CodeToolsPage initialPath="/tools/convert-code" initialHash="" />)
+    fireEvent.change(screen.getByTestId('tool-code'), { target: { value: 'x = 1' } })
+    fireEvent.change(screen.getByTestId('tool-target'), { target: { value: 'Go' } })
+    fireEvent.click(screen.getByTestId('tool-run'))
+    await waitFor(() => expect(screen.getByTestId('tool-answer')).toBeTruthy())
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ action: 'convert', target: 'Go' })
+  })
+
+  it('hides the target picker away from Convert', () => {
+    render(<CodeToolsPage initialPath="/tools/optimize-code" initialHash="" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Optimize your code for performance')
+    expect(screen.queryByTestId('tool-target')).toBeNull()
+  })
+
   it('shows the server error', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 429, json: async () => ({ detail: 'Wait a few minutes.' }) })))
     render(<CodeToolsPage initialPath="/tools/code-review" initialHash="" />)

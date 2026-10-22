@@ -17,6 +17,9 @@ const TOOL_LINKS = [
   ['code-review', 'Code review'],
   ['find-bugs', 'Find bugs'],
   ['add-comments', 'Add comments'],
+  ['convert-code', 'Convert code'],
+  ['optimize-code', 'Optimize code'],
+  ['generate-tests', 'Generate tests'],
 ]
 
 const STEPS = [
@@ -75,7 +78,8 @@ export default function Landing({ clientId, onCredential, error }) {
             Try it now, no sign-in
           </h2>
           <p className="max-w-xl text-sm text-zinc-400">
-            Paste any code to explain it, review it, find bugs or add comments. Free, and shareable on WhatsApp.
+            Paste any code to explain it, review it, find bugs, add comments, convert it to another language,
+            optimize it or generate unit tests. Free, and shareable on WhatsApp.
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             {TOOL_LINKS.map(([slug, label]) => (

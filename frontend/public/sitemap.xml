@@ -5,4 +5,7 @@
   <url><loc>https://code.doaide.com/tools/code-review</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
   <url><loc>https://code.doaide.com/tools/find-bugs</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
   <url><loc>https://code.doaide.com/tools/add-comments</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://code.doaide.com/tools/convert-code</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://code.doaide.com/tools/optimize-code</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://code.doaide.com/tools/generate-tests</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
 </urlset>

@@ -17,6 +17,17 @@ def test_prompt_wraps_code_and_rejects_bad_input():
             codetools.build_prompt(action, code)
 
 
+def test_prompt_convert_optimize_and_tests():
+    prompt = codetools.build_prompt("convert", "x = 1", "Python", "Go")
+    assert "Convert this code to Go" in prompt and "idiomatic Go" in prompt
+    with pytest.raises(codetools.ToolError, match="convert to"):
+        codetools.build_prompt("convert", "x = 1", "Python")
+    assert "Optimize this code" in codetools.build_prompt("optimize", "x = 1")
+    assert "unit tests" in codetools.build_prompt("tests", "x = 1")
+    # A hostile target cannot grow without bound.
+    assert len(codetools.build_prompt("convert", "x", "", "G" * 500)) < 400
+
+
 def test_rate_limiter_window():
     now = [0.0]
     limiter = codetools.RateLimiter(limit=2, window=10, clock=lambda: now[0])
@@ -65,6 +76,9 @@ def test_endpoint_needs_no_sign_in_and_is_rate_limited(settings, executors, monk
         assert seen[0][1] == "server-key" and "a + b" in seen[0][0]
         assert "server-key" not in ok.text
         assert c.post("/api/public/code-tool", json={"action": "explain", "code": ""}).status_code == 400
+        convert = c.post("/api/public/code-tool", json={"action": "convert", "code": "x = 1", "target": "Go"})
+        assert convert.status_code == 200 and "Convert this code to Go" in seen[-1][0]
+        assert c.post("/api/public/code-tool", json={"action": "convert", "code": "x = 1"}).status_code == 400
         codes = [
             c.post("/api/public/code-tool", json={"action": "bugs", "code": "x"}, headers={"X-Forwarded-For": "9.9.9.9"}).status_code
             for _ in range(9)

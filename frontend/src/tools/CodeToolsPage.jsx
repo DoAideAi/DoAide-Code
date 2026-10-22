@@ -4,6 +4,7 @@ import { Markdown } from '../markdown.jsx'
 import {
   LANGUAGES,
   MAX_CODE_CHARS,
+  TARGET_LANGUAGES,
   TOOLS,
   applyMeta,
   readShared,
@@ -54,6 +55,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
   const shared = readShared(initialHash)
   const [code, setCode] = useState(shared?.code ?? '')
   const [language, setLanguage] = useState(LANGUAGES.includes(shared?.language) ? shared.language : LANGUAGES[0])
+  const [target, setTarget] = useState('Python')
   const [answer, setAnswer] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -84,7 +86,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
     setError(null)
     setAnswer('')
     try {
-      setAnswer(await runTool(tool.action, code, language))
+      setAnswer(await runTool(tool.action, code, language, tool.needsTarget ? target : ''))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -161,6 +163,25 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
                 <option key={l}>{l}</option>
               ))}
             </select>
+            {tool.needsTarget && (
+              <>
+                <span className="text-xs text-zinc-500">to</span>
+                <label className="sr-only" htmlFor="tool-target">
+                  Convert to
+                </label>
+                <select
+                  id="tool-target"
+                  data-testid="tool-target"
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value)}
+                  className="min-h-[40px] rounded-md border border-zinc-800 bg-surface px-2 text-sm text-zinc-300"
+                >
+                  {TARGET_LANGUAGES.map((l) => (
+                    <option key={l}>{l}</option>
+                  ))}
+                </select>
+              </>
+            )}
             <span className={`text-xs tabular-nums ${tooLong ? 'text-red-400' : 'text-zinc-500'}`}>
               {code.length.toLocaleString()} / {MAX_CODE_CHARS.toLocaleString()}
             </span>

@@ -11,6 +11,20 @@ describe('code tools', () => {
     expect(toolForPath('/tools/nope')).toBe(TOOLS[0])
   })
 
+  it('knows the three newer tools and their paths', () => {
+    expect(toolForPath('/tools/convert-code').action).toBe('convert')
+    expect(toolForPath('/tools/convert-code').needsTarget).toBe(true)
+    expect(toolForPath('/tools/optimize-code').action).toBe('optimize')
+    expect(toolForPath('/tools/generate-tests').action).toBe('tests')
+  })
+
+  it('sends the target language when converting', async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ answer: 'done' }) })
+    vi.stubGlobal('fetch', fetch)
+    await runTool('convert', 'x = 1', 'Python', 'Go')
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ action: 'convert', code: 'x = 1', language: 'Python', target: 'Go' })
+  })
+
   it('round-trips code (unicode included) through a share link fragment', () => {
     const code = 'const s = "héllo ✓"\n// ```fence```'
     const link = shareLink(TOOLS[1], code, 'JavaScript')
@@ -37,7 +51,7 @@ describe('code tools', () => {
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
     vi.stubGlobal('fetch', fetch)
     expect(await runTool('explain', 'print(1)', 'Auto-detect')).toBe('It prints.')
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ action: 'explain', code: 'print(1)', language: '' })
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ action: 'explain', code: 'print(1)', language: '', target: '' })
     await expect(runTool('explain', 'x')).rejects.toThrow('Slow down.')
     await expect(runTool('explain', 'x')).rejects.toThrow(/reach DoAide/)
   })

@@ -66,6 +66,7 @@ class CodeToolRequest(BaseModel):
     action: str
     code: str
     language: str = ""
+    target: str = ""
 
 
 class RefreshRequest(BaseModel):
@@ -173,7 +174,7 @@ def create_app(
         forwarded = request.headers.get("x-forwarded-for", "")
         client = forwarded.split(",")[-1].strip() or (request.client.host if request.client else "?")
         try:
-            prompt = codetools.build_prompt(body.action, body.code, body.language)
+            prompt = codetools.build_prompt(body.action, body.code, body.language, body.target)
         except codetools.ToolError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
         if not per_client.allow(client):
