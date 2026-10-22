@@ -13,6 +13,8 @@ describe('CodeToolsPage', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise((r) => (resolve = r))))
     render(<CodeToolsPage initialPath="/tools/find-bugs" initialHash="" />)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Find bugs in your code')
+    expect(screen.getByTestId('tool-whatsapp').getAttribute('aria-disabled')).toBe('true')
+    expect(screen.getByTestId('tool-whatsapp').getAttribute('href')).toBeNull()
     fireEvent.click(screen.getByTestId('tool-run'))
     expect(screen.getByTestId('tool-error').textContent).toBe('Paste some code first.')
     fireEvent.change(screen.getByTestId('tool-code'), { target: { value: 'for (i = 0; i <= n; i++)' } })

@@ -165,17 +165,19 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
               {code.length.toLocaleString()} / {MAX_CODE_CHARS.toLocaleString()}
             </span>
             <div className="flex-1" />
-            {code.trim() && (
-              <a
-                data-testid="tool-whatsapp"
-                href={whatsappUrl(tool, code, language)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex min-h-[40px] items-center rounded-md border border-emerald-700/60 px-3 text-sm text-emerald-300 hover:bg-emerald-900/30"
-              >
-                Share on WhatsApp
-              </a>
-            )}
+            {/* Always there (inactive until there is code), so the Run button never jumps. */}
+            <a
+              data-testid="tool-whatsapp"
+              href={code.trim() ? whatsappUrl(tool, code, language) : undefined}
+              aria-disabled={!code.trim()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex min-h-[40px] items-center rounded-md border border-emerald-700/60 px-3 text-sm text-emerald-300 hover:bg-emerald-900/30 ${
+                code.trim() ? '' : 'pointer-events-none opacity-40'
+              }`}
+            >
+              Share on WhatsApp
+            </a>
             <button
               type="button"
               data-testid="tool-run"
