@@ -6,6 +6,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { guides, site } from '../guides/content.mjs'
+import { pages } from '../pages/content.mjs'
 
 const dist = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist')
 
@@ -135,4 +136,34 @@ write(
   }),
 )
 
-console.log(`build-guides: wrote ${guides.length} guides + index to dist/guides`)
+// Standalone landing pages (/vscode, /github, …): the body is full HTML (h1 included);
+// FAQs double as JSON-LD so the questions can appear in search results.
+for (const p of pages) {
+  const path = `/${p.slug}`
+  const jsonLd = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: p.h1,
+      description: p.description,
+      dateModified: p.updated,
+      inLanguage: site.lang,
+      url: `${site.url}${path}`,
+      publisher: { '@type': 'Organization', name: 'DoAide', url: 'https://doaide.com' },
+    },
+    crumbs([
+      [site.name, '/'],
+      [p.h1, path],
+    ]),
+  ]
+  if (p.faqs?.length) {
+    jsonLd.push({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: p.faqs.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
+    })
+  }
+  write(path, page({ title: p.title, description: p.description, path, ogType: 'website', jsonLd, body: p.body }))
+}
+
+console.log(`build-guides: wrote ${guides.length} guides + index and ${pages.length} pages to dist`)
