@@ -166,6 +166,13 @@ def create_app(
     per_client = codetools.RateLimiter(limit=8, window=600)
     overall = codetools.RateLimiter(limit=300, window=3600)
 
+    def snippets_analyzed() -> int:
+        return int(store.get_setting("code_tool_count") or 0)
+
+    @app.get("/api/public/tool-stats")
+    async def tool_stats() -> dict:
+        return {"snippets": snippets_analyzed()}
+
     @app.post("/api/public/code-tool")
     async def code_tool(body: CodeToolRequest, request: Request) -> dict:
         if not settings.gemini_api_key:
@@ -185,6 +192,7 @@ def create_app(
             answer = await codetools.generate(prompt, api_key=settings.gemini_api_key, models=settings.gemini_models)
         except codetools.ToolError as exc:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+        store.set_setting("code_tool_count", str(snippets_analyzed() + 1))
         return {"answer": answer}
 
     @app.post("/api/auth/local")

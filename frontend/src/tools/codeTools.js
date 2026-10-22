@@ -149,6 +149,19 @@ export async function runTool(action, code, language = '', target = '') {
   return body.answer
 }
 
+// How many snippets the tools have analyzed, ever; null when it cannot be fetched (the pages
+// never wait for it or complain about it).
+export async function fetchToolStats() {
+  try {
+    const resp = await fetch('/api/public/tool-stats')
+    if (!resp.ok) return null
+    const count = (await resp.json()).snippets
+    return Number.isFinite(count) && count > 0 ? count : null
+  } catch {
+    return null
+  }
+}
+
 // Title, description and canonical URL for the tool on screen.
 export function applyMeta(tool, doc = document) {
   doc.title = `${tool.title}: Free AI Tool | DoAide Code`

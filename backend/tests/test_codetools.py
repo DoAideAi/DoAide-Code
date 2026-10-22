@@ -79,6 +79,8 @@ def test_endpoint_needs_no_sign_in_and_is_rate_limited(settings, executors, monk
         convert = c.post("/api/public/code-tool", json={"action": "convert", "code": "x = 1", "target": "Go"})
         assert convert.status_code == 200 and "Convert this code to Go" in seen[-1][0]
         assert c.post("/api/public/code-tool", json={"action": "convert", "code": "x = 1"}).status_code == 400
+        # Every successful answer counts toward the public stats; failures do not.
+        assert c.get("/api/public/tool-stats").json() == {"snippets": 2}
         codes = [
             c.post("/api/public/code-tool", json={"action": "bugs", "code": "x"}, headers={"X-Forwarded-For": "9.9.9.9"}).status_code
             for _ in range(9)

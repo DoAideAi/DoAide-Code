@@ -25,7 +25,7 @@ describe('CodeToolsPage', () => {
     await waitFor(() => expect(screen.getByTestId('tool-answer')).toBeTruthy())
     expect(screen.getByTestId('tool-answer').textContent).toContain('Off by one.')
     expect(screen.getByTestId('code-lang').textContent).toBe('js')
-    expect(JSON.parse(fetch.mock.calls[0][1].body).action).toBe('bugs')
+    expect(JSON.parse(fetch.mock.calls.at(-1)[1].body).action).toBe('bugs')
   })
 
   it('opens shared code and offers WhatsApp sharing', () => {
@@ -50,13 +50,19 @@ describe('CodeToolsPage', () => {
     fireEvent.change(screen.getByTestId('tool-target'), { target: { value: 'Go' } })
     fireEvent.click(screen.getByTestId('tool-run'))
     await waitFor(() => expect(screen.getByTestId('tool-answer')).toBeTruthy())
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ action: 'convert', target: 'Go' })
+    expect(JSON.parse(fetch.mock.calls.at(-1)[1].body)).toMatchObject({ action: 'convert', target: 'Go' })
   })
 
   it('hides the target picker away from Convert', () => {
     render(<CodeToolsPage initialPath="/tools/optimize-code" initialHash="" />)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Optimize your code for performance')
     expect(screen.queryByTestId('tool-target')).toBeNull()
+  })
+
+  it('shows how many snippets were analyzed once the stats arrive', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ snippets: 1234 }) })))
+    render(<CodeToolsPage initialPath="/tools/explain-code" initialHash="" />)
+    await waitFor(() => expect(screen.getByTestId('tool-stats').textContent).toBe('1,234 snippets analyzed so far'))
   })
 
   it('shows the server error', async () => {

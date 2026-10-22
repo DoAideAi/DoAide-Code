@@ -8,6 +8,7 @@ import {
   TARGET_LANGUAGES,
   TOOLS,
   applyMeta,
+  fetchToolStats,
   readShared,
   runTool,
   shareLink,
@@ -61,6 +62,16 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
   const [answer, setAnswer] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+  // How many snippets all visitors have analyzed; null until known (then the line stays away).
+  const [analyzed, setAnalyzed] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    fetchToolStats().then((count) => active && setAnalyzed(count))
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => applyMeta(tool), [tool])
   useEffect(() => {
@@ -89,6 +100,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
     setAnswer('')
     try {
       setAnswer(await runTool(tool.action, code, language, tool.needsTarget ? target : ''))
+      setAnalyzed((count) => (count ? count + 1 : count))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -111,6 +123,11 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
         <header className="flex flex-col gap-2">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">{tool.heading}</h1>
           <p className="text-sm text-zinc-400">{tool.description}</p>
+          {analyzed && (
+            <p data-testid="tool-stats" className="text-xs text-zinc-500">
+              <span className="tabular-nums">{analyzed.toLocaleString()}</span> snippet{analyzed === 1 ? '' : 's'} analyzed so far
+            </p>
+          )}
         </header>
 
         {/* On phones the tab row bleeds to the screen edges, so it scrolls under them. */}

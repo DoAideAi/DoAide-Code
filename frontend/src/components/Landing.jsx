@@ -1,4 +1,7 @@
+import { useEffect, useState } from 'react'
+import { fetchToolStats } from '../tools/codeTools.js'
 import SignIn from './SignIn.jsx'
+import Testimonials from './Testimonials.jsx'
 
 // The signed-out page: what DoAide Code is, and the sign-in button. Static, so it is also what
 // search engines and link previews describe (with the tags in index.html).
@@ -29,6 +32,15 @@ const STEPS = [
 ]
 
 export default function Landing({ clientId, onCredential, error }) {
+  // How many snippets the free tools have analyzed; null until known (the line stays away).
+  const [analyzed, setAnalyzed] = useState(null)
+  useEffect(() => {
+    let active = true
+    fetchToolStats().then((count) => active && setAnalyzed(count))
+    return () => {
+      active = false
+    }
+  }, [])
   return (
     <div data-testid="landing" className="h-[100dvh] overflow-y-auto">
       <main className="mx-auto flex max-w-4xl flex-col gap-12 px-4 py-12 sm:py-16">
@@ -92,7 +104,14 @@ export default function Landing({ clientId, onCredential, error }) {
               </a>
             ))}
           </div>
+          {analyzed && (
+            <p data-testid="landing-stats" className="text-xs text-zinc-500">
+              <span className="tabular-nums">{analyzed.toLocaleString()}</span> snippet{analyzed === 1 ? '' : 's'} analyzed so far
+            </p>
+          )}
         </section>
+
+        <Testimonials />
 
         <footer className="border-t border-zinc-800 pt-6 text-center text-xs text-zinc-500">
           DoAide Code · part of <a href="https://doaide.com" className="underline hover:text-zinc-300">DoAide</a>
