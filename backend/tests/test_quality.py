@@ -16,7 +16,8 @@ from doaide_code.dashboard import usage_report
 from doaide_code.executors import Job, OllamaExecutor
 from doaide_code.executors.ollama import choose_model, num_ctx
 from doaide_code.fastpath import math_answer
-from doaide_code.prompts import IDENTITY, few_shot, system_prompt
+from doaide_code.changes import parse_edits
+from doaide_code.prompts import FEW_SHOT_ANSWER, FEW_SHOT_DEBUG, FEW_SHOT_EDIT, IDENTITY, few_shot, system_prompt
 from doaide_code.router import RouterBrain
 from doaide_code.runner import Outcome, run_job
 from doaide_code.validate import check_code_blocks, edit_checks, incomplete_reason
@@ -165,7 +166,14 @@ def test_prompts_per_executor_style():
     claude = system_prompt("claude", "review")
     assert "You are NOT GPT-4" in claude and "List concrete problems in the diff" in claude
     assert system_prompt("local", "edit") is system_prompt("local", "edit")  # cached
-    assert few_shot("local", "edit") and few_shot("local", "explain") == [] and few_shot("claude", "edit") == []
+    assert few_shot("local", "edit") == [FEW_SHOT_EDIT] and few_shot("local", "debug") == [FEW_SHOT_DEBUG]
+    assert few_shot("local", "explain") == [FEW_SHOT_ANSWER] == few_shot("local", "question")
+    assert few_shot("local", "math") == [] and few_shot("claude", "edit") == []
+    for user, answer in (FEW_SHOT_ANSWER, FEW_SHOT_EDIT, FEW_SHOT_DEBUG):
+        assert (len(user) + len(answer)) / 3.5 < 200  # each example under ~200 tokens
+    # The answer example is one plain line, the edit examples apply as edit blocks.
+    assert "\n" not in FEW_SHOT_ANSWER[1] and "```" not in FEW_SHOT_ANSWER[1]
+    assert all(len(parse_edits(a)) == 1 for _, a in (FEW_SHOT_EDIT, FEW_SHOT_DEBUG))
 
 
 async def test_ollama_payload_uses_local_prompt_few_shot_and_a_fitting_window():

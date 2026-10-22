@@ -38,7 +38,8 @@ async def test_ollama_streams_chunks_with_history():
     assert out[2] == Usage("qwen3-coder:latest", 12, 3, 0.0)
     payload = seen[0]
     assert payload["model"] == "qwen3-coder:latest" and payload["stream"] is True
-    assert [m["role"] for m in payload["messages"]] == ["system", "user", "assistant", "user"]
+    # System prompt, the worked example (a user/assistant pair), the history, the request.
+    assert [m["role"] for m in payload["messages"]] == ["system", "user", "assistant", "user", "assistant", "user"]
 
 
 @pytest.mark.anyio

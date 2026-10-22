@@ -1,7 +1,8 @@
 """System prompts per executor style and task kind, plus few-shot examples for small models.
 
 - "local" (Ollama): short and direct; small models have small windows and follow short
-  instructions better. Edit-shaped tasks get one worked example of the edit-block format.
+  instructions better. Each task gets one short worked example (under 200 tokens) of the ideal
+  reply: a plain one-line answer for questions, edit blocks for edits, cause and fix for bugs.
 - "claude": the full instructions; Claude reads the project itself with read-only tools.
 - "codex": code-first wording for Codex.
 
@@ -119,13 +120,30 @@ Work as a precise coding agent in the user's repository (read-only). Prefer code
 {STYLE}
 {EDIT_FORMAT}"""
 
-# One worked example of the edit-block format, for small models on edit-shaped tasks.
+# Worked examples for small models, one per task shape: they copy an example's shape more
+# reliably than they follow a rule. Each is under 200 tokens: it is read on every request.
+# Questions: the answer itself, in plain words, with no walk-through of the code.
+FEW_SHOT_ANSWER = (
+    "## File: app/cache.py\n```python\nTTL = 300\n\ndef get(key):\n    entry = store.get(key)\n"
+    "    if entry and time.time() - entry.saved_at < TTL:\n        return entry.value\n```\n\n"
+    "# Request\nhow long are cached values kept?",
+    "Five minutes. After that a saved value is ignored and fetched again.",
+)
+# Edits: one line saying what changed, then the edit blocks.
 FEW_SHOT_EDIT = (
     "## File: app/util.py\n```python\ndef add(a, b):\n    return a - b\n```\n\n# Request\nfix add, it subtracts",
     # Says the change, not the bug: small models copy this line's shape ("X returns a float").
     "Done — updated app/util.py so `add` adds instead of subtracting.\n\napp/util.py\n<<<<<<< SEARCH\n    return a - b\n=======\n"
     "    return a + b\n>>>>>>> REPLACE",
 )
+# Bugs: the cause in plain words, then the fix.
+FEW_SHOT_DEBUG = (
+    "## File: app/users.py\n```python\ndef first_name(user):\n    return user[\"name\"].split()[1]\n```\n\n"
+    "# Request\nfirst_name gives me the last name",
+    "It picked the second word of the name. Done — updated app/users.py to take the first.\n\napp/users.py\n"
+    "<<<<<<< SEARCH\n    return user[\"name\"].split()[1]\n=======\n    return user[\"name\"].split()[0]\n>>>>>>> REPLACE",
+)
+FEW_SHOTS = {"edit": FEW_SHOT_EDIT, "test": FEW_SHOT_EDIT, "debug": FEW_SHOT_DEBUG}
 
 
 @lru_cache(maxsize=64)
@@ -143,13 +161,16 @@ def system_prompt(style: str, kind: str = "question") -> str:
 
 
 def few_shot(style: str, kind: str) -> list[tuple[str, str]]:
-    """(user, assistant) example turns to put before the real conversation."""
-    return [FEW_SHOT_EDIT] if style == "local" and kind in EDIT_KINDS else []
+    """(user, assistant) example turns to put before the real conversation (local models only;
+    none for math, where the example would only be noise)."""
+    if style != "local" or kind == "math":
+        return []
+    return [FEW_SHOTS.get(kind, FEW_SHOT_ANSWER)]
 
 
 def _version() -> str:
     styles = [system_prompt(s, k) for s in ("local", "claude", "codex") for k in KIND_GUIDANCE]
-    return hashlib.sha256("\n".join([*styles, *FEW_SHOT_EDIT, LOCAL_REMINDER]).encode()).hexdigest()[:12]
+    return hashlib.sha256("\n".join([*styles, *FEW_SHOT_ANSWER, *FEW_SHOT_EDIT, *FEW_SHOT_DEBUG, LOCAL_REMINDER]).encode()).hexdigest()[:12]
 
 
 PROMPT_VERSION = _version()
