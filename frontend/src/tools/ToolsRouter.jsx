@@ -1,11 +1,14 @@
-// Which page owns a /tools path: each utility has its own, every other slug is the AI tools page.
+// Which page owns a /tools path: each utility has its own, the AI tool slugs (and /tools itself)
+// share the AI tools page, and anything else is a not-found page with every tool on it.
 // Pages stay lazy so a visitor only downloads the one they open; moving between pages is a plain
 // link (full navigation), only the AI tools switch among themselves in place.
 
 import { lazy } from 'react'
+import { TOOLS } from './codeTools.js'
 import { slugForPath } from './utilTools.js'
 
 const CodeToolsPage = lazy(() => import('./CodeToolsPage.jsx'))
+const ToolsNotFound = lazy(() => import('./ToolsNotFound.jsx'))
 const PAGES = {
   'diff-checker': lazy(() => import('./DiffPage.jsx')),
   'code-formatter': lazy(() => import('./FormatterPage.jsx')),
@@ -15,6 +18,8 @@ const PAGES = {
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {
-  const Page = PAGES[slugForPath(path)] ?? CodeToolsPage
+  const slug = slugForPath(path)
+  const Page =
+    PAGES[slug] ?? (slug === '' || TOOLS.some((t) => t.slug === slug) ? CodeToolsPage : ToolsNotFound)
   return <Page />
 }
