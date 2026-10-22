@@ -10,6 +10,7 @@ const PAGES = {
   'diff-checker': lazy(() => import('./DiffPage.jsx')),
   'code-formatter': lazy(() => import('./FormatterPage.jsx')),
   'regex-tester': lazy(() => import('./RegexPage.jsx')),
+  'json-formatter': lazy(() => import('./JsonPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {
