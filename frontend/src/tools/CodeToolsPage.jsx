@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { CodeBlock, copyText, splitFences } from '../components/MessageList.jsx'
 import { Markdown } from '../markdown.jsx'
 import CodeEditor, { EDITOR_THEMES, saveEditorTheme, savedEditorTheme } from './CodeEditor.jsx'
+import RecentSnippets from './RecentSnippets.jsx'
+import ShortcutsHelp from './ShortcutsHelp.jsx'
+import { rememberSnippet } from './snippets.js'
 import ToolTabs from './ToolTabs.jsx'
 import {
   LANGUAGES,
@@ -64,6 +67,8 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
   const [loading, setLoading] = useState(false)
   // How many snippets all visitors have analyzed; null until known (then the line stays away).
   const [analyzed, setAnalyzed] = useState(null)
+  // Bumped after a run saves to the recent-snippets history, so the picker shows it.
+  const [historyAt, setHistoryAt] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -98,6 +103,8 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
     setLoading(true)
     setError(null)
     setAnswer('')
+    rememberSnippet('ai', code, language === LANGUAGES[0] ? '' : language)
+    setHistoryAt(Date.now())
     try {
       setAnswer(await runTool(tool.action, code, language, tool.needsTarget ? target : ''))
       setAnalyzed((count) => (count ? count + 1 : count))
@@ -199,6 +206,14 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
                 <option key={name}>{name}</option>
               ))}
             </select>
+            <RecentSnippets
+              scope="ai"
+              refreshKey={historyAt}
+              onRestore={(s) => {
+                setCode(s.code)
+                if (LANGUAGES.includes(s.language)) setLanguage(s.language)
+              }}
+            />
             <span className={`ml-auto text-xs tabular-nums ${tooLong ? 'text-red-400' : 'text-zinc-500'}`}>
               {code.length.toLocaleString()} / {MAX_CODE_CHARS.toLocaleString()}
             </span>
@@ -228,7 +243,10 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
               {loading ? 'Thinking…' : tool.button}
             </button>
           </div>
-          <p className="text-xs text-zinc-500">Ctrl/⌘ + Enter to run. Don't paste passwords or API keys.</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <p className="text-xs text-zinc-500">Ctrl/⌘ + Enter to run. Don't paste passwords or API keys.</p>
+            <ShortcutsHelp />
+          </div>
         </div>
 
         {error && (

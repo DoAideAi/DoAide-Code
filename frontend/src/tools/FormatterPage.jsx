@@ -3,6 +3,9 @@
 
 import { useState } from 'react'
 import CodeEditor, { savedEditorTheme } from './CodeEditor.jsx'
+import RecentSnippets from './RecentSnippets.jsx'
+import ShortcutsHelp from './ShortcutsHelp.jsx'
+import { rememberSnippet } from './snippets.js'
 import ToolShell, { BUTTON, CopyButton } from './ToolShell.jsx'
 import { FORMAT_LANGUAGES, detectFormatLanguage, formatCode } from './format.js'
 import { UTIL_TOOLS } from './utilTools.js'
@@ -18,11 +21,14 @@ export default function FormatterPage() {
   const [language, setLanguage] = useState('Auto-detect')
   const [indent, setIndent] = useState(2)
   const [result, setResult] = useState(null)
+  const [historyAt, setHistoryAt] = useState(0)
 
   const tooLong = code.length > MAX_FORMAT_CHARS
   const run = () => {
     if (tooLong) return
     const chosen = language === 'Auto-detect' ? detectFormatLanguage(code) : language
+    rememberSnippet('code-formatter', code, chosen)
+    setHistoryAt(Date.now())
     setResult({ ...formatCode(chosen, code, { indent }), language: chosen })
   }
 
@@ -70,6 +76,14 @@ export default function FormatterPage() {
             <option value={2}>2 spaces</option>
             <option value={4}>4 spaces</option>
           </select>
+          <RecentSnippets
+            scope="code-formatter"
+            refreshKey={historyAt}
+            onRestore={(s) => {
+              setCode(s.code)
+              if (FORMAT_LANGUAGES.includes(s.language)) setLanguage(s.language)
+            }}
+          />
           <span className={`ml-auto text-xs tabular-nums ${tooLong ? 'text-red-400' : 'text-zinc-500'}`}>
             {code.length.toLocaleString()} / {MAX_FORMAT_CHARS.toLocaleString()}
           </span>
@@ -83,7 +97,10 @@ export default function FormatterPage() {
             Format
           </button>
         </div>
-        <p className="text-xs text-zinc-500">Ctrl/⌘ + Enter to format. Your code never leaves this page.</p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="text-xs text-zinc-500">Ctrl/⌘ + Enter to format. Your code never leaves this page.</p>
+          <ShortcutsHelp />
+        </div>
       </div>
 
       {result && !result.ok && (

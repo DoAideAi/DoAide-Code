@@ -2,6 +2,8 @@
 // is valid (and where it broke), and explore it as a collapsible tree. Runs in the page.
 
 import { useMemo, useState } from 'react'
+import RecentSnippets from './RecentSnippets.jsx'
+import { rememberSnippet } from './snippets.js'
 import ToolShell, { BUTTON, CopyButton } from './ToolShell.jsx'
 import { MAX_JSON_CHARS, jsonStats, parseJson } from './jsonTool.js'
 import { UTIL_TOOLS } from './utilTools.js'
@@ -67,10 +69,16 @@ function Node({ name, value, depth }) {
 
 export default function JsonPage() {
   const [text, setText] = useState('')
+  const [historyAt, setHistoryAt] = useState(0)
 
   const tooLong = text.length > MAX_JSON_CHARS
   const result = useMemo(() => (text.trim() && !tooLong ? parseJson(text) : null), [text, tooLong])
   const stats = useMemo(() => (result?.ok ? jsonStats(result.value) : null), [result])
+  const keepAnd = (make) => () => {
+    rememberSnippet('json-formatter', text, 'JSON')
+    setHistoryAt(Date.now())
+    setText(make())
+  }
 
   return (
     <ToolShell tool={TOOL}>
@@ -97,7 +105,7 @@ export default function JsonPage() {
             type="button"
             data-testid="json-format"
             disabled={!result?.ok}
-            onClick={() => setText(JSON.stringify(result.value, null, 2))}
+            onClick={keepAnd(() => JSON.stringify(result.value, null, 2))}
             className={`${BUTTON} disabled:cursor-not-allowed disabled:opacity-40`}
           >
             Format
@@ -106,12 +114,13 @@ export default function JsonPage() {
             type="button"
             data-testid="json-minify"
             disabled={!result?.ok}
-            onClick={() => setText(JSON.stringify(result.value))}
+            onClick={keepAnd(() => JSON.stringify(result.value))}
             className={`${BUTTON} disabled:cursor-not-allowed disabled:opacity-40`}
           >
             Minify
           </button>
           <CopyButton text={text} label="Copy" testid="json-copy" />
+          <RecentSnippets scope="json-formatter" refreshKey={historyAt} onRestore={(s) => setText(s.code)} />
           <span className={`ml-auto text-xs tabular-nums ${tooLong ? 'text-red-400' : 'text-zinc-500'}`}>
             {text.length.toLocaleString()} / {MAX_JSON_CHARS.toLocaleString()}
           </span>

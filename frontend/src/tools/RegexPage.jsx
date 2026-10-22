@@ -2,6 +2,8 @@
 // capture group shown live as you type. Runs in the page; nothing is uploaded.
 
 import { useMemo, useState } from 'react'
+import RecentSnippets from './RecentSnippets.jsx'
+import { rememberSnippet } from './snippets.js'
 import ToolShell from './ToolShell.jsx'
 import { MAX_REGEX_TEXT, REGEX_FLAGS, runRegex } from './regexTool.js'
 import { UTIL_TOOLS } from './utilTools.js'
@@ -13,6 +15,16 @@ export default function RegexPage() {
   const [pattern, setPattern] = useState('')
   const [flags, setFlags] = useState('g')
   const [text, setText] = useState('')
+  const [historyAt, setHistoryAt] = useState(0)
+
+  // A pattern is worth remembering once it is valid, has been tried against text, and the
+  // keyboard leaves the field.
+  const keepPattern = () => {
+    if (pattern && text && runRegex(pattern, flags, text).ok) {
+      rememberSnippet('regex-tester', pattern, flags)
+      setHistoryAt(Date.now())
+    }
+  }
 
   const tooLong = text.length > MAX_REGEX_TEXT
   const result = useMemo(
@@ -37,6 +49,7 @@ export default function RegexPage() {
               data-testid="rx-pattern"
               value={pattern}
               onChange={(e) => setPattern(e.target.value)}
+              onBlur={keepPattern}
               spellCheck={false}
               autoCapitalize="off"
               autoCorrect="off"
@@ -78,7 +91,17 @@ export default function RegexPage() {
             className={`w-full resize-y rounded-lg border border-zinc-800 bg-shade/40 p-3 text-zinc-200 placeholder:text-zinc-600 focus:border-zinc-600 focus:outline-none ${MONO}`}
           />
         </div>
-        <p className="text-xs text-zinc-500">Matches update as you type. Your text never leaves this page.</p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="text-xs text-zinc-500">Matches update as you type. Your text never leaves this page.</p>
+          <RecentSnippets
+            scope="regex-tester"
+            refreshKey={historyAt}
+            onRestore={(s) => {
+              setPattern(s.code)
+              if (/^[gims]*$/.test(s.language)) setFlags(s.language)
+            }}
+          />
+        </div>
       </div>
 
       {!result.ok && (
