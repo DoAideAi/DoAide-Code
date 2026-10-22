@@ -35,10 +35,15 @@ export default function Composer({ busy, disabled, onSend, onStop }) {
           value={text}
           disabled={disabled}
           onChange={(e) => setText(e.target.value)}
+          // Enter or Cmd/Ctrl+Enter sends, Shift+Enter is a new line, Escape clears the box.
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            if (e.nativeEvent.isComposing) return
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
               e.preventDefault()
               submit()
+            } else if (e.key === 'Escape' && text) {
+              e.preventDefault()
+              setText('')
             }
           }}
           placeholder={disabled ? 'Connecting…' : 'Message Doaide Code'}
