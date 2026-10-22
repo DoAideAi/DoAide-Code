@@ -654,6 +654,8 @@ describe('usage dashboard', () => {
     expect(perf).toContain('Escalated25%')
     const costs = [...screen.getByTestId('task-cost-by-model').querySelectorAll('tbody tr')].map((r) => r.textContent)
     expect(costs).toEqual(['sonnet120s$0.05', 'qwen2.5-coder:7b23.0s$0', 'direct1–$0'])
+    const bars = screen.getAllByTestId('model-cost-bar').map((b) => b.style.width)
+    expect(bars).toEqual(['100%', '0%', '0%'])
 
     await act(async () => fireEvent.mouseEnter(screen.getAllByTestId('day-bar')[6]))
     expect(screen.getByTestId('chart-tooltip').textContent).toContain('5 tasks · 4 free')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { taskStats } from './UsagePage.jsx'
+import { costShare, taskStats } from './UsagePage.jsx'
 
 describe('taskStats', () => {
   it('totals tasks, cost per model, average response time and escalation rate', () => {
@@ -22,5 +22,13 @@ describe('taskStats', () => {
 
   it('handles no tasks', () => {
     expect(taskStats([])).toEqual({ tasks: 0, cost_usd: 0, avg_seconds: null, escalation_rate: 0, by_model: [] })
+  })
+})
+
+describe('costShare', () => {
+  it('is the part of the total cost, and 0 when everything was free', () => {
+    expect(costShare(0.05, 0.2)).toBe(0.25)
+    expect(costShare(0, 0)).toBe(0)
+    expect(costShare(undefined, 1)).toBe(0)
   })
 })

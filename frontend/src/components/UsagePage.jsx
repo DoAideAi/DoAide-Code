@@ -137,6 +137,11 @@ export function taskStats(tasks) {
   }
 }
 
+// A model's part of the total cost, 0 to 1 (0 when nothing cost anything).
+export function costShare(cost, total) {
+  return total > 0 ? (cost || 0) / total : 0
+}
+
 function seconds(value) {
   return value == null ? '–' : `${value < 10 ? value.toFixed(1) : Math.round(value)}s`
 }
@@ -180,6 +185,9 @@ function TaskPerformance({ loadHistory }) {
               <th className="py-1 font-normal">Model</th>
               <th className="py-1 font-normal">Tasks</th>
               <th className="py-1 font-normal">Avg time</th>
+              <th className="w-1/3 py-1 font-normal">
+                <span className="sr-only">Share of cost</span>
+              </th>
               <th className="py-1 text-right font-normal">Cost</th>
             </tr>
           </thead>
@@ -189,12 +197,20 @@ function TaskPerformance({ loadHistory }) {
                 <td className="py-1.5">{m.model}</td>
                 <td>{m.tasks}</td>
                 <td>{seconds(m.avg_seconds)}</td>
+                <td className="pr-3">
+                  <div
+                    data-testid="model-cost-bar"
+                    className="h-2 rounded-sm"
+                    style={{ width: `${costShare(m.cost_usd, s.cost_usd) * 100}%`, background: PAID }}
+                    title={`${Math.round(costShare(m.cost_usd, s.cost_usd) * 100)}% of the cost`}
+                  />
+                </td>
                 <td className="text-right">{formatCost(m.cost_usd)}</td>
               </tr>
             ))}
             {s.by_model.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-2 text-zinc-500">
+                <td colSpan={5} className="py-2 text-zinc-500">
                   No tasks yet.
                 </td>
               </tr>
