@@ -33,6 +33,11 @@ FIXED_CTX = 16384
 # starts (warm), so the first task after a break does not wait for a load either.
 KEEP_ALIVE = os.environ.get("DOAIDE_OLLAMA_KEEP_ALIVE", "2h")
 log = logging.getLogger(__name__)
+# Project context caps in tokens (~3.5 characters each): more than this and a small model loses
+# the request among the files; a 14B+ model reads twice as much before it does.
+SMALL_CONTEXT_TOKENS = 4_000
+LARGE_CONTEXT_TOKENS = 8_000
+CHARS_PER_TOKEN = 3.5
 
 
 FAST_CODERS = ("qwen3-coder",)
@@ -89,7 +94,6 @@ class OllamaExecutor(Executor):
     context_mode = "files"
     cacheable = True
     # Small local models have small windows: the 2-3 most relevant files only.
-    context_chars = 24_000
     max_files = 3
 
     def __init__(
@@ -109,7 +113,7 @@ class OllamaExecutor(Executor):
         self.tier = tier
         # Strong tier: the largest installed coder model that uses at most 40% of memory.
         self.prefer_large = prefer_large
-        self.context_chars = context_chars
+        self._context_chars = context_chars
         self._transport = transport
         self._resolved: str | None = None
         self._checked_at = 0.0
@@ -155,11 +159,25 @@ class OllamaExecutor(Executor):
         return resp.status_code == 200
 
     @property
+    def large(self) -> bool:
+        """14B parameters or more (by the model's tag; unknown sizes: the coder tier is)."""
+        size = re.search(r"(\d+(?:\.\d+)?)b\b", (self._resolved or self.model).lower())
+        return float(size.group(1)) >= 14 if size else self.prefer_large
+
+    @property
+    def context_chars(self) -> int:  # type: ignore[override]
+        """The configured context budget, capped at ~4k tokens for small models, ~8k for large."""
+        cap = LARGE_CONTEXT_TOKENS if self.large else SMALL_CONTEXT_TOKENS
+        return min(self._context_chars, int(cap * CHARS_PER_TOKEN))
+
+    @context_chars.setter
+    def context_chars(self, value: int) -> None:
+        self._context_chars = value
+
+    @property
     def history_tokens(self) -> int:  # type: ignore[override]
         """~4k tokens of history for small models, ~8k for 14B and larger (or the coder tier)."""
-        size = re.search(r"(\d+(?:\.\d+)?)b\b", (self._resolved or self.model).lower())
-        large = float(size.group(1)) >= 14 if size else self.prefer_large
-        return 8_000 if large else 4_000
+        return 8_000 if self.large else 4_000
 
     @property
     def history_turns(self) -> int:  # type: ignore[override]

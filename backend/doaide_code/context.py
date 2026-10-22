@@ -1,6 +1,7 @@
 """Smart file selection: give API models the project files that matter for a request.
 
-Files named in the request come first; the rest are ranked by how many of the request's
+Files named in the request come first, then the project files they import (where the helpers
+they call live); the rest are ranked by how many of the request's
 identifiers appear in their path and contents. The ranking is computed once per request and
 rendered to each executor's character budget. Its fingerprint (paths, sizes, mtimes) keys the
 response cache, so editing any selected file invalidates cached answers that read it.
@@ -18,6 +19,7 @@ from pathlib import Path
 
 from .classify import without_urls
 from .files import IGNORED
+from .imports import parse_imports, resolve, suffix_index
 
 TEXT_SUFFIXES = {
     ".py", ".pyi", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".json", ".toml", ".yaml", ".yml",
@@ -47,6 +49,8 @@ STOPWORDS = {
 RELATIVE_CUTOFF = 0.3
 # With named files in the context, other files are added only if this much budget is left.
 NAMED_REMAINDER = 4000
+# Project files imported by the named files: one level deep, at most this many.
+MAX_IMPORTED = 6
 LANG = {".py": "python", ".js": "js", ".jsx": "jsx", ".ts": "ts", ".tsx": "tsx", ".json": "json", ".md": "md",
         ".toml": "toml", ".yaml": "yaml", ".yml": "yaml", ".sh": "bash", ".css": "css", ".html": "html"}
 
@@ -58,6 +62,8 @@ class Candidate:
     size: int
     mtime_ns: int
     explicit: bool = False
+    # Imported by a file the request names.
+    imported: bool = False
 
 
 @dataclass
@@ -71,6 +77,9 @@ class Ranking:
     # to send another file.
     idents: set[str] = field(default_factory=set)
     wants_tests: bool = False
+    # Names the named files import ("charge" for "from app.billing import charge"): what to cut
+    # an imported file down to.
+    import_names: set[str] = field(default_factory=set)
     # Every scanned file's modification time, for "what changed since the last turn".
     mtimes: dict[str, float] = field(default_factory=dict)
 
@@ -119,9 +128,11 @@ class Ranking:
                 continue
             lang = LANG.get(Path(c.path).suffix, "")
             block = f"\n## File: {c.path}\n```{lang}\n{text}\n```"
+            terms = self.terms | self.import_names if c.imported else self.terms
             if named and not c.explicit and (
                 budget - used < NAMED_REMAINDER
                 or not more
+                and not c.imported
                 and (not any(i in text for i in self.idents) or (_is_test(c.path.lower()) and not self.wants_tests))
             ):
                 # The named files took the budget (the rest would only be excerpts), or this file
@@ -134,7 +145,7 @@ class Ranking:
                 max_files is not None
                 and not (c.explicit and used + len(block) <= budget)
                 and len(block) > budget // 3
-                and (cut := _excerpt(text, self.terms, budget // 3))
+                and (cut := _excerpt(text, terms, budget // 3))
             ):
                 block = f"\n## File: {c.path} (excerpts)\n```{lang}\n{cut}\n```"
             if used + len(block) > budget:
@@ -145,7 +156,7 @@ class Ranking:
                 if room < 1500:
                     continue
                 # Too big to send whole: the parts that mention the request's terms.
-                excerpt = _excerpt(text, self.terms, room)
+                excerpt = _excerpt(text, terms, room)
                 if excerpt:
                     block = f"\n## File: {c.path} (excerpts)\n```{lang}\n{excerpt}\n```"
                 elif c.explicit:
@@ -367,12 +378,13 @@ def rank_files(root: Path, request: str) -> Ranking:
     # those files are as good as named.
     if not explicit and 0 < len(defines) <= 2:
         explicit.update(defines)
+    stats = dict(files)
+    imported = _imported(root, explicit, set(stats), ranking)
 
     # Rare terms say more than common ones: weight each by inverse document frequency.
     total = max(len(present), 1)
     df = {t: sum(1 for found in present.values() if t in found) for t in terms}
     idf = {t: math.log(1 + total / df[t]) for t in terms if df[t]}
-    stats = dict(files)
     scored: list[Candidate] = []
     wants_tests = bool(terms & {"test", "tests", "testing", "pytest", "spec", "vitest"}) or "test" in request.lower()
     ranking.wants_tests = wants_tests
@@ -383,11 +395,36 @@ def rank_files(root: Path, request: str) -> Ranking:
             # Tests repeat the names they test; the source is what explains them, unless the
             # request is about the tests.
             score *= 1.5 if wants_tests else 0.5
-        if rel in explicit or score > 0:
+        if rel in explicit or rel in imported or score > 0:
             st = stats[rel]
-            scored.append(Candidate(rel, score + (1000 if rel in explicit else 0), st.st_size, st.st_mtime_ns, rel in explicit))
-    best = max((c.score for c in scored if not c.explicit), default=0)
-    scored = [c for c in scored if c.explicit or c.score >= best * RELATIVE_CUTOFF]
+            boost = 1000 if rel in explicit else 500 if rel in imported else 0
+            scored.append(
+                Candidate(rel, score + boost, st.st_size, st.st_mtime_ns, rel in explicit, rel in imported and rel not in explicit)
+            )
+    best = max((c.score for c in scored if not (c.explicit or c.imported)), default=0)
+    scored = [c for c in scored if c.explicit or c.imported or c.score >= best * RELATIVE_CUTOFF]
     scored.sort(key=lambda c: (-c.score, c.size))
     ranking.candidates = scored[:MAX_CANDIDATES]
     return ranking
+
+
+def _imported(root: Path, explicit: set[str], files: set[str], ranking: Ranking) -> set[str]:
+    """Project files the named files import (one level), recording the imported names."""
+    found: set[str] = set()
+    index: dict[str, list[str]] | None = None
+    for rel in sorted(explicit):
+        try:
+            text = (root / rel).read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for spec in parse_imports(rel, text):
+            index = index if index is not None else suffix_index(files)
+            target = resolve(rel, spec, files, index)
+            if target is None or target in explicit:
+                continue
+            if len(found) < MAX_IMPORTED:
+                found.add(target)
+            name = spec.rstrip("/").rsplit(".", 1)[-1].rsplit("/", 1)[-1].lower()
+            if len(name) > 2 and name not in STOPWORDS:
+                ranking.import_names.add(name)
+    return found
