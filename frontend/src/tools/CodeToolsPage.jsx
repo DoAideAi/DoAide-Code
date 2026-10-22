@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CodeBlock, copyText, splitFences } from '../components/MessageList.jsx'
 import { Markdown } from '../markdown.jsx'
+import CodeEditor, { EDITOR_THEMES, saveEditorTheme, savedEditorTheme } from './CodeEditor.jsx'
 import {
   LANGUAGES,
   MAX_CODE_CHARS,
@@ -56,6 +57,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
   const [code, setCode] = useState(shared?.code ?? '')
   const [language, setLanguage] = useState(LANGUAGES.includes(shared?.language) ? shared.language : LANGUAGES[0])
   const [target, setTarget] = useState('Python')
+  const [editorTheme, setEditorTheme] = useState(savedEditorTheme)
   const [answer, setAnswer] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -132,21 +134,15 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
           <label htmlFor="tool-code" className="sr-only">
             Your code
           </label>
-          <textarea
+          <CodeEditor
             id="tool-code"
-            data-testid="tool-code"
+            testid="tool-code"
             value={code}
-            onChange={(e) => setCode(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault()
-                run()
-              }
-            }}
+            onChange={setCode}
+            onRun={run}
             placeholder={PLACEHOLDER}
-            spellCheck={false}
-            rows={12}
-            className="w-full resize-y rounded-lg border border-zinc-800 bg-shade/40 p-3 font-mono text-[13px] leading-relaxed text-zinc-200 placeholder:text-zinc-600 focus:border-zinc-600 focus:outline-none"
+            language={language}
+            theme={editorTheme}
           />
           <div className="flex flex-wrap items-center gap-2">
             <label className="sr-only" htmlFor="tool-language">
@@ -182,6 +178,23 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
                 </select>
               </>
             )}
+            <label className="sr-only" htmlFor="tool-theme">
+              Editor theme
+            </label>
+            <select
+              id="tool-theme"
+              data-testid="tool-theme"
+              value={editorTheme}
+              onChange={(e) => {
+                setEditorTheme(e.target.value)
+                saveEditorTheme(e.target.value)
+              }}
+              className="min-h-[40px] rounded-md border border-zinc-800 bg-surface px-2 text-sm text-zinc-300"
+            >
+              {Object.keys(EDITOR_THEMES).map((name) => (
+                <option key={name}>{name}</option>
+              ))}
+            </select>
             <span className={`text-xs tabular-nums ${tooLong ? 'text-red-400' : 'text-zinc-500'}`}>
               {code.length.toLocaleString()} / {MAX_CODE_CHARS.toLocaleString()}
             </span>
