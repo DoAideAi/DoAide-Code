@@ -29,6 +29,7 @@ const ICONS = {
   bell: 'M18 8A6 6 0 1 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0',
   settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
+  download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   bellOff: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0M1 1l22 22',
 }
 
@@ -169,6 +170,7 @@ export default function TopBar({
   onUsage = null,
   onHow = null,
   onSettings = null,
+  onExport = null,
   localUrl = null,
   onRefresh = () => window.location.reload(),
   onToggleSidebar = null,
@@ -187,6 +189,7 @@ export default function TopBar({
     onModels && { id: 'models', label: 'Models', icon: 'models', onClick: onModels },
     onUsage && { id: 'usage', label: 'Usage', icon: 'usage', onClick: onUsage },
     onHow && { id: 'how', label: 'How it works', icon: 'how', onClick: onHow },
+    onExport && { id: 'export', label: 'Export chat (Markdown)', icon: 'download', onClick: onExport },
     onSettings && { id: 'settings', label: 'Settings', icon: 'settings', onClick: onSettings },
   ].filter(Boolean)
   const presence = busy && color === 'green' ? 'Working…' : PRESENCE[color]
@@ -254,6 +257,7 @@ export default function TopBar({
               <Label>Usage</Label>
             </Link>
           )}
+          {onExport && <IconButton testid="export-chat" label="Export chat as Markdown" icon="download" onClick={onExport} />}
           {onSettings && <IconButton testid="settings-toggle" label="Settings" icon="settings" onClick={onSettings} />}
         </div>
         <ThemeToggle />

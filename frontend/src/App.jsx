@@ -29,6 +29,7 @@ import ConnectionBanner from './components/ConnectionBanner.jsx'
 import ConversationSidebar from './components/ConversationSidebar.jsx'
 import FileViewer from './components/FileViewer.jsx'
 import SettingsPage from './components/SettingsPage.jsx'
+import { exportConversation } from './export.js'
 import HowItWorksPage from './components/HowItWorksPage.jsx'
 import LaptopBanner from './components/LaptopBanner.jsx'
 import { NoModelsBanner } from './components/Models.jsx'
@@ -214,6 +215,16 @@ export default function App() {
     }
   }, [token, apply, loadSessions])
 
+  const handleExport = useCallback(async () => {
+    if (!token || !sessionId) return
+    try {
+      const title = sessions.find((s) => s.id === sessionId)?.title
+      await exportConversation(token, sessionId, { title, project })
+    } catch (err) {
+      apply({ type: 'notice', text: `Export failed: ${err.message}` })
+    }
+  }, [token, sessionId, sessions, project, apply])
+
   const loadEarlier = useCallback(async () => {
     // After Ctrl+L nothing is on screen: the latest page comes back first.
     const before = oldestServerId(messages)
@@ -341,6 +352,7 @@ export default function App() {
         onModels={token ? toggle('models') : null}
         onHow={toggle('how')}
         onSettings={toggle('settings')}
+        onExport={sessionId ? handleExport : null}
         onToggleSidebar={() => setSidebarOpen((p) => !p)}
         onNewChat={handleNewChat}
         newChatHint={shortcutLabel(loadKeys(), 'newChat')}
