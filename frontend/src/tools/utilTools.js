@@ -210,6 +210,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'markdown-to-html',
+    label: 'MD → HTML',
+    title: 'Markdown to HTML Converter',
+    heading: 'Convert Markdown to HTML',
+    description:
+      'Paste Markdown and get clean HTML with a live preview — headings, lists, tables, fenced code and links, with raw HTML safely escaped. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',

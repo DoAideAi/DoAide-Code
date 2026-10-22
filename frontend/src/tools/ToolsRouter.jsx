@@ -34,6 +34,7 @@ const PAGES = {
   'string-utilities': lazy(() => import('./StringPage.jsx')),
   'json-path-finder': lazy(() => import('./JsonPathPage.jsx')),
   'html-preview': lazy(() => import('./HtmlPreviewPage.jsx')),
+  'markdown-to-html': lazy(() => import('./MdHtmlPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {
