@@ -36,6 +36,7 @@ const PAGES = {
   'html-preview': lazy(() => import('./HtmlPreviewPage.jsx')),
   'markdown-to-html': lazy(() => import('./MdHtmlPage.jsx')),
   'image-to-base64': lazy(() => import('./ImagePage.jsx')),
+  'qr-code': lazy(() => import('./QrPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {

@@ -228,6 +228,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'qr-code',
+    label: 'QR code',
+    title: 'QR Code Generator',
+    heading: 'Generate a QR code',
+    description:
+      'Type text or a URL and download the QR code as a crisp SVG or PNG, with selectable error correction. Generated in your browser, nothing uploaded. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
