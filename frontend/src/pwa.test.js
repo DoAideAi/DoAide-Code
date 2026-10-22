@@ -51,6 +51,7 @@ describe('PWA files', () => {
       { source: '/guides', destination: '/guides/index.html' },
       { source: '/vscode', destination: '/vscode/index.html' },
       { source: '/github', destination: '/github/index.html' },
+      { source: '/api-docs', destination: '/api-docs/index.html' },
       { source: '/embed', destination: '/embed.html' },
       { source: '/tools', destination: '/index.html' },
       { source: '/tools/:slug([a-z0-9-]+)', destination: '/index.html' },

@@ -99,4 +99,101 @@ export const pages = [
       ],
     ],
   },
+  {
+    slug: 'api-docs',
+    title: 'DoAide Code API: Free REST API for AI Code Review, Explain & Tests',
+    description:
+      'REST API documentation for the free DoAide Code tools: one POST endpoint for explain, review, find-bugs, comments, convert, optimize and test generation. No key needed, fair-use rate limits.',
+    h1: 'DoAide Code API',
+    updated: '2026-10-22',
+    body: `<p class="meta">Updated 2026-10-22</p>
+<h1>DoAide Code API</h1>
+<p>Everything the free tools on this site do is available over one small REST API — the same endpoints the pages call. No API key, no sign-up: just fair-use rate limits. Use it from scripts, git hooks, CI, or your own editor plugins.</p>
+<p><strong>Base URL:</strong> <code>https://code.doaide.com</code> · All requests and responses are JSON.</p>
+<h2 id="run">POST /api/public/code-tool</h2>
+<p>Runs one tool on one snippet and returns the answer as Markdown.</p>
+<pre><code>curl -s https://code.doaide.com/api/public/code-tool \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "action": "review",
+    "code": "def avg(nums):\\n    return sum(nums) / len(nums)",
+    "language": "Python"
+  }'</code></pre>
+<h3>Request body</h3>
+<table>
+<tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr>
+<tr><td><code>action</code></td><td>string</td><td>yes</td><td>One of <code>explain</code>, <code>review</code>, <code>bugs</code>, <code>comments</code>, <code>convert</code>, <code>optimize</code>, <code>tests</code></td></tr>
+<tr><td><code>code</code></td><td>string</td><td>yes</td><td>The snippet to analyze, up to 12,000 characters</td></tr>
+<tr><td><code>language</code></td><td>string</td><td>no</td><td>Hint like <code>"Python"</code>; omit for auto-detect</td></tr>
+<tr><td><code>target</code></td><td>string</td><td>convert only</td><td>The language to convert to, e.g. <code>"Go"</code></td></tr>
+</table>
+<h3>Response</h3>
+<pre><code>{ "answer": "### Review\\n1. **Division by zero** — \`avg([])\` raises \`ZeroDivisionError\` …" }</code></pre>
+<p>The <code>answer</code> is Markdown: render it, or pipe it to a terminal viewer like <code>glow</code>.</p>
+<h3>Errors</h3>
+<table>
+<tr><th>Status</th><th>Meaning</th></tr>
+<tr><td><code>400</code></td><td>Bad input — unknown action, empty code, over the 12,000-character limit, or convert without a target. The <code>detail</code> field says which.</td></tr>
+<tr><td><code>429</code></td><td>Rate limited — more than 8 requests in 10 minutes from your address, or the shared hourly cap. Back off and retry later.</td></tr>
+<tr><td><code>502</code> / <code>503</code></td><td>The AI service is busy or the tools are off on this server. Retry with backoff.</td></tr>
+</table>
+<h2 id="stats">GET /api/public/tool-stats</h2>
+<p>How many snippets the tools have analyzed, ever. Handy for status pages and badges.</p>
+<pre><code>curl -s https://code.doaide.com/api/public/tool-stats
+{ "snippets": 1234 }</code></pre>
+<h2 id="recipes">Recipes</h2>
+<h3>Review staged changes in a git pre-commit hook</h3>
+<pre><code>#!/bin/sh
+# .git/hooks/pre-commit — AI-review each staged file (advisory, never blocks)
+git diff --cached --name-only --diff-filter=ACM | while read -r f; do
+  jq -n --arg code "$(git show ":$f")" '{action:"review", code:$code}' \\
+  | curl -s https://code.doaide.com/api/public/code-tool \\
+      -H 'Content-Type: application/json' -d @- \\
+  | jq -r '.answer' | sed "s|^|[$f] |"
+done
+exit 0</code></pre>
+<h3>Python</h3>
+<pre><code>import requests
+
+r = requests.post(
+    "https://code.doaide.com/api/public/code-tool",
+    json={"action": "tests", "code": open("utils.py").read(), "language": "Python"},
+    timeout=90,
+)
+r.raise_for_status()
+print(r.json()["answer"])</code></pre>
+<h3>JavaScript / Node</h3>
+<pre><code>const res = await fetch("https://code.doaide.com/api/public/code-tool", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ action: "explain", code: "const f = (n) => (n <= 1 ? 1 : n * f(n - 1))" }),
+})
+const { answer } = await res.json()</code></pre>
+<h2 id="fair-use">Fair use</h2>
+<ul>
+<li><strong>8 requests per 10 minutes</strong> per client address, plus a shared hourly cap — designed for interactive and hook-style use, not batch processing.</li>
+<li>Send one focused snippet per request (a function or file, not a whole repo).</li>
+<li>Don't send secrets: strip API keys and passwords before submitting, as with any online tool.</li>
+<li>The API may evolve; this page documents the current contract.</li>
+</ul>
+<a class="cta" href="/tools">Try the same tools in the browser</a>
+<h2 id="faq">Frequently asked questions</h2>
+<details><summary>Do I need an API key?</summary><p>No. The public endpoints are open with fair-use rate limits. If you need higher limits for a real integration, reach out via doaide.com.</p></details>
+<details><summary>Is my code stored?</summary><p>Snippets are processed to produce the answer and counted in aggregate (the total on the tools page). Don't send secrets or code you cannot share.</p></details>
+<details><summary>Can I use this in CI?</summary><p>Yes, within the rate limits — review the changed files of a commit rather than the whole repository, and treat failures as advisory so a busy API never blocks your pipeline.</p></details>`,
+    faqs: [
+      [
+        'Does the DoAide Code API need an API key?',
+        'No. The public endpoints are open with fair-use rate limits: 8 requests per 10 minutes per client address.',
+      ],
+      [
+        'What can the DoAide Code API do?',
+        'One POST endpoint runs any of the free tools on a pasted snippet: explain, review, find bugs, add comments, convert between languages, optimize, and generate unit tests. Answers come back as Markdown.',
+      ],
+      [
+        'Is code sent to the API stored?',
+        'Snippets are processed to produce the answer and counted in aggregate. Do not send secrets or code you cannot share.',
+      ],
+    ],
+  },
 ]

@@ -18,6 +18,10 @@
       "destination": "/github/index.html"
     },
     {
+      "source": "/api-docs",
+      "destination": "/api-docs/index.html"
+    },
+    {
       "source": "/embed",
       "destination": "/embed.html"
     },
