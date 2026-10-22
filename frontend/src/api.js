@@ -121,6 +121,11 @@ export function fetchModelComparison(token, days = 30) {
   return get(`/api/models/compare?days=${days}`, token)
 }
 
+// Benchmark results per model (this laptop's runs, else the published baseline).
+export function fetchBenchmarks(token) {
+  return get('/api/benchmarks', token)
+}
+
 // The latest Tasks API results (newest first): model, cost, response time, checks, escalation.
 export function fetchTaskHistory(token, limit = 200) {
   return get(`/api/v1/tasks/history?limit=${limit}`, token)

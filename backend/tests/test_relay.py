@@ -222,3 +222,16 @@ def test_the_hub_lists_the_projects_the_laptop_reported(hub, token, agent_token)
             laptop.send_json({"type": "project", "project": "gamma", "projects": ["alpha", "beta", "gamma"]})
             drain_until(browser, "project")
             assert [p["name"] for p in hub.get("/api/projects", headers=auth(token)).json()["projects"]][-1] == "gamma"
+
+
+def test_the_hub_serves_the_laptops_benchmarks(hub, token, agent_token):
+    baseline = hub.get("/api/benchmarks", headers=auth(token)).json()
+    assert baseline["rows"] and "M2 Max" in baseline["source"]
+    with hub.websocket_connect(f"/ws?token={token}") as browser:
+        browser.receive_json()
+        with hub.websocket_connect(f"/agent?token={agent_token}") as laptop:
+            rows = [{"model": "ollama", "quality": 0.8, "median_seconds": 1.0, "tasks": 6}]
+            bench = {"source": "measured on this laptop", "tasks": ["fix-bug"], "rows": rows}
+            laptop.send_json({"type": "hello", "project": "alpha", "benchmarks": bench, "executors": []})
+            drain_until(browser, "project")
+            assert hub.get("/api/benchmarks", headers=auth(token)).json() == bench

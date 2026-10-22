@@ -50,6 +50,7 @@ async def test_hello_reports_project_and_available_executors(store, executors, t
     store.set_active_project(OWNER, store.add_project("alpha", str(tmp_path))["id"])
     hello = await agent.hello()
     models = hello.pop("models")
+    assert hello.pop("benchmarks")["rows"]  # the baseline until this laptop runs the benchmark
     assert hello == {
         "type": "hello",
         "project": "alpha",

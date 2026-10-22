@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from . import benchmark
 from .auth import (
     AuthError,
     User,
@@ -243,6 +244,14 @@ def create_app(
     async def models_compare(days: int = 30, user: User = Depends(current_user)) -> dict:
         """Cost and quality of each model on this user's own tasks (view only: routing picks)."""
         return model_comparison(store, user.email, days=days)
+
+    @app.get("/api/benchmarks")
+    async def benchmarks(user: User = Depends(current_user)) -> dict:
+        """Benchmark results per model: the laptop's (in hub mode, as it last reported them),
+        else the published baseline."""
+        if isinstance(chat, RelayService) and (reported := chat.benchmarks(user.email)) is not None:
+            return reported
+        return await asyncio.to_thread(benchmark.report)
 
     @app.get("/api/stats")
     async def stats(user: User = Depends(current_user)) -> dict:

@@ -23,6 +23,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from .benchmark import report as benchmark_report
 from .chat import public_message
 from .commands import is_command, is_models_command, run_command
 from .detect import format_report, same_report
@@ -91,6 +92,7 @@ class LaptopAgent:
             "type": "hello",
             "project": self.project_name(),
             "projects": self.project_names(),
+            "benchmarks": await asyncio.to_thread(benchmark_report),
             "executors": executors,
             "models": models,
             "running": running,

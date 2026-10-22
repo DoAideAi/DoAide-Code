@@ -27,9 +27,78 @@ function QualityBar({ rate }) {
   )
 }
 
+export function benchCost(row) {
+  if (row.cost_known === false) return 'not reported'
+  return row.cost_per_task ? formatCost(row.cost_per_task) : 'free'
+}
+
+// The same small coding tasks run through DoAide by every model (backend/doaide_code/benchmark.py):
+// this laptop's results once it has run them, else the published numbers.
+function Benchmarks({ load }) {
+  const [bench, setBench] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    load()
+      .then((b) => active && setBench(b))
+      .catch((e) => active && setError(e.message || 'Could not load benchmark results'))
+    return () => {
+      active = false
+    }
+  }, [load])
+
+  return (
+    <section>
+      <h2 className="mb-2 text-sm font-medium text-zinc-300">Benchmark results</h2>
+      {error && <p className="text-sm text-red-300">{error}</p>}
+      {!bench && !error && <p className="text-sm text-zinc-500">Loading…</p>}
+      {bench && (
+        <>
+          <div className="overflow-x-auto">
+            <table data-testid="models-bench" className="w-full min-w-[30rem] text-left text-xs tabular-nums">
+              <thead className="text-zinc-500">
+                <tr>
+                  <th className="py-1 font-normal">Model</th>
+                  <th className="py-1 font-normal" title="Share of runs whose tests passed on the files DoAide wrote">
+                    Solved
+                  </th>
+                  <th className="py-1 font-normal">Cost / task</th>
+                  <th className="py-1 font-normal">Median time</th>
+                  <th className="py-1 text-right font-normal">Runs</th>
+                </tr>
+              </thead>
+              <tbody className="text-zinc-300">
+                {bench.rows.map((r) => (
+                  <tr key={r.model} className="border-t border-zinc-900">
+                    <td className="py-1.5 pr-2">
+                      {r.model}
+                      {r.model === 'auto' && <span className="ml-2 text-[10px] text-zinc-500">DoAide routing</span>}
+                    </td>
+                    <td>
+                      <QualityBar rate={r.quality} />
+                    </td>
+                    <td>{benchCost(r)}</td>
+                    <td>{r.median_seconds === null || r.median_seconds === undefined ? '–' : `${r.median_seconds.toFixed(1)}s`}</td>
+                    <td className="text-right">{r.tasks}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p data-testid="bench-source" className="mt-2 text-[11px] text-zinc-500">
+            {bench.tasks?.length || 'Several'} small coding tasks ({(bench.tasks ?? []).join(', ')}), each checked by running its
+            tests. Source: {bench.source}. Re-run with <code>python -m doaide_code.benchmark</code>.
+          </p>
+        </>
+      )}
+    </section>
+  )
+}
+
 // View only: what this laptop can run, and how each model has done on the user's own tasks.
 // Routing picks the model (a free local one first, Claude Sonnet when its answer fails checks).
-export default function ModelsPage({ load, models, onClose }) {
+export default function ModelsPage({ load, loadBenchmarks = null, models, onClose }) {
   const [days, setDays] = useState(30)
   const [report, setReport] = useState(null)
   const [error, setError] = useState(null)
@@ -149,6 +218,8 @@ export default function ModelsPage({ load, models, onClose }) {
             apply). Costs are the API-equivalent amounts the CLIs report; subscription runs are not billed per task.
           </p>
         </section>
+
+        {loadBenchmarks && <Benchmarks load={loadBenchmarks} />}
       </div>
     </div>
   )

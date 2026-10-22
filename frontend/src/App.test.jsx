@@ -73,6 +73,8 @@ function mockFetch() {
           blob: async () => new Blob(['script']),
         }
       }
+      case '/api/benchmarks':
+        return reply(BENCH)
       case '/api/agent-token':
         return reply({ token: 'agent-tok', hub_url: 'wss://code.doaide.com/agent' })
       case '/api/files':
@@ -566,6 +568,16 @@ const COMPARE = {
   ],
 }
 
+const BENCH = {
+  source: 'measured on this laptop',
+  tasks: ['fix-bug', 'implement'],
+  rows: [
+    { model: 'auto', quality: 0.9, cost_per_task: 0.01, cost_known: true, median_seconds: 8, tasks: 10 },
+    { model: 'codex', quality: 1, cost_per_task: 0, cost_known: false, median_seconds: 17.5, tasks: 6 },
+    { model: 'qwen2.5-coder:7b', quality: 0.67, cost_per_task: 0, cost_known: true, median_seconds: 0.9, tasks: 18 },
+  ],
+}
+
 describe('models are view only', () => {
   it('offers no way to pick a model', async () => {
     await boot(true, { models: REPORT })
@@ -586,6 +598,15 @@ describe('models are view only', () => {
     expect(rows[0]).toEqual(['ollama-coder · qwen2.5-coder:32bfree', '8 (+2 escalated)', '80%', '$0', 'free', '20s'])
     expect(rows[1]).toEqual(['claude-sonnet', '5', '80%', '$0.40', '1×', '30s'])
     expect(rows[2]).toEqual(['claude-opusfew tasks', '1', '100%', '$1.20', '3×', '60s'])
+    const bench = [...screen.getByTestId('models-bench').querySelectorAll('tbody tr')].map((r) =>
+      [...r.querySelectorAll('td')].map((td) => td.textContent),
+    )
+    expect(bench).toEqual([
+      ['autoDoAide routing', '90%', '$0.01', '8.0s', '10'],
+      ['codex', '100%', 'not reported', '17.5s', '6'],
+      ['qwen2.5-coder:7b', '67%', 'free', '0.9s', '18'],
+    ])
+    expect(screen.getByTestId('bench-source').textContent).toContain('measured on this laptop')
     fireEvent.click(screen.getByText('Close'))
     expect(screen.queryByTestId('models-page')).toBeNull()
   })

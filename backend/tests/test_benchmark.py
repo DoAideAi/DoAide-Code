@@ -58,3 +58,28 @@ def test_summary_tracks_cost_quality_and_speed():
     assert "| claude-sonnet | 50% | $0.200 | 30.0s |" in table
     # Codex reports tokens but no cost: never shown as free.
     assert "| codex | 100% | not reported | 15.0s |" in table
+
+
+def test_saved_results_merge_per_model_and_feed_the_report(tmp_path):
+    from datetime import datetime, timezone
+
+    from doaide_code.benchmark import BASELINE_SOURCE, report, save
+
+    path = tmp_path / "bench.json"
+    assert report(path)["source"] == BASELINE_SOURCE  # nothing measured here yet
+    row = {"model": "ollama", "quality": 0.5, "cost_per_task": 0.0, "cost_known": True, "median_seconds": 1.0, "tasks": 6}
+    save([row, {**row, "model": "auto", "quality": 0.9}], path, now=datetime(2026, 10, 22, tzinfo=timezone.utc))
+    save([{**row, "quality": 0.75}], path)  # an --only ollama run keeps auto's row
+    body = report(path)
+    assert body["source"] == "measured on this laptop" and "fix-bug" in body["tasks"]
+    assert [(r["model"], r["quality"]) for r in body["rows"]] == [("auto", 0.9), ("ollama", 0.75)]
+    assert body["rows"][0]["measured_at"].startswith("2026-10-22")
+    path.write_text("{broken")
+    assert report(path)["source"] == BASELINE_SOURCE
+
+
+def test_benchmarks_endpoint_serves_the_baseline_locally(client, token):
+    from .test_api import auth
+
+    body = client.get("/api/benchmarks", headers=auth(token)).json()
+    assert body["rows"] and body["rows"][0]["quality"] >= body["rows"][-1]["quality"]

@@ -11,6 +11,10 @@ Speed is the wall-clock time of the whole task.
 
 "auto" is DoAide's real routing (try a free local model, escalate to Sonnet if its answer fails
 checks); the others run one model alone. Paid models cost real (subscription) usage.
+
+Results are saved to ~/.doaide-code/benchmarks.json (newest row per model wins, so a run with
+--only keeps the other models' rows) for the Models page; until a first run there, the page
+shows BASELINE, the numbers in docs/benchmarks.md.
 """
 
 from __future__ import annotations
@@ -23,15 +27,32 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import os
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from .config import Settings
 from .db import Store
 from .executors import Executor, Job, OllamaExecutor, build_executors
 from .router import RouterBrain
 from .runner import Outcome, run_job
+
+
+BENCH_FILE = Path(os.environ.get("DOAIDE_BENCH_FILE", str(Path.home() / ".doaide-code" / "benchmarks.json")))
+# Measured 2026-10-21 on an M2 Max laptop (docs/benchmarks.md): shown until this laptop has run
+# the benchmark itself.
+BASELINE_SOURCE = "docs/benchmarks.md (M2 Max, 2026-10-21)"
+BASELINE: list[dict[str, Any]] = [
+    {"model": "auto", "quality": 0.90, "cost_per_task": 0.01, "cost_known": True, "median_seconds": 8.0, "tasks": 10},
+    {"model": "codex", "quality": 1.0, "cost_per_task": 0.0, "cost_known": False, "median_seconds": 17.5, "tasks": 6},
+    {"model": "claude-sonnet", "quality": 0.92, "cost_per_task": 0.011, "cost_known": True, "median_seconds": 5.6, "tasks": 12},
+    {"model": "qwen2.5-coder:32b", "quality": 0.78, "cost_per_task": 0.0, "cost_known": True, "median_seconds": 5.0, "tasks": 18},
+    {"model": "deepseek-coder-v2:16b", "quality": 0.72, "cost_per_task": 0.0, "cost_known": True, "median_seconds": 1.2, "tasks": 18},
+    {"model": "qwen2.5-coder:7b", "quality": 0.67, "cost_per_task": 0.0, "cost_known": True, "median_seconds": 0.9, "tasks": 18},
+]
 
 
 @dataclass(frozen=True)
@@ -186,6 +207,34 @@ def summarize(results: list[Result]) -> list[dict]:
     return rows
 
 
+def save(rows: list[dict], path: Path | None = None, *, now: datetime | None = None) -> None:
+    """Merge `rows` into the saved results: each model's newest row wins."""
+    path = path or BENCH_FILE
+    stamp = (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")
+    try:
+        saved = json.loads(path.read_text()).get("rows", [])
+    except (OSError, ValueError, AttributeError):
+        saved = []
+    by_model = {r["model"]: r for r in saved if isinstance(r, dict) and "model" in r}
+    by_model.update({r["model"]: {**r, "measured_at": stamp} for r in rows})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"rows": list(by_model.values())}, indent=2))
+
+
+def report(path: Path | None = None) -> dict[str, Any]:
+    """Benchmark rows for the Models page, best first: this laptop's saved results, else BASELINE."""
+    path = path or BENCH_FILE
+    try:
+        rows = [r for r in json.loads(path.read_text()).get("rows", []) if isinstance(r, dict) and "model" in r]
+        source = "measured on this laptop"
+    except (OSError, ValueError, AttributeError):
+        rows, source = [], ""
+    if not rows:
+        rows, source = BASELINE, BASELINE_SOURCE
+    rows = sorted(rows, key=lambda r: (-r.get("quality", 0), r.get("cost_per_task", 0), r.get("median_seconds", 0)))
+    return {"source": source, "tasks": [t.name for t in TASKS], "rows": rows}
+
+
 def markdown(rows: list[dict]) -> str:
     lines = [
         "| Model | Quality (tests pass) | Cost / task | Speed (median) |",
@@ -222,6 +271,8 @@ async def main_async(args: argparse.Namespace) -> None:
                     mark += f" (escalated: {result.escalated})"
                 print(f"{name:20} {task.name:11} {result.seconds:6.1f}s ${result.cost_usd:.4f} {mark}", file=sys.stderr)
     rows = summarize(results)
+    if rows and not args.no_save:
+        save(rows)
     if args.json:
         Path(args.json).write_text(json.dumps({"rows": rows, "results": [r.__dict__ for r in results]}, indent=2))
     print(markdown(rows))
@@ -233,6 +284,7 @@ def main() -> None:
     parser.add_argument("--tasks", nargs="*", help="task names to run (default: all)")
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--json", help="also write the raw results here")
+    parser.add_argument("--no-save", action="store_true", help=f"do not save the results to {BENCH_FILE}")
     parser.add_argument("--verbose", action="store_true", help="print the answer of every failed task")
     asyncio.run(main_async(parser.parse_args()))
 

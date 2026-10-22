@@ -6,6 +6,7 @@ import {
   createSession,
   downloadInstaller,
   fetchConfig,
+  fetchBenchmarks,
   fetchModelComparison,
   fetchProjects,
   fetchSessions,
@@ -146,6 +147,7 @@ export default function App() {
   const toggle = (name) => () => setPage((p) => (p === name ? null : name))
   const loadUsage = useCallback((days) => fetchUsage(token, days), [token])
   const loadComparison = useCallback((days) => fetchModelComparison(token, days), [token])
+  const loadBenchmarks = useCallback(() => fetchBenchmarks(token), [token])
   const loadHistory = useCallback(() => fetchTaskHistory(token), [token])
 
   // Sidebar state
@@ -304,6 +306,7 @@ export default function App() {
       {page === 'models' && token ? (
         <ModelsPage
           load={loadComparison}
+          loadBenchmarks={loadBenchmarks}
           models={connection === 'open' ? models : null}
           onClose={() => setPage(null)}
         />

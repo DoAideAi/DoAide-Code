@@ -40,6 +40,8 @@ def _metrics_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("doaide_code.metrics.METRICS_FILE", tmp_path / "metrics.jsonl")
     # Nor to the project cache in ~/.doaide-code/cache.
     monkeypatch.setattr("doaide_code.projcache.CACHE_DIR", tmp_path / ".cache")  # hidden: never in a walk
+    # Nor read this laptop's saved benchmark results.
+    monkeypatch.setattr("doaide_code.benchmark.BENCH_FILE", tmp_path / "benchmarks.json")
 
 
 @pytest.fixture

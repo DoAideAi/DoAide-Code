@@ -116,6 +116,8 @@ class RelayService:
         self._executors: dict[str, list[str]] = {}
         # Project names the laptop reported (hello, and after /add-project etc.).
         self._projects: dict[str, list[str]] = {}
+        # The laptop's benchmark results (benchmark.report), from its hello.
+        self._benchmarks: dict[str, dict[str, Any]] = {}
         # Each connected laptop's detected models (see detect.py); never produced by a model.
         self._models: dict[str, dict[str, Any]] = {}
         self._running: dict[str, str] = {}
@@ -292,6 +294,12 @@ class RelayService:
         if kind == "hello":
             await self._adopt(user_email, event.get("running"))
             self._remember_projects(user_email, event.get("projects"))
+            if isinstance(bench := event.get("benchmarks"), dict) and isinstance(bench.get("rows"), list):
+                self._benchmarks[user_email] = {
+                    "source": str(bench.get("source", ""))[:200],
+                    "tasks": [str(t) for t in bench.get("tasks") or []][:50],
+                    "rows": [r for r in bench["rows"] if isinstance(r, dict)][:50],
+                }
             project = event.get("project")
             self._executors[user_email] = [str(e) for e in event.get("executors") or []]
             await self._set_models(user_email, event.get("models"))
@@ -419,6 +427,9 @@ class RelayService:
             return
         self.store.update_meta(message["id"], meta)
         await self.hub.publish(user_email, {"type": "changes", "id": message["id"], "changes": meta["changes"]})
+
+    def benchmarks(self, user_email: str) -> dict[str, Any] | None:
+        return self._benchmarks.get(user_email)
 
     def projects(self, user_email: str) -> list[str]:
         """The laptop's project names, as last reported (empty before it first connects)."""
