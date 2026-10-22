@@ -102,6 +102,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'cron-builder',
+    label: 'Cron builder',
+    title: 'Cron Expression Builder',
+    heading: 'Build a cron expression',
+    description:
+      'Type or pick a cron expression and read it back in plain words, with the next five run times in your timezone. Lists, ranges, steps and @daily shortcuts all work. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',

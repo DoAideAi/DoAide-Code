@@ -22,6 +22,7 @@ const PAGES = {
   'share-code': lazy(() => import('./SharePage.jsx')),
   'code-playground': lazy(() => import('./PlaygroundPage.jsx')),
   'jwt-decoder': lazy(() => import('./JwtPage.jsx')),
+  'cron-builder': lazy(() => import('./CronPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {
