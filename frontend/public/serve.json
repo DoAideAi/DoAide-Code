@@ -1,4 +1,17 @@
 {
   "cleanUrls": false,
-  "rewrites": [{ "source": "**", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/guides/:slug([a-z0-9-]+)",
+      "destination": "/guides/:slug/index.html"
+    },
+    {
+      "source": "/guides",
+      "destination": "/guides/index.html"
+    },
+    {
+      "source": "**",
+      "destination": "/index.html"
+    }
+  ]
 }
