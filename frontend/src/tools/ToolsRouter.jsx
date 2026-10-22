@@ -14,6 +14,7 @@ const PAGES = {
   'code-formatter': lazy(() => import('./FormatterPage.jsx')),
   'regex-tester': lazy(() => import('./RegexPage.jsx')),
   'json-formatter': lazy(() => import('./JsonPage.jsx')),
+  'sql-formatter': lazy(() => import('./SqlPage.jsx')),
   'embed-code': lazy(() => import('./EmbedPage.jsx')),
   'share-code': lazy(() => import('./SharePage.jsx')),
   'code-playground': lazy(() => import('./PlaygroundPage.jsx')),

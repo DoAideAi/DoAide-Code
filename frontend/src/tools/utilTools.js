@@ -57,6 +57,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'sql-formatter',
+    label: 'SQL formatter',
+    title: 'SQL Formatter & Validator',
+    heading: 'Format and validate SQL',
+    description:
+      'Paste a SQL query to format it — one clause per line, keywords uppercased — and catch unbalanced parentheses, unterminated strings and missing WHERE clauses. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
