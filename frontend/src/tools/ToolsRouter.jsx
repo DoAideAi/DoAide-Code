@@ -27,6 +27,8 @@ const PAGES = {
   'css-gradient': lazy(() => import('./GradientPage.jsx')),
   'unit-converter': lazy(() => import('./UnitPage.jsx')),
   'code-screenshot': lazy(() => import('./ScreenshotPage.jsx')),
+  'hash-generator': lazy(() => import('./HashPage.jsx')),
+  'url-encoder': lazy(() => import('./UrlPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {

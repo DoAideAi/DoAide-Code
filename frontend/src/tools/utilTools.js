@@ -147,6 +147,24 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'hash-generator',
+    label: 'Hash',
+    title: 'SHA Hash Generator',
+    heading: 'Generate SHA hashes',
+    description:
+      'Type text and get its SHA-1, SHA-256, SHA-384 and SHA-512 hex digests live, computed with WebCrypto in your browser — nothing is uploaded. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'url-encoder',
+    label: 'URL encode',
+    title: 'URL Encoder & Decoder',
+    heading: 'URL encode and decode',
+    description:
+      'Percent-encode text for URLs or decode it back as you type — component mode for query values, whole-URL mode that keeps structure, + read as space. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
