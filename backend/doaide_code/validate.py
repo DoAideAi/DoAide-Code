@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from .changes import _run, parse_edits
-from .prompts import LIST_QUESTION
+from .prompts import HOWTO_QUESTION, LIST_QUESTION
 
 _FENCE = re.compile(r"^```([\w+-]*)[^\n]*\n(.*?)^```", re.M | re.S)
 _NEEDS_FILES = re.compile(
@@ -238,6 +238,10 @@ def off_topic_reason(prompt: str, answer: str) -> str | None:
     text = answer.lower()
     if _REFUSAL.search(answer[:300]):
         return "the model declined to answer"
+    if HOWTO_QUESTION.search(prompt) and re.search(r"`[^`\n]+`", answer):
+        # "How do I reverse a list?" answered with `items[::-1]`: the code is the answer, though it
+        # repeats none of the request's words (live: escalated to Sonnet for that).
+        return None
     if LIST_QUESTION.search(prompt) and _PATH.search(answer):
         # "Which files handle the login?" answered with paths: on topic, though the paths need not
         # repeat the request's words (live: a correct list of files escalated to Sonnet).

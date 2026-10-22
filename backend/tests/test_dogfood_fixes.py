@@ -89,3 +89,10 @@ def test_how_to_code_questions_ask_for_inline_code():
     assert local_reminder("how do I reverse a list in python?") == HOWTO_REMINDER
     assert local_reminder("How can I read a file in JavaScript") == HOWTO_REMINDER
     assert local_reminder("how does the router pick a model?") == LOCAL_REMINDER
+
+
+def test_a_code_answer_to_a_how_to_question_is_on_topic():
+    from doaide_code.validate import off_topic_reason
+
+    assert off_topic_reason("how do I reverse a list in python?", "Use `items[::-1]` or `items.reverse()`.") is None
+    assert off_topic_reason("how do I reverse a list in python?", "I like turtles a lot.") is not None
