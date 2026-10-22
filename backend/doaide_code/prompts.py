@@ -95,9 +95,19 @@ LIST_REMINDER = "(List every relevant file, including those under 'Other matchin
 LIST_QUESTION = re.compile(r"\b(?:which|what)\s+(?:files?|modules?|components?|classes|functions|places)\b|\bwhere\s+(?:are|do)\b", re.I)
 
 
+# "Why does X ...?": the reason is usually in a comment next to the code; a generic guess is not
+# an answer (live: 32b on "why does num_ctx round up in 8192-token steps?" said "to leave room",
+# missing the comment's reason, that a changed window reloads the model).
+WHY_REMINDER = "(Answer in 1-2 short sentences with the reason the code's comments or docstrings give, in plain words.)"
+WHY_QUESTION = re.compile(r"^\s*(?:but\s+)?why\b", re.I)
+
+
 def local_reminder(prompt: str) -> str:
-    """The reminder after a local question: a short list for "which files" questions, else brevity."""
-    return LIST_REMINDER if LIST_QUESTION.search(prompt) else LOCAL_REMINDER
+    """The reminder after a local question: a short list for "which files" questions, the code's
+    own reason for "why" questions, else brevity."""
+    if LIST_QUESTION.search(prompt):
+        return LIST_REMINDER
+    return WHY_REMINDER if WHY_QUESTION.search(prompt) else LOCAL_REMINDER
 
 LOCAL_BASE = f"""{IDENTITY}
 {LOCAL_ACCESS}
@@ -182,7 +192,7 @@ def few_shot(style: str, kind: str) -> list[tuple[str, str]]:
 
 def _version() -> str:
     styles = [system_prompt(s, k) for s in ("local", "claude", "codex") for k in KIND_GUIDANCE]
-    return hashlib.sha256("\n".join([*styles, *FEW_SHOT_ANSWER, *FEW_SHOT_EDIT, *FEW_SHOT_DEBUG, LOCAL_REMINDER, LIST_REMINDER]).encode()).hexdigest()[:12]
+    return hashlib.sha256("\n".join([*styles, *FEW_SHOT_ANSWER, *FEW_SHOT_EDIT, *FEW_SHOT_DEBUG, LOCAL_REMINDER, LIST_REMINDER, WHY_REMINDER]).encode()).hexdigest()[:12]
 
 
 PROMPT_VERSION = _version()

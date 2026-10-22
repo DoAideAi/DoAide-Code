@@ -413,3 +413,11 @@ def test_a_list_of_files_answers_a_which_files_question():
     assert off_topic_reason(q, "- frontend/src/socket.js opens and reconnects.\n- backend/doaide_code/main.py serves /ws.") is None
     assert off_topic_reason(q, "- socket.js and relay.py") is None
     assert off_topic_reason(q, "I like turtles.") is not None
+
+
+def test_why_questions_ask_for_the_codes_own_reason():
+    from doaide_code.prompts import LOCAL_REMINDER, WHY_REMINDER, local_reminder
+
+    assert local_reminder("why does num_ctx round up?") == WHY_REMINDER
+    assert local_reminder("Why is FIXED_CTX a constant") == WHY_REMINDER
+    assert local_reminder("explain why the cache exists") == LOCAL_REMINDER
