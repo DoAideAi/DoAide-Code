@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { CodeBlock, copyText, splitFences } from '../components/MessageList.jsx'
 import { Markdown } from '../markdown.jsx'
 import CodeEditor, { EDITOR_THEMES, saveEditorTheme, savedEditorTheme } from './CodeEditor.jsx'
+import EditHistory from './EditHistory.jsx'
+import { emptyHistory, record } from './editHistory.js'
 import FeedbackWidget from './FeedbackWidget.jsx'
 import RecentSnippets from './RecentSnippets.jsx'
 import ShortcutsHelp from './ShortcutsHelp.jsx'
@@ -60,6 +62,8 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
   const [tool, setTool] = useState(() => toolForPath(initialPath))
   const shared = readShared(initialHash)
   const [code, setCode] = useState(shared?.code ?? '')
+  // Session versions of the code: a snapshot per run or restore, stepped through under the editor.
+  const [versions, setVersions] = useState(() => emptyHistory(shared?.code ?? ''))
   const [language, setLanguage] = useState(LANGUAGES.includes(shared?.language) ? shared.language : LANGUAGES[0])
   const [target, setTarget] = useState('Python')
   const [editorTheme, setEditorTheme] = useState(savedEditorTheme)
@@ -109,6 +113,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
     setAnswer('')
     rememberSnippet('ai', code, language === LANGUAGES[0] ? '' : language)
     setHistoryAt(Date.now())
+    setVersions((h) => record(h, code))
     try {
       setAnswer(await runTool(tool.action, code, language, tool.needsTarget ? target : ''))
       setAnalyzed((count) => (count ? count + 1 : count))
@@ -222,6 +227,7 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
               scope="ai"
               refreshKey={historyAt}
               onRestore={(s) => {
+                setVersions((h) => record(record(h, code), s.code))
                 setCode(s.code)
                 if (LANGUAGES.includes(s.language)) setLanguage(s.language)
               }}
@@ -259,6 +265,14 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
             <p className="text-xs text-zinc-500">Ctrl/⌘ + Enter to run. Don't paste passwords or API keys.</p>
             <ShortcutsHelp />
           </div>
+          <EditHistory
+            history={versions}
+            code={code}
+            onNavigate={(next, restored) => {
+              setVersions(next)
+              setCode(restored)
+            }}
+          />
         </div>
 
         {error && (
