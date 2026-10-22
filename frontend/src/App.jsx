@@ -157,7 +157,6 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sessions, setSessions] = useState([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
-  const [activeSessionId, setActiveSessionId] = useState(null)
 
   // Search state
   const [searchOpen, setSearchOpen] = useState(false)
@@ -178,7 +177,7 @@ export default function App() {
     setSessionsLoading(true)
     try {
       const data = await fetchSessions(token)
-      setSessions(data.sessions)
+      setSessions(data.sessions ?? [])
     } catch {
       // Ignore errors loading sessions.
     } finally {
@@ -189,12 +188,6 @@ export default function App() {
   useEffect(() => {
     if (sidebarOpen) loadSessions()
   }, [sidebarOpen, loadSessions])
-
-  // Track active session from snapshot
-  useEffect(() => {
-    // The store doesn't expose session_id, but we get it from the snapshot event.
-    // We track it separately.
-  }, [])
 
   const handleNewChat = useCallback(async () => {
     if (!token) return
@@ -221,11 +214,12 @@ export default function App() {
     try {
       const snapshot = await switchSession(token, sessionId)
       apply(snapshot)
-      setActiveSessionId(sessionId)
+      // Switching moves the session to the top of the list.
+      loadSessions()
     } catch {
       // Ignore errors switching session.
     }
-  }, [token, apply])
+  }, [token, apply, loadSessions])
 
   // Every device can read and send; on the hub, prompts are queued and run by the laptop.
   useEffect(() => {
@@ -285,7 +279,7 @@ export default function App() {
     <div className="flex h-[100dvh]">
       <ConversationSidebar
         sessions={sessions}
-        activeSessionId={activeSessionId}
+        activeSessionId={sessionId}
         onSelect={handleSelectSession}
         onNewChat={handleNewChat}
         open={sidebarOpen}

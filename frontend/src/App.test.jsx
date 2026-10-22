@@ -73,6 +73,18 @@ function mockFetch() {
           blob: async () => new Blob(['script']),
         }
       }
+      case '/api/sessions':
+        return reply({ sessions: SESSIONS })
+      case '/api/session': {
+        const id = new URLSearchParams(query).get('session_id')
+        return reply({ type: 'snapshot', session_id: id, project: 'alpha', status: 'idle', messages: [], has_more: false })
+      }
+      case '/api/sessions/s/messages': {
+        const before = new URLSearchParams(query).get('before')
+        return before === '1'
+          ? reply({ messages: [{ id: '0', role: 'user', content: 'an older question', status: 'done' }], has_more: false })
+          : reply({ detail: 'bad cursor' }, false, 400)
+      }
       case '/api/benchmarks':
         return reply(BENCH)
       case '/api/agent-token':
@@ -107,6 +119,11 @@ function mockFetch() {
   })
 }
 
+const SESSIONS = [
+  { id: 's', title: 'Current chat', created_at: 1, updated_at: 2 },
+  { id: 't', title: 'Other chat', created_at: 1, updated_at: 1 },
+]
+
 const flush = () => act(async () => new Promise((r) => setTimeout(r, 0)))
 
 async function boot(desktop, snapshot = {}) {
@@ -134,6 +151,8 @@ beforeEach(() => {
   globalThis.WebSocket = FakeSocket
   useChat.setState({
     messages: [],
+    sessionId: null,
+    hasMore: false,
     project: null,
     serverStatus: 'idle',
     mode: 'local',
@@ -826,5 +845,33 @@ describe('errors in the chat', () => {
     expect(screen.getByTestId('connection-banner').textContent).toContain('Reconnecting')
     await act(async () => FakeSocket.instances[1].open())
     expect(screen.queryByTestId('connection-banner')).toBeNull()
+  })
+})
+
+describe('conversation history', () => {
+  it('Load earlier messages fetches the page before the oldest message and shows it above', async () => {
+    await boot(true, { has_more: true })
+    fireEvent.click(screen.getByTestId('load-earlier'))
+    await flush()
+    expect(screen.getByText('an older question')).toBeTruthy()
+    expect(useChat.getState().messages.map((m) => m.id)).toEqual(['0', '1'])
+    expect(screen.queryByTestId('load-earlier')).toBeNull()
+  })
+
+  it('no Load earlier button when the snapshot holds the whole conversation', async () => {
+    await boot(true)
+    expect(screen.queryByTestId('load-earlier')).toBeNull()
+  })
+
+  it('the sidebar highlights the session the snapshot is showing, and follows a switch', async () => {
+    await boot(true)
+    fireEvent.click(screen.getByTestId('sidebar-toggle'))
+    await flush()
+    expect(screen.getByTestId('conv-s').className).toContain('bg-sky-600/20')
+    expect(screen.getByTestId('conv-t').className).not.toContain('bg-sky-600/20')
+    fireEvent.click(screen.getByTestId('conv-t'))
+    await flush()
+    expect(screen.getByTestId('conv-t').className).toContain('bg-sky-600/20')
+    expect(screen.getByTestId('conv-s').className).not.toContain('bg-sky-600/20')
   })
 })
