@@ -20,6 +20,7 @@ from pathlib import Path
 from .classify import without_urls
 from .files import IGNORED
 from .imports import parse_imports, resolve, suffix_index
+from .projcache import ProjectCache
 
 TEXT_SUFFIXES = {
     ".py", ".pyi", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".json", ".toml", ".yaml", ".yml",
@@ -329,24 +330,11 @@ def rank_files(root: Path, request: str) -> Ranking:
     """Walk the project once and rank files for `request` (blocking; run in a thread)."""
     root = root.resolve()
     ranking = Ranking(root)
-    files: list[tuple[str, os.stat_result]] = []
-    for current, dirs, names in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in IGNORED and not d.startswith(".") and not d.endswith(".egg-info"))
-        base = Path(current)
-        rel_dir = base.relative_to(root).as_posix()
-        if rel_dir != ".":
-            ranking.tree.append(rel_dir + "/")
-        for name in sorted(names):
-            if name in IGNORED or name in SKIP_NAMES or not _is_text(name):
-                continue
-            rel = (base / name).relative_to(root).as_posix()
-            ranking.tree.append(rel)
-            try:
-                files.append((rel, (base / name).stat()))
-            except OSError:
-                continue
-        if len(files) >= MAX_SCAN_FILES:
-            break
+    cache = ProjectCache(root)
+    if (hit := cache.cached_walk()) is not None:
+        ranking.tree, files = list(hit[0]), hit[1]
+    else:
+        ranking.tree, files = _walk(root, cache)
 
     ranking.mtimes = {rel: st.st_mtime for rel, st in files}
     terms = _terms(request)
@@ -379,7 +367,8 @@ def rank_files(root: Path, request: str) -> Ranking:
     if not explicit and 0 < len(defines) <= 2:
         explicit.update(defines)
     stats = dict(files)
-    imported = _imported(root, explicit, set(stats), ranking)
+    imported = _imported(root, explicit, stats, ranking, cache)
+    cache.save()
 
     # Rare terms say more than common ones: weight each by inverse document frequency.
     total = max(len(present), 1)
@@ -408,16 +397,54 @@ def rank_files(root: Path, request: str) -> Ranking:
     return ranking
 
 
-def _imported(root: Path, explicit: set[str], files: set[str], ranking: Ranking) -> set[str]:
-    """Project files the named files import (one level), recording the imported names."""
+def _walk(root: Path, cache: ProjectCache) -> tuple[list[str], list[tuple[str, os.stat_result]]]:
+    """The project's folders and text files (the tree) and the files' stats, stored in `cache`."""
+    tree: list[str] = []
+    files: list[tuple[str, os.stat_result]] = []
+    dir_mtimes: dict[str, int] = {}
+    for current, dirs, names in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in IGNORED and not d.startswith(".") and not d.endswith(".egg-info"))
+        base = Path(current)
+        rel_dir = base.relative_to(root).as_posix()
+        try:
+            dir_mtimes[rel_dir] = base.stat().st_mtime_ns
+        except OSError:
+            pass
+        if rel_dir != ".":
+            tree.append(rel_dir + "/")
+        for name in sorted(names):
+            if name in IGNORED or name in SKIP_NAMES or not _is_text(name):
+                continue
+            rel = (base / name).relative_to(root).as_posix()
+            tree.append(rel)
+            try:
+                files.append((rel, (base / name).stat()))
+            except OSError:
+                continue
+        if len(files) >= MAX_SCAN_FILES:
+            break
+    cache.store_walk(dir_mtimes, tree, [rel for rel, _ in files])
+    return tree, files
+
+
+def _imported(
+    root: Path, explicit: set[str], stats: dict[str, os.stat_result], ranking: Ranking, cache: ProjectCache
+) -> set[str]:
+    """Project files the named files import (one level), recording the imported names. Each
+    file's import specs come from `cache` while it is unchanged; resolving them is cheap."""
     found: set[str] = set()
+    files = set(stats)
     index: dict[str, list[str]] | None = None
     for rel in sorted(explicit):
-        try:
-            text = (root / rel).read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        for spec in parse_imports(rel, text):
+        specs = cache.imports_of(rel, stats[rel])
+        if specs is None:
+            try:
+                text = (root / rel).read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            specs = parse_imports(rel, text)
+            cache.store_imports(rel, stats[rel], specs)
+        for spec in specs:
             index = index if index is not None else suffix_index(files)
             target = resolve(rel, spec, files, index)
             if target is None or target in explicit:

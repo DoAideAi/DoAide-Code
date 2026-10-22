@@ -38,6 +38,8 @@ class FakeExecutor(Executor):
 def _metrics_file(tmp_path: Path, monkeypatch) -> None:
     # Every task appends to ~/.doaide-code/metrics.jsonl; tests must not.
     monkeypatch.setattr("doaide_code.metrics.METRICS_FILE", tmp_path / "metrics.jsonl")
+    # Nor to the project cache in ~/.doaide-code/cache.
+    monkeypatch.setattr("doaide_code.projcache.CACHE_DIR", tmp_path / ".cache")  # hidden: never in a walk
 
 
 @pytest.fixture
