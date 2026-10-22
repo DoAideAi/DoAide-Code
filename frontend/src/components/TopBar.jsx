@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { currentTheme, followSystem, saveTheme } from '../theme.js'
+import { currentTheme, followSystem, onThemeChange, saveTheme } from '../theme.js'
 import { usableTools } from '../store.js'
 import ProjectSwitcher from './ProjectSwitcher.jsx'
 
@@ -75,6 +75,8 @@ function IconButton({ testid, label, icon, onClick, hint = null }) {
 function ThemeToggle() {
   const [theme, setTheme] = useState(currentTheme)
   useEffect(() => followSystem(setTheme), [])
+  // A choice made on the settings page.
+  useEffect(() => onThemeChange(setTheme), [])
   const next = theme === 'dark' ? 'light' : 'dark'
   return (
     <IconButton

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyTheme, currentTheme, followSystem, saveTheme, savedTheme } from './theme.js'
+import { applyTheme, currentTheme, followSystem, onThemeChange, saveTheme, savedTheme, themeChoice } from './theme.js'
 
 // A fake prefers-color-scheme query whose answer the test can flip.
 function mockSystem(light) {
@@ -74,5 +74,26 @@ describe('theme', () => {
     expect(seen).toEqual(['light'])
     stop()
     expect(system.listeners.size).toBe(0)
+  })
+
+  it("'system' forgets the saved choice and shows the system's theme", () => {
+    mockSystem(true)
+    saveTheme('dark')
+    expect(themeChoice()).toBe('dark')
+    expect(saveTheme('system')).toBe('light')
+    expect(localStorage.getItem('doaide-theme')).toBeNull()
+    expect(themeChoice()).toBe('system')
+    expect(document.documentElement.dataset.theme).toBe('light')
+  })
+
+  it('tells every listener what is shown after a save', () => {
+    mockSystem(false)
+    const seen = []
+    const stop = onThemeChange((t) => seen.push(t))
+    saveTheme('light')
+    saveTheme('system')
+    stop()
+    saveTheme('light')
+    expect(seen).toEqual(['light', 'dark'])
   })
 })
