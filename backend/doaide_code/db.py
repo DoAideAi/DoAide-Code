@@ -120,6 +120,14 @@ CREATE TABLE IF NOT EXISTS remote_state (
     user_email TEXT PRIMARY KEY,
     project TEXT
 );
+-- Anonymous thumbs up/down left on the public tool pages.
+CREATE TABLE IF NOT EXISTS tool_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool TEXT NOT NULL,
+    helpful INTEGER NOT NULL,
+    comment TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL
+);
 """
 
 
@@ -362,6 +370,17 @@ class Store:
                 "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 (key, value),
             )
+
+    # Tool feedback
+
+    def add_tool_feedback(self, tool: str, helpful: bool, comment: str = "") -> None:
+        self._exec(
+            "INSERT INTO tool_feedback (tool, helpful, comment, created_at) VALUES (?, ?, ?, ?)",
+            (tool, int(helpful), comment, time.time()),
+        )
+
+    def list_tool_feedback(self, limit: int = 100) -> list[dict[str, Any]]:
+        return self._all("SELECT * FROM tool_feedback ORDER BY id DESC LIMIT ?", (limit,))
 
     # Refresh tokens
 

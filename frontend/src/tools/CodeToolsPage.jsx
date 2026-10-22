@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { CodeBlock, copyText, splitFences } from '../components/MessageList.jsx'
 import { Markdown } from '../markdown.jsx'
 import CodeEditor, { EDITOR_THEMES, saveEditorTheme, savedEditorTheme } from './CodeEditor.jsx'
+import FeedbackWidget from './FeedbackWidget.jsx'
 import RecentSnippets from './RecentSnippets.jsx'
 import ShortcutsHelp from './ShortcutsHelp.jsx'
 import { rememberSnippet } from './snippets.js'
@@ -282,7 +283,11 @@ export default function CodeToolsPage({ initialPath = window.location.pathname, 
           </section>
         )}
 
-        <section className="mt-6 flex flex-col gap-2 rounded-lg border border-zinc-800 p-4 text-sm text-zinc-400">
+        <div className="mt-4">
+          <FeedbackWidget key={tool.slug} tool={tool.slug} />
+        </div>
+
+        <section className="mt-2 flex flex-col gap-2 rounded-lg border border-zinc-800 p-4 text-sm text-zinc-400">
           <h2 className="text-sm font-medium text-zinc-200">Want this inside your own project?</h2>
           <p>
             DoAide Code is an AI coding assistant that works on your whole codebase. It tries a free model on your

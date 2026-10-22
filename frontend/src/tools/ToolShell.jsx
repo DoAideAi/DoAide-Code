@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { applyMeta } from './codeTools.js'
 import { copyText } from '../copy.js'
+import FeedbackWidget from './FeedbackWidget.jsx'
 import ToolTabs from './ToolTabs.jsx'
 
 export default function ToolShell({ tool, children }) {
@@ -31,7 +32,10 @@ export default function ToolShell({ tool, children }) {
         </header>
         <ToolTabs activeSlug={tool.slug} />
         {children}
-        <section className="mt-6 flex flex-col gap-2 rounded-lg border border-zinc-800 p-4 text-sm text-zinc-400">
+        <div className="mt-4">
+          <FeedbackWidget key={tool.slug} tool={tool.slug} />
+        </div>
+        <section className="mt-2 flex flex-col gap-2 rounded-lg border border-zinc-800 p-4 text-sm text-zinc-400">
           <h2 className="text-sm font-medium text-zinc-200">Want AI help with this code?</h2>
           <p>
             The AI tools above explain, review, convert and test code for free. And DoAide Code itself is an AI coding

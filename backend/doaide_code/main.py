@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -67,6 +68,12 @@ class CodeToolRequest(BaseModel):
     code: str
     language: str = ""
     target: str = ""
+
+
+class FeedbackRequest(BaseModel):
+    tool: str
+    helpful: bool
+    comment: str = ""
 
 
 class RefreshRequest(BaseModel):
@@ -194,6 +201,19 @@ def create_app(
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
         store.set_setting("code_tool_count", str(snippets_analyzed() + 1))
         return {"answer": answer}
+
+    feedback_limit = codetools.RateLimiter(limit=5, window=600)
+
+    @app.post("/api/public/feedback", status_code=status.HTTP_201_CREATED)
+    async def tool_feedback_in(body: FeedbackRequest, request: Request) -> dict:
+        if not re.fullmatch(r"[a-z][a-z0-9-]{0,40}", body.tool):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unknown tool.")
+        forwarded = request.headers.get("x-forwarded-for", "")
+        client = forwarded.split(",")[-1].strip() or (request.client.host if request.client else "?")
+        if not feedback_limit.allow(client):
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "That's a lot of feedback: wait a few minutes.")
+        store.add_tool_feedback(body.tool, body.helpful, body.comment.strip()[:500])
+        return {"ok": True}
 
     @app.post("/api/auth/local")
     async def local_login(request: Request) -> dict:
