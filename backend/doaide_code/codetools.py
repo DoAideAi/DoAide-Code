@@ -32,6 +32,10 @@ ACTIONS = {
     "tests": "Write unit tests for this code using the idiomatic test framework for its language "
     "(pytest, Vitest/Jest, JUnit, go test, …). Cover the happy path, edge cases and error handling. "
     "Reply with one code block of runnable tests, then one sentence on how to run them.",
+    "docs": "Add documentation comments to this code in its language's idiomatic style (JSDoc for "
+    "JavaScript/TypeScript, docstrings for Python, Javadoc for Java, godoc for Go, …): every public "
+    "function, class and module gets a summary, parameters, return value and raised errors, plus an "
+    "@example where it helps. Do not change the code itself. Reply with one code block.",
 }
 
 

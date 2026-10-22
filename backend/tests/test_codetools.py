@@ -24,6 +24,7 @@ def test_prompt_convert_optimize_and_tests():
         codetools.build_prompt("convert", "x = 1", "Python")
     assert "Optimize this code" in codetools.build_prompt("optimize", "x = 1")
     assert "unit tests" in codetools.build_prompt("tests", "x = 1")
+    assert "documentation comments" in codetools.build_prompt("docs", "x = 1")
     # A hostile target cannot grow without bound.
     assert len(codetools.build_prompt("convert", "x", "", "G" * 500)) < 400
 

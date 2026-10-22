@@ -16,6 +16,7 @@ describe('code tools', () => {
     expect(toolForPath('/tools/convert-code').needsTarget).toBe(true)
     expect(toolForPath('/tools/optimize-code').action).toBe('optimize')
     expect(toolForPath('/tools/generate-tests').action).toBe('tests')
+    expect(toolForPath('/tools/generate-docs').action).toBe('docs')
   })
 
   it('sends the target language when converting', async () => {

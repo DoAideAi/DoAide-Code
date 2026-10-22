@@ -62,6 +62,16 @@ export const TOOLS = [
     button: 'Optimize',
   },
   {
+    slug: 'generate-docs',
+    action: 'docs',
+    label: 'Generate docs',
+    title: 'Code Documentation Generator',
+    heading: 'Generate documentation for your code',
+    description:
+      'Paste code and get it back with idiomatic documentation comments: JSDoc, Python docstrings, Javadoc or godoc, with parameters, return values and examples. Free, no sign-up.',
+    button: 'Generate docs',
+  },
+  {
     slug: 'generate-tests',
     action: 'tests',
     label: 'Generate tests',
