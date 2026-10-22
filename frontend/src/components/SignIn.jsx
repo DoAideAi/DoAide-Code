@@ -38,12 +38,12 @@ export default function SignIn({ clientId, onCredential, error }) {
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-      <h1 className="text-lg font-medium text-zinc-200">Doaide Code</h1>
+      <h1 className="text-lg font-medium text-zinc-200">DoAide Code</h1>
       {clientId ? (
         <div ref={button} />
       ) : (
         <p className="max-w-sm text-sm text-zinc-500">
-          Google sign-in is not configured on this server. Open Doaide Code on the machine running it.
+          Google sign-in is not configured on this server. Open DoAide Code on the machine running it.
         </p>
       )}
       {(error || loadError) && <p className="text-sm text-red-400">{error || loadError}</p>}

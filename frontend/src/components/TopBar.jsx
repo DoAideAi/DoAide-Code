@@ -132,7 +132,7 @@ export default function TopBar({
           />
         </div>
         <div className="min-w-0 leading-tight">
-          <div className="text-[15px] font-semibold tracking-tight text-zinc-100">Doaide Code</div>
+          <div className="text-[15px] font-semibold tracking-tight text-zinc-100">DoAide Code</div>
           <div className="flex min-w-0 items-center gap-1.5 text-xs text-zinc-500">
             <span className="shrink-0">{presence}</span>
             <span aria-hidden="true">·</span>

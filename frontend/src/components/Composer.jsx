@@ -135,7 +135,7 @@ export default function Composer({ busy, disabled, onSend, onStop }) {
               change('')
             }
           }}
-          placeholder={disabled ? 'Connecting…' : 'Message Doaide Code'}
+          placeholder={disabled ? 'Connecting…' : 'Message DoAide Code'}
           // 16px text: iOS zooms the page into smaller inputs.
           className="max-h-48 min-h-[44px] flex-1 resize-none rounded-[22px] border border-line/[0.08] bg-zinc-900 px-4 py-[10px] text-base leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-sky-500/50 focus:outline-none disabled:opacity-60 sm:text-[15px]"
         />

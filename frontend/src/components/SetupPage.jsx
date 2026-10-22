@@ -144,7 +144,7 @@ export default function SetupPage({ agentOnline, onDownload, onCreateToken, onCl
           {manual?.error && <span className="text-red-300">Could not create a laptop token.</span>}
           {manual && !manual.error && (
             <>
-              <span>Run this in the Doaide Code backend environment on your laptop:</span>
+              <span>Run this in the DoAide Code backend environment on your laptop:</span>
               <code
                 data-testid="agent-command"
                 className="block select-all overflow-x-auto whitespace-pre rounded-md border border-zinc-800 bg-shade/40 p-2 font-mono text-[11px] text-zinc-300"
