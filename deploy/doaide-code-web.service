@@ -6,7 +6,7 @@ Wants=network-online.target docker.service
 [Service]
 Type=exec
 WorkingDirectory=/opt/DoAide-Code/frontend
-ExecStart=/usr/bin/serve -s dist -l tcp://172.18.0.1:3098
+ExecStart=/usr/bin/serve dist -l tcp://172.18.0.1:3098
 Restart=always
 RestartSec=5
 NoNewPrivileges=yes
