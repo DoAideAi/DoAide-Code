@@ -26,6 +26,7 @@ const PAGES = {
   base64: lazy(() => import('./Base64Page.jsx')),
   'css-gradient': lazy(() => import('./GradientPage.jsx')),
   'unit-converter': lazy(() => import('./UnitPage.jsx')),
+  'code-screenshot': lazy(() => import('./ScreenshotPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {

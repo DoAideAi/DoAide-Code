@@ -138,6 +138,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'code-screenshot',
+    label: 'Screenshot',
+    title: 'Code Screenshot Generator',
+    heading: 'Turn code into a shareable image',
+    description:
+      'Paste a snippet and download a polished PNG — gradient backdrop, editor window chrome, syntax colors, five themes. Rendered in your browser, nothing is uploaded. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
