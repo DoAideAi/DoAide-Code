@@ -16,6 +16,7 @@ const PAGES = {
   'json-formatter': lazy(() => import('./JsonPage.jsx')),
   'embed-code': lazy(() => import('./EmbedPage.jsx')),
   'share-code': lazy(() => import('./SharePage.jsx')),
+  'code-playground': lazy(() => import('./PlaygroundPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {

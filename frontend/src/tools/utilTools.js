@@ -48,6 +48,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'code-playground',
+    label: 'Playground',
+    title: 'Code Playground',
+    heading: 'Run JavaScript or Python in your browser',
+    description:
+      'Type code and run it instantly in a sandboxed frame: JavaScript natively, Python on WebAssembly. Nothing is uploaded. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
