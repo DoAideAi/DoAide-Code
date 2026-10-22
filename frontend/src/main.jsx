@@ -3,9 +3,12 @@ import ReactDOM from 'react-dom/client'
 import './index.css'
 import { applyTheme } from './theme.js'
 import { registerServiceWorker } from './pwa.js'
+import { preloadToolPage } from './tools/pageLoaders.js'
 
 applyTheme()
 registerServiceWorker()
+// On a tool URL, fetch that page's chunk in parallel with the router chunk instead of after it.
+if (window.location.pathname.startsWith('/tools')) preloadToolPage(window.location.pathname)
 
 // Both pages load on demand, so a /tools visitor never downloads the chat app (and the other
 // way round). The entry keeps only React and the shared styles.

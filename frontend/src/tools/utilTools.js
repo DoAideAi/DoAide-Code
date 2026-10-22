@@ -1,6 +1,10 @@
 // The free developer utilities: no AI, no server, everything computed in the page. One URL per
 // tool for search engines, like the AI tools in codeTools.js.
 
+// The slug parser lives beside the page import map, which the entry also loads.
+import { slugForPath } from './pageLoaders.js'
+export { slugForPath }
+
 export const UTIL_TOOLS = [
   {
     slug: 'diff-checker',
@@ -246,11 +250,6 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
 ]
-
-// The slug in a path like /tools/diff-checker ('' for /tools).
-export function slugForPath(pathname) {
-  return pathname.replace(/^\/tools\/?/, '').replace(/\/$/, '')
-}
 
 // The utility living at this path, or null when the path is an AI tool's (or unknown).
 export function utilForPath(pathname) {
