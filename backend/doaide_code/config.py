@@ -88,6 +88,11 @@ class Settings:
     # Kept for compatibility: routing is always local heuristics now (no API calls).
     offline_router: bool = field(default_factory=lambda: _flag("DOAIDE_OFFLINE_ROUTER"))
 
+    # The free code tools (codetools.py) on the public site: a server-side Gemini key, never sent
+    # to the browser. Empty turns the tools off.
+    gemini_api_key: str = field(default_factory=lambda: os.environ.get("GEMINI_API_KEY", "").strip())
+    gemini_model: str = field(default_factory=lambda: os.environ.get("DOAIDE_GEMINI_MODEL", "gemini-2.5-flash").strip())
+
     @property
     def is_hub(self) -> bool:
         return self.mode == "hub"

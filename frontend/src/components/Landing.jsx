@@ -12,6 +12,13 @@ const FEATURES = [
   ['Uses your own logins', 'Claude and Codex run on your existing subscriptions. No API keys to paste in.'],
 ]
 
+const TOOL_LINKS = [
+  ['explain-code', 'Explain code'],
+  ['code-review', 'Code review'],
+  ['find-bugs', 'Find bugs'],
+  ['add-comments', 'Add comments'],
+]
+
 const STEPS = [
   ['Sign in', 'With Google, on any device.'],
   ['Install the agent', 'One download for your laptop; it connects to your account.'],
@@ -61,6 +68,26 @@ export default function Landing({ clientId, onCredential, error }) {
               </li>
             ))}
           </ol>
+        </section>
+
+        <section aria-labelledby="tools" className="flex flex-col items-center gap-3 rounded-lg border border-zinc-800 p-6 text-center">
+          <h2 id="tools" className="text-base font-medium text-zinc-100">
+            Try it now, no sign-in
+          </h2>
+          <p className="max-w-xl text-sm text-zinc-400">
+            Paste any code to explain it, review it, find bugs or add comments. Free, and shareable on WhatsApp.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {TOOL_LINKS.map(([slug, label]) => (
+              <a
+                key={slug}
+                href={`/tools/${slug}`}
+                className="min-h-[40px] rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
+              >
+                {label}
+              </a>
+            ))}
+          </div>
         </section>
 
         <footer className="border-t border-zinc-800 pt-6 text-center text-xs text-zinc-500">

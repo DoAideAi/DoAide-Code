@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import benchmark
+from . import benchmark, codetools
 from .auth import (
     AuthError,
     User,
@@ -60,6 +60,12 @@ class GoogleLogin(BaseModel):
 
 class SendMessage(BaseModel):
     text: str
+
+
+class CodeToolRequest(BaseModel):
+    action: str
+    code: str
+    language: str = ""
 
 
 class RefreshRequest(BaseModel):
@@ -154,6 +160,31 @@ def create_app(
             "local_login": not settings.require_sso,
             "mode": settings.mode,
         }
+
+    # Free code tools (no sign-in): Gemini on the server, limited per client and overall.
+    per_client = codetools.RateLimiter(limit=8, window=600)
+    overall = codetools.RateLimiter(limit=300, window=3600)
+
+    @app.post("/api/public/code-tool")
+    async def code_tool(body: CodeToolRequest, request: Request) -> dict:
+        if not settings.gemini_api_key:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The free code tools are off on this server.")
+        # Caddy sets X-Forwarded-For; its last entry is the address Caddy saw.
+        forwarded = request.headers.get("x-forwarded-for", "")
+        client = forwarded.split(",")[-1].strip() or (request.client.host if request.client else "?")
+        try:
+            prompt = codetools.build_prompt(body.action, body.code, body.language)
+        except codetools.ToolError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        if not per_client.allow(client):
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "That's a lot of requests: wait a few minutes.")
+        if not overall.allow("*"):
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "The free tools are busy right now. Try again later.")
+        try:
+            answer = await codetools.generate(prompt, api_key=settings.gemini_api_key, model=settings.gemini_model)
+        except codetools.ToolError as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+        return {"answer": answer}
 
     @app.post("/api/auth/local")
     async def local_login(request: Request) -> dict:
