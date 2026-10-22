@@ -9,7 +9,9 @@ export const site = {
   accent: '#60a5fa',
   nav: [
     ['/tools', 'Free tools'],
+    ['/features', 'Features'],
     ['/guides', 'Guides'],
+    ['/compare', 'Compare'],
   ],
   footer:
     'DoAide Code: free AI code tools — review, explain, convert and test code without sign-up. Also from DoAide: <a href="https://resume.doaide.com">free resume builder</a> · <a href="https://coach.doaide.com">AI interview prep</a>',
