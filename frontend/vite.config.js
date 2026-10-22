@@ -5,6 +5,15 @@ const api = 'http://127.0.0.1:3097'
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // React in its own chunk: it changes only on upgrades, so repeat visitors keep it
+        // cached across deploys of our code.
+        manualChunks: { vendor: ['react', 'react-dom'] },
+      },
+    },
+  },
   server: {
     port: 3098,
     proxy: {
