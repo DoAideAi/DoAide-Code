@@ -34,7 +34,7 @@ from .executors import Executor, ExecutorError, Job, Turn, build_executors
 from .executors.base import user_message
 from .fastpath import direct_answer, math_answer, rename_answer
 from .history import fit_history
-from .prompts import PROMPT_VERSION
+from .prompts import EDIT_KINDS, PROMPT_VERSION
 from .router import RouteDecision, RouterBrain, is_local
 from .usage import Usage, sonnet_equivalent
 from .verify import failing_tests
@@ -295,6 +295,9 @@ async def _run_job(
     if not decision.about_project:
         # General knowledge ("how do I reverse a list"): project files would only slow it down.
         ranking = None
+    candidates, too_big = _fits_whole(candidates, ranking, decision.kind)
+    if too_big:
+        skipped = f"{skipped}; {too_big}" if skipped else too_big
 
     resume = find_resume(store, job)
     claude_session, claude_context = "", 0
@@ -570,6 +573,25 @@ def _repair_job(run: Job, fix: str, first: str) -> Job:
     same prefix, so a local model reuses its prompt cache and reads only the new turn."""
     history = [*run.history, Turn("user", user_message(run)), Turn("assistant", first)]
     return replace(run, prompt=fix, context="", history=history)
+
+
+def _fits_whole(
+    candidates: list[Executor], ranking: Ranking | None, kind: str
+) -> tuple[list[Executor], str | None]:
+    """Without the local models that cannot see a named file whole, for edits: they edit what they
+    were shown (live: 32b, "fix any typos in README.md", 22k characters against a 14k budget, made
+    up a line to replace, twice, for two minutes before escalating). Unchanged when no other
+    executor is left."""
+    if ranking is None or kind not in EDIT_KINDS:
+        return candidates, None
+    named = [c for c in ranking.candidates if c.explicit]
+    if not named:
+        return candidates, None
+    biggest = max(named, key=lambda c: c.size)
+    kept = [e for e in candidates if not (is_local(e) and e.context_chars < biggest.size)]
+    if not kept or len(kept) == len(candidates):
+        return candidates, None
+    return kept, f"{biggest.path} ({biggest.size // 1000}k characters) is too large for the local models to edit whole"
 
 
 def _escalation(candidates: list[Executor]) -> Executor | None:

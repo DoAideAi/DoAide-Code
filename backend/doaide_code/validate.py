@@ -108,6 +108,16 @@ def capability_claim(answer: str) -> str | None:
     return NO_ACCESS_REASON if _NO_ACCESS.search(head) or _NO_ACCESS_TO.search(head) else None
 
 
+# "Fix any typos" when there are none: a finding, not a missing edit (live: Sonnet's correct "no
+# typos found" was marked incomplete).
+_NOTHING_TO_DO = re.compile(
+    r"\b(?:no|zero|not any|didn't find any|did not find any)\s+(?:\w+\s+){0,2}(?:typos?|misspellings?|spelling mistakes|errors?|issues?|"
+    r"problems?|bugs?|changes?|mistakes?)\b|\bnothing (?:to|needs to be) (?:fix|change|update)|\balready (?:correct|fixed|"
+    r"does|handles|in place|up to date|has)\b",
+    re.I,
+)
+
+
 def incomplete_reason(answer: str, kind: str, *, reads_files: bool = False) -> str | None:
     """Why the answer looks unfinished, or None when it looks complete.
 
@@ -125,7 +135,7 @@ def incomplete_reason(answer: str, kind: str, *, reads_files: bool = False) -> s
         return NEEDS_FILES_REASON
     if not reads_files and _PARTIAL.search(text):
         return PARTIAL_REASON
-    if kind in _EDIT_KINDS and "```" not in text and not parse_edits(text) and len(text) < 400:
+    if kind in _EDIT_KINDS and "```" not in text and not parse_edits(text) and len(text) < 400 and not _NOTHING_TO_DO.search(text):
         return NO_EDIT
     if _CLAIMS_CHANGE.match(text) and "```" not in text and not parse_edits(text) and len(text) < 400:
         # Live: "Usage RE updated to accept 'what calls X' questions." with no edit at all.
