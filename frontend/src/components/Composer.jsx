@@ -25,7 +25,7 @@ export default function Composer({ busy, disabled, onSend, onStop }) {
   return (
     <footer
       data-testid="composer"
-      className="shrink-0 border-t border-white/[0.06] bg-[#0f1013]/90 pb-[env(safe-area-inset-bottom)] backdrop-blur"
+      className="shrink-0 border-t border-line/[0.06] bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur"
     >
       <div className="mx-auto flex max-w-2xl items-end gap-2 px-3 py-2.5 sm:px-4">
         <textarea
@@ -48,7 +48,7 @@ export default function Composer({ busy, disabled, onSend, onStop }) {
           }}
           placeholder={disabled ? 'Connecting…' : 'Message Doaide Code'}
           // 16px text: iOS zooms the page into smaller inputs.
-          className="max-h-48 min-h-[44px] flex-1 resize-none rounded-[22px] border border-white/[0.08] bg-zinc-900 px-4 py-[10px] text-base leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-sky-500/50 focus:outline-none disabled:opacity-60 sm:text-[15px]"
+          className="max-h-48 min-h-[44px] flex-1 resize-none rounded-[22px] border border-line/[0.08] bg-zinc-900 px-4 py-[10px] text-base leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-sky-500/50 focus:outline-none disabled:opacity-60 sm:text-[15px]"
         />
         {busy ? (
           <button

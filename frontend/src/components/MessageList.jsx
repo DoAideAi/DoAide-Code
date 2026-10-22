@@ -26,7 +26,7 @@ export function codeLines(value) {
 
 function Code({ value }) {
   return (
-    <pre className="my-2 overflow-x-auto rounded-xl bg-black/40 p-3 font-mono text-[13px] leading-relaxed text-zinc-200">
+    <pre className="my-2 overflow-x-auto rounded-xl bg-shade/40 p-3 font-mono text-[13px] leading-relaxed text-zinc-200">
       <code>{value}</code>
     </pre>
   )
@@ -40,7 +40,7 @@ function Inline({ text }) {
     if (i % 2 === 0) return piece
     if (piece.startsWith('`'))
       return (
-        <code key={i} className="rounded-md bg-black/30 px-1.5 py-0.5 font-mono text-[0.88em] text-sky-200">
+        <code key={i} className="rounded-md bg-shade/30 px-1.5 py-0.5 font-mono text-[0.88em] text-sky-200">
           {piece.slice(1, -1)}
         </code>
       )
@@ -67,7 +67,7 @@ function Body({ content }) {
         <Code key={i} value={part.value} />
       ) : (
         <details key={i} data-testid="collapsed-code" className="my-1.5 text-xs text-zinc-400">
-          <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-full bg-black/25 px-2.5 py-1 hover:text-zinc-200">
+          <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-full bg-shade/25 px-2.5 py-1 hover:text-zinc-200">
             Show code ({codeLines(part.value)} lines{part.lang ? `, ${part.lang}` : ''})
           </summary>
           <Code value={part.value} />
@@ -163,7 +163,7 @@ function ClaudeBadge({ tool, label = 'Claude Code' }) {
 
 function Diff({ text }) {
   return (
-    <pre className="max-h-80 overflow-auto bg-black/40 p-2 font-mono text-[12px] leading-snug">
+    <pre className="max-h-80 overflow-auto bg-shade/40 p-2 font-mono text-[12px] leading-snug">
       {text.split('\n').map((line, i) => {
         let color = 'text-zinc-400'
         if (line.startsWith('+++') || line.startsWith('---')) color = 'text-zinc-500'
@@ -218,7 +218,7 @@ export function ChangeSet({ changes }) {
       return next
     })
   return (
-    <div data-testid="changeset" className="mt-2.5 overflow-hidden rounded-xl bg-black/25 text-xs">
+    <div data-testid="changeset" className="mt-2.5 overflow-hidden rounded-xl bg-shade/25 text-xs">
       <div className="flex items-center gap-1.5 px-3 pb-1 pt-2">
         <svg viewBox="0 0 24 24" aria-hidden="true" className={`h-3.5 w-3.5 ${CHANGE_STATUS[changes.status] ?? 'text-zinc-400'}`} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M4 20h4L19 9l-4-4L4 16v4z" />
@@ -233,7 +233,7 @@ export function ChangeSet({ changes }) {
             type="button"
             onClick={() => toggle(file.path)}
             aria-expanded={open.has(file.path)}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-white/[0.04]"
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-line/[0.04]"
           >
             <Chevron open={open.has(file.path)} />
             <span className="min-w-0 flex-1 truncate font-mono text-zinc-200">{file.path}</span>
@@ -254,7 +254,7 @@ export function ChangeSet({ changes }) {
         </div>
       ))}
       {changes.problems?.length > 0 && (
-        <ul className="border-t border-white/[0.06] px-3 py-1.5 text-amber-300">
+        <ul className="border-t border-line/[0.06] px-3 py-1.5 text-amber-300">
           {changes.problems.map((p, i) => (
             <li key={i}>⚠ {p}</li>
           ))}
@@ -375,7 +375,7 @@ function Message({ message }) {
         <summary className={`cursor-pointer truncate px-3 py-1.5 font-mono ${message.status === 'error' ? 'text-red-300' : 'text-zinc-400'}`}>
           {first}
         </summary>
-        <pre className="max-h-80 overflow-auto rounded-b-xl bg-black/40 p-2 font-mono text-[12px] text-zinc-300">
+        <pre className="max-h-80 overflow-auto rounded-b-xl bg-shade/40 p-2 font-mono text-[12px] text-zinc-300">
           {message.content}
         </pre>
       </details>
@@ -428,7 +428,7 @@ function Welcome({ onSend }) {
               key={s}
               type="button"
               onClick={() => onSend(s)}
-              className="rounded-full border border-white/[0.08] bg-zinc-900 px-3.5 py-2 text-sm text-zinc-300 hover:border-sky-500/40 hover:text-zinc-100"
+              className="rounded-full border border-line/[0.08] bg-zinc-900 px-3.5 py-2 text-sm text-zinc-300 hover:border-sky-500/40 hover:text-zinc-100"
             >
               {s}
             </button>

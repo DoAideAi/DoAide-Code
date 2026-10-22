@@ -86,7 +86,7 @@ export default function SetupPage({ agentOnline, onDownload, onCreateToken, onCl
               data-testid="setup-download"
               disabled={state === 'downloading'}
               onClick={() => download(platform)}
-              className="self-start rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-black hover:bg-white disabled:opacity-60"
+              className="self-start rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-zinc-50 disabled:opacity-60"
             >
               {state === 'downloading' ? 'Preparing…' : `Download for ${PLATFORM_NAMES[platform]}`}
             </button>
@@ -147,7 +147,7 @@ export default function SetupPage({ agentOnline, onDownload, onCreateToken, onCl
               <span>Run this in the Doaide Code backend environment on your laptop:</span>
               <code
                 data-testid="agent-command"
-                className="block select-all overflow-x-auto whitespace-pre rounded-md border border-zinc-800 bg-black/40 p-2 font-mono text-[11px] text-zinc-300"
+                className="block select-all overflow-x-auto whitespace-pre rounded-md border border-zinc-800 bg-shade/40 p-2 font-mono text-[11px] text-zinc-300"
               >
                 {`DOAIDE_HUB_URL=${manual.hub_url} DOAIDE_HUB_TOKEN=${manual.token} doaide-code agent`}
               </code>

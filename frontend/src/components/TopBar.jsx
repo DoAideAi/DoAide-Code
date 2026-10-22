@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+import { currentTheme, followSystem, saveTheme } from '../theme.js'
 import { usableTools } from '../store.js'
 
 const DOT = {
@@ -18,6 +20,8 @@ const ICONS = {
   models: 'M4 7h16M4 12h16M4 17h10',
   usage: 'M5 19V11M12 19V5M19 19v-6',
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
+  sun: 'M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z',
 }
 
 function Icon({ name, always = false }) {
@@ -44,13 +48,44 @@ function Link({ testid, icon, onClick, children }) {
   )
 }
 
+// An icon button on every screen size.
+function IconButton({ testid, label, icon, onClick }) {
+  return (
+    <button
+      type="button"
+      data-testid={testid}
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100"
+    >
+      <Icon name={icon} always />
+    </button>
+  )
+}
+
+// Flips dark/light and saves the choice; until then it follows the system setting.
+function ThemeToggle() {
+  const [theme, setTheme] = useState(currentTheme)
+  useEffect(() => followSystem(setTheme), [])
+  const next = theme === 'dark' ? 'light' : 'dark'
+  return (
+    <IconButton
+      testid="theme-toggle"
+      label={`Switch to ${next} mode`}
+      icon={theme === 'dark' ? 'sun' : 'moon'}
+      onClick={() => setTheme(saveTheme(next))}
+    />
+  )
+}
+
 // Not a <span>: the readiness dot is the Models button's only span.
 function Label({ children }) {
   return <em className="sr-only not-italic sm:not-sr-only">{children}</em>
 }
 
 // A chat header: DoAide's avatar with a presence dot, its name and the project; How it works,
-// Models, Usage and a refresh icon (it reloads the page, on phones and desktop) on the right.
+// Models, Usage, a dark/light toggle and a refresh icon (it reloads the page) on the right.
 export default function TopBar({
   project,
   color,
@@ -65,7 +100,7 @@ export default function TopBar({
   const ready = usableTools(models).length
   const presence = busy && color === 'green' ? 'Working…' : PRESENCE[color]
   return (
-    <header className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] bg-[#0f1013]/90 px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur sm:px-4">
+    <header className="flex shrink-0 items-center justify-between gap-2 border-b border-line/[0.06] bg-surface/90 px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur sm:px-4">
       <div className="flex min-w-0 items-center gap-3">
         <div className="relative shrink-0">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-sm font-semibold text-white">
@@ -75,7 +110,7 @@ export default function TopBar({
             data-testid="status-dot"
             data-color={color}
             aria-label={`status ${color}`}
-            className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0f1013] ${DOT[color]} ${busy && color === 'green' ? 'animate-pulse' : ''}`}
+            className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface ${DOT[color]} ${busy && color === 'green' ? 'animate-pulse' : ''}`}
           />
         </div>
         <div className="min-w-0 leading-tight">
@@ -116,16 +151,8 @@ export default function TopBar({
             <Label>Usage</Label>
           </Link>
         )}
-        <button
-          type="button"
-          data-testid="refresh"
-          aria-label="Refresh"
-          title="Refresh"
-          onClick={onRefresh}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100"
-        >
-          <Icon name="refresh" always />
-        </button>
+        <ThemeToggle />
+        <IconButton testid="refresh" label="Refresh" icon="refresh" onClick={onRefresh} />
       </div>
     </header>
   )
