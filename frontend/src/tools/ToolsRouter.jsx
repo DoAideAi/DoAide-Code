@@ -29,6 +29,7 @@ const PAGES = {
   'code-screenshot': lazy(() => import('./ScreenshotPage.jsx')),
   'hash-generator': lazy(() => import('./HashPage.jsx')),
   'url-encoder': lazy(() => import('./UrlPage.jsx')),
+  'timestamp-converter': lazy(() => import('./TimestampPage.jsx')),
 }
 
 export default function ToolsRouter({ path = window.location.pathname }) {

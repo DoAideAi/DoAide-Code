@@ -165,6 +165,15 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'timestamp-converter',
+    label: 'Timestamp',
+    title: 'Unix Timestamp Converter',
+    heading: 'Convert timestamps',
+    description:
+      'Paste unix seconds, milliseconds, ISO 8601 or RFC 2822 and get every format back, plus the moment in any timezone — as you type, in your browser. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
