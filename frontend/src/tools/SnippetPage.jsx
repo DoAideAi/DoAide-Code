@@ -19,7 +19,13 @@ export function CodeView({ code, language = '' }) {
       <pre aria-hidden className={`select-none py-3 pl-3 pr-2 text-right text-zinc-600 ${FONT}`}>
         {Array.from({ length: lines }, (_, i) => i + 1).join('\n')}
       </pre>
-      <pre data-testid="snippet-code" tabIndex={0} className={`min-w-0 flex-1 overflow-x-auto py-3 pl-1 pr-3 text-zinc-200 ${FONT}`}>
+      <pre
+        data-testid="snippet-code"
+        tabIndex={0}
+        role="region"
+        aria-label="Shared code"
+        className={`min-w-0 flex-1 overflow-x-auto py-3 pl-1 pr-3 text-zinc-200 ${FONT}`}
+      >
         {tokens.map((t, i) =>
           t.kind && TOKEN_CLASS[t.kind] ? (
             <span key={i} className={TOKEN_CLASS[t.kind]}>
@@ -86,7 +92,9 @@ export default function SnippetPage({ path = window.location.pathname }) {
             </a>
           </>
         ) : !snippet ? (
-          <p className="text-sm text-zinc-500">Loading snippet…</p>
+          <p role="status" className="text-sm text-zinc-500">
+            Loading snippet…
+          </p>
         ) : (
           <>
             <header className="flex flex-col gap-1">

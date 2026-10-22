@@ -55,6 +55,7 @@ describe('PWA files', () => {
       { source: '/features', destination: '/features/index.html' },
       { source: '/compare', destination: '/compare/index.html' },
       { source: '/compare/:slug([a-z0-9-]+)', destination: '/compare/:slug/index.html' },
+      { source: '/free-code-editor-online', destination: '/free-code-editor-online/index.html' },
       { source: '/embed', destination: '/embed.html' },
       { source: '/s/:id([A-Za-z0-9]+)', destination: '/index.html' },
       { source: '/tools', destination: '/index.html' },
