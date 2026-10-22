@@ -172,7 +172,7 @@ export async function fetchToolStats() {
   }
 }
 
-// Title, description and canonical URL for the tool on screen.
+// Title, description, canonical URL and JSON-LD for the tool on screen.
 export function applyMeta(tool, doc = document) {
   doc.title = `${tool.title}: Free AI Tool | DoAide Code`
   const set = (selector, attr, value) => doc.querySelector(selector)?.setAttribute(attr, value)
@@ -182,4 +182,24 @@ export function applyMeta(tool, doc = document) {
   set('meta[property="og:description"]', 'content', tool.description)
   set('meta[property="og:url"]', 'content', url)
   set('link[rel="canonical"]', 'href', url)
+  // One WebApplication block per tool page, replaced (not stacked) when switching tools in place.
+  let script = doc.querySelector('script[data-tool-jsonld]')
+  if (!script) {
+    script = doc.createElement('script')
+    script.type = 'application/ld+json'
+    script.setAttribute('data-tool-jsonld', '')
+    doc.head.appendChild(script)
+  }
+  script.textContent = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    name: tool.title,
+    url,
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'Any',
+    description: tool.description,
+    isAccessibleForFree: true,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    publisher: { '@type': 'Organization', name: 'DoAide', url: 'https://doaide.com' },
+  })
 }

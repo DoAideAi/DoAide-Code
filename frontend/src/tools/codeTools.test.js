@@ -64,4 +64,17 @@ describe('code tools', () => {
     expect(document.querySelector('link[rel="canonical"]').getAttribute('href')).toBe('https://code.doaide.com/tools/find-bugs')
     expect(document.querySelector('meta[name="description"]').getAttribute('content')).toBe(TOOLS[2].description)
   })
+
+  it('injects one WebApplication JSON-LD block and replaces it on tool switch', () => {
+    document.head.innerHTML = '<meta name="description" content=""><link rel="canonical" href="">'
+    applyMeta(TOOLS[2])
+    applyMeta(TOOLS[0])
+    const scripts = document.querySelectorAll('script[data-tool-jsonld]')
+    expect(scripts).toHaveLength(1)
+    const data = JSON.parse(scripts[0].textContent)
+    expect(data['@type']).toBe('WebApplication')
+    expect(data.name).toBe(TOOLS[0].title)
+    expect(data.url).toBe(`https://code.doaide.com/tools/${TOOLS[0].slug}`)
+    expect(data.offers.price).toBe('0')
+  })
 })
