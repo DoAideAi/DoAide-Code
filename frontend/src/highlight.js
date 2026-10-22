@@ -75,3 +75,13 @@ export const TOKEN_CLASS = {
   added: 'text-emerald-300 bg-emerald-500/10',
   removed: 'text-red-300 bg-red-500/10',
 }
+
+// File extension -> the highlighter's language name, where they differ.
+const LANGS = { mjs: 'js', cjs: 'js', pyi: 'py', yml: 'yaml', htm: 'html', mk: 'make' }
+
+export function langFor(path) {
+  const name = path.split('/').pop().toLowerCase()
+  if (name === 'dockerfile' || name === 'makefile') return name
+  const ext = name.includes('.') ? name.split('.').pop() : ''
+  return LANGS[ext] ?? ext
+}

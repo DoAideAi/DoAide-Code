@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { explainFailure } from '../errors.js'
-import { TOKEN_CLASS, highlight } from '../highlight.js'
+import { TOKEN_CLASS, highlight, langFor } from '../highlight.js'
+import { parseDiff } from '../diff.js'
 import { Markdown } from '../markdown.jsx'
 import { MOD_KEY } from '../hooks/useShortcuts.js'
 
@@ -223,22 +224,52 @@ function ClaudeBadge({ tool, label = 'Claude Code' }) {
   )
 }
 
-function Diff({ text }) {
+const DIFF_ROW = {
+  add: 'bg-emerald-500/10',
+  del: 'bg-red-500/10',
+  ctx: '',
+  note: 'text-zinc-500 italic',
+}
+const DIFF_SIGN = { add: ['+', 'text-emerald-400'], del: ['-', 'text-red-400'], ctx: [' ', ''], note: [' ', ''] }
+
+// A file's diff: old and new line numbers, +/- marks, and the code highlighted for its language.
+export function Diff({ text, path = '' }) {
+  const lang = langFor(path)
+  const rows = useMemo(() => parseDiff(text).map((r) => ({ ...r, tokens: r.kind === 'note' ? [{ text: r.text, kind: null }] : highlight(r.text, lang) })), [text, lang])
   return (
-    <pre className="max-h-80 overflow-auto bg-shade/40 p-2 font-mono text-[12px] leading-snug">
-      {text.split('\n').map((line, i) => {
-        let color = 'text-zinc-400'
-        if (line.startsWith('+++') || line.startsWith('---')) color = 'text-zinc-500'
-        else if (line.startsWith('+')) color = 'text-emerald-300 bg-emerald-500/10'
-        else if (line.startsWith('-')) color = 'text-red-300 bg-red-500/10'
-        else if (line.startsWith('@@')) color = 'text-sky-300'
-        return (
-          <div key={i} className={color}>
-            {line || ' '}
-          </div>
-        )
-      })}
-    </pre>
+    <div data-testid="diff" className="max-h-96 overflow-auto bg-shade/40 font-mono text-[12px] leading-[1.45]">
+      <table className="w-full border-collapse">
+        <tbody>
+          {rows.map((r, i) =>
+            r.kind === 'hunk' ? (
+              <tr key={i} data-kind="hunk" className="bg-sky-500/[0.06] text-sky-300/70">
+                <td colSpan={4} className="select-none px-2 py-0.5">
+                  ⋯ {r.text}
+                </td>
+              </tr>
+            ) : (
+              <tr key={i} data-kind={r.kind} className={DIFF_ROW[r.kind]}>
+                <td className="w-0 select-none whitespace-nowrap px-1.5 text-right align-top text-zinc-600">{r.old ?? ''}</td>
+                <td className="w-0 select-none whitespace-nowrap px-1.5 text-right align-top text-zinc-600">{r.new ?? ''}</td>
+                <td className={`w-0 select-none pl-1 align-top ${DIFF_SIGN[r.kind][1]}`}>{DIFF_SIGN[r.kind][0]}</td>
+                <td className="whitespace-pre pr-3 text-zinc-200">
+                  {r.tokens.map((t, j) =>
+                    t.kind ? (
+                      <span key={j} className={TOKEN_CLASS[t.kind]}>
+                        {t.text}
+                      </span>
+                    ) : (
+                      t.text
+                    ),
+                  )}
+                  {!r.text && ' '}
+                </td>
+              </tr>
+            ),
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -312,7 +343,7 @@ export function ChangeSet({ changes }) {
               ))}
             </ul>
           )}
-          {open.has(file.path) && <Diff text={file.diff} />}
+          {open.has(file.path) && <Diff text={file.diff} path={file.path} />}
         </div>
       ))}
       {changes.problems?.length > 0 && (

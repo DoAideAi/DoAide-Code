@@ -1,15 +1,8 @@
 import { useEffect, useState } from 'react'
+import { langFor } from '../highlight.js'
 import { CodeBlock, copyText } from './MessageList.jsx'
 
-// File extension -> the highlighter's language name, where they differ.
-const LANGS = { mjs: 'js', cjs: 'js', pyi: 'py', yml: 'yaml', htm: 'html', mk: 'make' }
-
-export function langFor(path) {
-  const name = path.split('/').pop().toLowerCase()
-  if (name === 'dockerfile' || name === 'makefile') return name
-  const ext = name.includes('.') ? name.split('.').pop() : ''
-  return LANGS[ext] ?? ext
-}
+export { langFor }
 
 function formatSize(bytes) {
   if (bytes == null) return ''
