@@ -1704,4 +1704,187 @@ CREATE TABLE orders (
     ],
     cta: ['/tools/css-grid-generator', 'Build your CSS grid visually — free generator'],
   },
+  {
+    slug: 'linux-file-permissions-chmod',
+    title: 'Linux File Permissions & chmod Explained: 755, 644, 600 (2026) | DoAide Code',
+    h1: 'Linux file permissions and chmod, explained',
+    description:
+      'How Linux permissions work — read, write and execute for owner, group and others, octal modes like 755, 644 and 600, symbolic chmod, setuid, setgid and the sticky bit — with a free visual chmod calculator.',
+    updated: '2026-10-23',
+    intro: `<p>“Permission denied” is one of the first errors every developer meets on a Linux server, and <code>chmod 777</code> is the fix that makes it go away — while opening a security hole. Understanding the nine permission bits takes ten minutes and saves you from both.</p>
+<p>This guide covers how permissions are represented, what the common octal modes mean, how to read <code>ls -l</code> output, and the special bits that trip people up. Try every example in the <a href="/tools/chmod-calculator">free chmod calculator</a>: tick boxes or type a mode and get both chmod commands with a plain-English explanation.</p>`,
+    sections: [
+      [
+        'three-classes',
+        'Owner, group, others — and read, write, execute',
+        `<p>Every file and directory has an <strong>owner</strong> (a user), a <strong>group</strong>, and permissions for three classes of people: the owner, members of the group, and <strong>others</strong> (everyone else). Each class gets three bits:</p>
+<ul>
+<li><strong>r — read</strong> (4): read a file’s contents; list a directory’s entries.</li>
+<li><strong>w — write</strong> (2): change a file; create, rename or delete entries in a directory.</li>
+<li><strong>x — execute</strong> (1): run a file as a program; <em>enter</em> a directory and reach the files inside it.</li>
+</ul>
+<p>The directory meanings are the ones that surprise people. Deleting a file needs write permission on the <em>directory</em>, not the file. And a directory with <code>r</code> but no <code>x</code> lets you see names but not open anything in it — which is why directories are almost always 755 or 700, never 644.</p>`,
+      ],
+      [
+        'octal',
+        'Octal modes: what 755, 644 and 600 mean',
+        `<p>Add up each class’s bits to get one digit from 0 to 7, then write the three digits owner-group-others:</p>
+<pre><code>7 = 4+2+1 = rwx      5 = 4+1 = r-x      4 = r--
+6 = 4+2   = rw-      0       = ---</code></pre>
+<ul>
+<li><strong>755</strong> (<code>rwxr-xr-x</code>) — scripts, binaries and directories: everyone can run or enter, only the owner can change.</li>
+<li><strong>644</strong> (<code>rw-r--r--</code>) — ordinary files: HTML, images, config that is not secret.</li>
+<li><strong>600</strong> (<code>rw-------</code>) — private files: SSH private keys, <code>.env</code> files, credentials.</li>
+<li><strong>700</strong> (<code>rwx------</code>) — private directories such as <code>~/.ssh</code>.</li>
+<li><strong>775 / 664</strong> — the group-shared versions of 755 / 644, for teams that share a group.</li>
+</ul>
+<p>OpenSSH refuses a private key that others can read — the classic “UNPROTECTED PRIVATE KEY FILE” error is fixed with <code>chmod 600 ~/.ssh/id_ed25519</code>.</p>`,
+      ],
+      [
+        'ls-l',
+        'Reading ls -l output',
+        `<p><code>ls -l</code> shows the same bits as ten characters:</p>
+<pre><code>-rwxr-xr-x  1 deploy www-data  4096 Oct 23 10:00 deploy.sh
+drwxr-x---  2 deploy www-data  4096 Oct 23 10:00 secrets</code></pre>
+<p>The first character is the type (<code>-</code> file, <code>d</code> directory, <code>l</code> symlink), then three groups of <code>rwx</code> for owner, group and others. So <code>deploy.sh</code> is 755 and <code>secrets</code> is 750: the group can enter and list it, others cannot. Paste either string into the <a href="/tools/chmod-calculator">chmod calculator</a> to get the octal value. A trailing <code>.</code>, <code>+</code> or <code>@</code> marks SELinux contexts, ACLs or macOS extended attributes.</p>`,
+      ],
+      [
+        'symbolic',
+        'Symbolic chmod: changing one bit at a time',
+        `<p>Octal sets all nine bits at once. Symbolic mode changes only what you name, which is safer in scripts:</p>
+<pre><code>chmod +x script.sh          # add execute for everyone (subject to umask)
+chmod u+x,go-w file         # owner gains execute; group and others lose write
+chmod g=rx,o= dir           # group exactly r-x, others nothing
+chmod -R u=rwX,go=rX site/  # capital X: execute only on directories (and already-executable files)</code></pre>
+<p>The capital <code>X</code> is the trick for fixing a whole tree: directories get <code>x</code> so they can be entered, ordinary files do not become executable. The common alternative is two <code>find</code> commands: <code>find site -type d -exec chmod 755 {} +</code> and <code>find site -type f -exec chmod 644 {} +</code>.</p>`,
+      ],
+      [
+        'special-bits',
+        'setuid, setgid and the sticky bit',
+        `<p>A fourth, leading octal digit holds three special bits:</p>
+<ul>
+<li><strong>setuid (4)</strong> — the program runs with its <em>owner’s</em> privileges. <code>/usr/bin/passwd</code> is <code>4755</code> owned by root, which is how ordinary users can update the shadow password file. Shows as <code>s</code> in the owner’s execute column.</li>
+<li><strong>setgid (2)</strong> — on a program, runs with the file’s group; on a <em>directory</em>, new files inherit the directory’s group instead of the creator’s. <code>2775</code> is the standard mode for a shared project directory.</li>
+<li><strong>sticky (1)</strong> — on a directory, only a file’s owner can delete or rename it, even if others can write to the directory. That is why <code>/tmp</code> is <code>1777</code> and shows a <code>t</code> at the end.</li>
+</ul>
+<p>A capital <code>S</code> or <code>T</code> in <code>ls -l</code> means the special bit is set but the execute bit underneath is not — usually a mistake.</p>`,
+      ],
+      [
+        'never-777',
+        'Why chmod 777 is almost always wrong',
+        `<p>777 gives every account on the machine — including a compromised web process — permission to modify or replace the file. On a web server that means an uploaded script can overwrite your code. The real problem behind “permission denied” is nearly always <strong>ownership</strong>, not mode:</p>
+<pre><code># the web server (www-data) needs to write uploads
+sudo chown -R deploy:www-data uploads/
+sudo chmod -R 2775 uploads/   # group-writable, new files keep the group</code></pre>
+<p>Also check your <strong>umask</strong>: it is subtracted from the default 666 (files) and 777 (directories) when files are created, so a umask of 022 yields 644 and 755. Working with servers, containers or deploy scripts? The <a href="/tools/ip-subnet-calculator">IP subnet calculator</a> and <a href="/tools/cron-builder">cron expression builder</a> cover the next two things you will need.</p>`,
+      ],
+    ],
+    faqs: [
+      [
+        'What does chmod 755 mean?',
+        'The owner can read, write and execute (7); the group and everyone else can read and execute (5 and 5). It is the normal mode for scripts, programs and directories.',
+      ],
+      [
+        'What is the difference between chmod 644 and 755?',
+        '644 (rw-r--r--) has no execute permission and suits regular files. 755 (rwxr-xr-x) adds execute, which programs need to run and directories need to be entered.',
+      ],
+      [
+        'What permissions should an SSH key have?',
+        'The private key must be 600 and the ~/.ssh directory 700. Public keys and authorized_keys can be 644. OpenSSH refuses private keys that other users can read.',
+      ],
+      [
+        'How do I calculate chmod permissions online?',
+        'Use the free chmod calculator at code.doaide.com/tools/chmod-calculator: tick read, write and execute for owner, group and others, or type a mode like 755 or rwxr-xr-x, and copy the octal or symbolic chmod command.',
+      ],
+    ],
+    cta: ['/tools/chmod-calculator', 'Work out any chmod mode — free visual calculator'],
+  },
+  {
+    slug: 'mock-api-for-frontend-development',
+    title: 'How to Mock a REST API for Frontend Development & Testing (2026) | DoAide Code',
+    h1: 'How to mock a REST API for frontend development',
+    description:
+      'Why and how to mock REST APIs — hosted mock URLs, MSW, json-server and test stubs — plus simulating errors, latency and path parameters, and a free online API mocker that gives you a live URL in seconds.',
+    updated: '2026-10-23',
+    intro: `<p>The backend endpoint you need does not exist yet, or it is flaky, or you need it to return a 500 so you can test the error state. Waiting is not an option — so you <strong>mock</strong> it: a stand-in that returns the responses your frontend expects.</p>
+<p>This guide compares the main ways to mock an API, from a hosted URL to in-browser interception, and shows how to cover the cases that real APIs make hard to reproduce. To follow along, the <a href="/tools/api-mocker">free API response mocker</a> turns a list of endpoints into a live URL that any app can call — no sign-up, CORS open.</p>`,
+    sections: [
+      [
+        'why-mock',
+        'Why mock an API at all',
+        `<ul>
+<li><strong>Parallel work.</strong> Agree on the response shape, mock it, and the frontend ships while the backend is built.</li>
+<li><strong>Edge cases on demand.</strong> Empty lists, 401s, 429 rate limits, 500s and slow responses are hard to trigger on a real server and easy to return from a mock.</li>
+<li><strong>Stable demos and tests.</strong> A mock never changes data under you, never goes down during a client demo, and never needs credentials.</li>
+<li><strong>Prototypes.</strong> A clickable prototype with realistic data convinces stakeholders far better than lorem ipsum.</li>
+</ul>`,
+      ],
+      [
+        'approaches',
+        'Four ways to mock: which fits when',
+        `<p><strong>1. A hosted mock URL.</strong> Define endpoints in a web tool and get a base URL such as <code>https://code.doaide.com/api/mock/abc123</code>. Nothing to install, works from any device, and teammates, Postman or a mobile app can hit the same URL. Best for prototypes, demos, mobile apps and sharing.</p>
+<p><strong>2. In-browser interception (MSW).</strong> <a href="https://mswjs.io/" rel="noopener">Mock Service Worker</a> intercepts <code>fetch</code> in the browser and Node with handlers written in code. Best when mocks should live in the repo and be reused by unit and end-to-end tests.</p>
+<p><strong>3. A local fake server (json-server).</strong> Point it at a <code>db.json</code> and get full CRUD that persists to the file. Best when you need writes to stick during a session.</p>
+<p><strong>4. Test-level stubs.</strong> <code>vi.fn()</code>/<code>jest.fn()</code> replacing <code>fetch</code>, or Playwright’s <code>page.route()</code>. Best for one test that needs one precise response.</p>
+<p>Many teams combine them: a hosted mock while the API is being designed, then MSW handlers generated from the agreed contract.</p>`,
+      ],
+      [
+        'design',
+        'Designing mock responses that catch real bugs',
+        `<p>A mock that only returns the happy path hides the bugs you most need to find. For each endpoint, add the variants your UI must handle:</p>
+<ul>
+<li><strong>Status codes</strong> — 201 with the created resource, 204 with no body, 400 and 422 with validation errors, 401/403, 404, 409 conflicts, 429 and 500.</li>
+<li><strong>Latency</strong> — a 1–3 second delay exposes missing spinners, double-submits and race conditions between requests.</li>
+<li><strong>Shape extremes</strong> — empty arrays, very long strings, <code>null</code> optional fields, Unicode names and large pages.</li>
+<li><strong>Path parameters</strong> — <code>/users/:id</code> should echo the id so detail pages show the record you clicked.</li>
+</ul>
+<pre><code>GET  /users        200  [{"id": 1, "name": "Asha"}, …]
+GET  /users/:id    200  {"id": "{{id}}", "name": "Asha"}
+POST /users        201  {"id": 3}          (delay 800 ms)
+GET  /users/999    404  {"error": "Not found"}</code></pre>
+<p>In the <a href="/tools/api-mocker">API mocker</a>, literal paths take priority over <code>:param</code> ones, so <code>/users/999</code> can return a 404 while every other id succeeds. Validate the bodies first with the <a href="/tools/json-formatter">JSON formatter</a>, and generate a schema for them with the <a href="/tools/json-schema-generator">JSON Schema generator</a> so the real API can be checked against the same contract later.</p>`,
+      ],
+      [
+        'wire-up',
+        'Pointing your app at the mock',
+        `<p>Keep the base URL in configuration so switching from mock to real API is a one-line change:</p>
+<pre><code># .env.development
+VITE_API_URL=https://code.doaide.com/api/mock/abc123
+
+// api.js
+const BASE = import.meta.env.VITE_API_URL
+export const getUser = (id) =&gt; fetch(\`\${BASE}/users/\${id}\`).then((r) =&gt; r.json())</code></pre>
+<p>Hosted mocks must send CORS headers or the browser blocks the response; DoAide’s mocks answer every origin and the <code>OPTIONS</code> preflight, so this works from <code>localhost</code>, a deployed preview or a mobile WebView. Use the copy-curl button to check an endpoint from the terminal first.</p>`,
+      ],
+      [
+        'pitfalls',
+        'Pitfalls: when mocks lie',
+        `<ul>
+<li><strong>Drift.</strong> The real API changes and the mock does not. Regenerate mocks from an OpenAPI spec or a schema and run contract tests against the real service.</li>
+<li><strong>Too-perfect data.</strong> Real responses have nulls, missing fields and odd casing. Copy a real response into the mock as soon as one exists.</li>
+<li><strong>Secrets.</strong> Hosted mocks are reachable by anyone with the URL — never put real customer data or keys in them.</li>
+<li><strong>Forgetting to switch.</strong> Log the API base URL at startup in development and fail the production build if it points at a mock.</li>
+</ul>`,
+      ],
+    ],
+    faqs: [
+      [
+        'How do I create a mock API online for free?',
+        'Open code.doaide.com/tools/api-mocker, add endpoints with a method, path, status code, optional delay and a JSON body, then press Create mock URL. The base URL is live immediately and works from any app, with CORS enabled.',
+      ],
+      [
+        'What is the difference between MSW and a hosted mock API?',
+        'MSW intercepts requests inside your app with handlers kept in your codebase, ideal for tests. A hosted mock is a real URL on the internet, so anything — another device, Postman, a teammate or a mobile app — can call it without code changes.',
+      ],
+      [
+        'How do I simulate a slow or failing API?',
+        'Return the status you want to test (401, 404, 429, 500) from a mock endpoint and add a delay of a few seconds. This exercises loading spinners, retries, timeouts and error messages without touching the real backend.',
+      ],
+      [
+        'Can a mock API return different data per id?',
+        'Yes. Define the path as /users/:id and put {{id}} in the body to echo the requested id. Add a literal path such as /users/999 to return a specific response, like a 404, for one id.',
+      ],
+    ],
+    cta: ['/tools/api-mocker', 'Create a live mock API URL in seconds — free'],
+  },
 ]

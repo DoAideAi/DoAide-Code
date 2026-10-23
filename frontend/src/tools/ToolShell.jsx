@@ -19,6 +19,8 @@ const TOOL_GUIDES = {
   'embed-code': ['/guides/code-snippet-sharing-tool', 'sharing code snippets as links'],
   'uuid-generator': ['/guides/uuid-v4-vs-v7', 'choosing between UUID v4 and v7'],
   'css-grid-generator': ['/guides/css-grid-layout-guide', 'CSS Grid tracks, minmax and template areas'],
+  'chmod-calculator': ['/guides/linux-file-permissions-chmod', 'Linux file permissions and chmod explained'],
+  'api-mocker': ['/guides/mock-api-for-frontend-development', 'mocking REST APIs for frontend development'],
 }
 
 const SUN = 'M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4'
