@@ -183,6 +183,26 @@ export function createSession(token) {
   })
 }
 
+// Deletes a conversation and its messages; 409 while one of its replies is still running.
+export async function deleteSession(token, sessionId) {
+  let resp
+  try {
+    resp = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+  } catch {
+    throw new Error(OFFLINE_ERROR)
+  }
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}))
+    const error = new Error(requestError(resp.status, body.detail))
+    error.status = resp.status
+    throw error
+  }
+  return resp.json()
+}
+
 // Messages older than `before` (a message id; null for the latest), oldest first: { messages, has_more }.
 export function fetchEarlierMessages(token, sessionId, before, limit = 20) {
   const params = new URLSearchParams({ limit: String(limit) })

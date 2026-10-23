@@ -296,6 +296,17 @@ class Store:
         if title is not None:
             self._exec("UPDATE sessions SET title = ? WHERE id = ?", (title, session_id))
 
+    def session_busy(self, session_id: str) -> bool:
+        """Whether a reply in the session is still queued or streaming."""
+        return self._one(
+            "SELECT 1 FROM messages WHERE session_id = ? AND status IN ('queued', 'streaming') LIMIT 1",
+            (session_id,),
+        ) is not None
+
+    def delete_session(self, session_id: str) -> bool:
+        """Remove a session; its messages (and their pending jobs) go with it."""
+        return self._exec("DELETE FROM sessions WHERE id = ?", (session_id,)).rowcount > 0
+
     # Messages
 
     def add_message(

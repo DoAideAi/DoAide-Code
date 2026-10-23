@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ConversationSidebar from './ConversationSidebar.jsx'
 
@@ -81,5 +81,60 @@ describe('ConversationSidebar', () => {
       <ConversationSidebar sessions={untitled} activeSessionId="" onSelect={() => {}} onNewChat={() => {}} open={true} onClose={() => {}} />,
     )
     expect(screen.getByText('New conversation')).toBeTruthy()
+  })
+
+  describe('deleting a conversation', () => {
+    const open = (onDelete, onSelect = () => {}) =>
+      render(
+        <ConversationSidebar sessions={sessions} activeSessionId="a1" onSelect={onSelect} onNewChat={() => {}} open={true} onClose={() => {}} onDelete={onDelete} />,
+      )
+
+    it('has no delete button without onDelete', () => {
+      render(
+        <ConversationSidebar sessions={sessions} activeSessionId="a1" onSelect={() => {}} onNewChat={() => {}} open={true} onClose={() => {}} />,
+      )
+      expect(screen.queryByTestId('delete-conv-b2')).toBeNull()
+    })
+
+    it('asks first, and cancelling deletes nothing', () => {
+      const onDelete = vi.fn()
+      const onSelect = vi.fn()
+      open(onDelete, onSelect)
+      fireEvent.click(screen.getByTestId('delete-conv-b2'))
+      expect(onSelect).not.toHaveBeenCalled()
+      expect(screen.getByRole('alertdialog').textContent).toContain('Second chat')
+      fireEvent.click(screen.getByTestId('delete-conv-cancel'))
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+      expect(onDelete).not.toHaveBeenCalled()
+    })
+
+    it('Escape closes the confirmation, not the sidebar', () => {
+      const onClose = vi.fn()
+      render(
+        <ConversationSidebar sessions={sessions} activeSessionId="a1" onSelect={() => {}} onNewChat={() => {}} open={true} onClose={onClose} onDelete={vi.fn()} />,
+      )
+      fireEvent.click(screen.getByTestId('delete-conv-b2'))
+      fireEvent.keyDown(window, { key: 'Escape' })
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+      expect(onClose).not.toHaveBeenCalled()
+    })
+
+    it('deletes on confirm and closes the dialog', async () => {
+      const onDelete = vi.fn().mockResolvedValue(undefined)
+      open(onDelete)
+      fireEvent.click(screen.getByTestId('delete-conv-b2'))
+      fireEvent.click(screen.getByTestId('delete-conv-confirm'))
+      expect(onDelete).toHaveBeenCalledWith('b2')
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    })
+
+    it('keeps the dialog open with the error when deleting fails', async () => {
+      const onDelete = vi.fn().mockRejectedValue(new Error('A reply is still running in this conversation; stop it first'))
+      open(onDelete)
+      fireEvent.click(screen.getByTestId('delete-conv-a1'))
+      fireEvent.click(screen.getByTestId('delete-conv-confirm'))
+      expect((await screen.findByTestId('delete-conv-error')).textContent).toContain('stop it first')
+      expect(screen.getByRole('alertdialog')).toBeTruthy()
+    })
   })
 })

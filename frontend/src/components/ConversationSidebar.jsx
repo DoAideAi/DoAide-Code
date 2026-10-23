@@ -12,25 +12,91 @@ function formatTime(ts) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
-function ConversationItem({ session, active, onClick }) {
-  const title = session.title || 'New conversation'
+const titleOf = (session) => session.title || 'New conversation'
+
+function ConversationItem({ session, active, onClick, onDelete }) {
+  const title = titleOf(session)
   return (
-    <button
-      type="button"
-      data-testid={`conv-${session.id}`}
-      onClick={onClick}
-      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-        active
-          ? 'bg-sky-600/20 text-zinc-100'
-          : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
-      }`}
-    >
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      </svg>
-      <span className="min-w-0 flex-1 truncate">{title}</span>
-      <span className="shrink-0 text-[11px] text-zinc-500">{formatTime(session.updated_at)}</span>
-    </button>
+    <div className="group relative">
+      <button
+        type="button"
+        data-testid={`conv-${session.id}`}
+        onClick={onClick}
+        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+          onDelete ? 'pr-10' : ''
+        } ${
+          active
+            ? 'bg-sky-600/20 text-zinc-100'
+            : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+        }`}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+        <span className="min-w-0 flex-1 truncate">{title}</span>
+        <span className="shrink-0 text-[11px] text-zinc-500">{formatTime(session.updated_at)}</span>
+      </button>
+      {onDelete && (
+        // Shown on hover or focus with a pointer; always on touch screens, which have no hover.
+        <button
+          type="button"
+          data-testid={`delete-conv-${session.id}`}
+          onClick={onDelete}
+          title="Delete conversation"
+          aria-label={`Delete conversation ${title}`}
+          className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-700/70 hover:text-red-400 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6" />
+          </svg>
+        </button>
+      )}
+    </div>
+  )
+}
+
+function ConfirmDelete({ session, busy, error, onCancel, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={onCancel}>
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-conv-title"
+        aria-describedby="delete-conv-body"
+        data-testid="delete-conv-dialog"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-xl border border-line/[0.08] bg-surface p-5 shadow-xl"
+      >
+        <h3 id="delete-conv-title" className="text-sm font-semibold text-zinc-100">Delete conversation?</h3>
+        <p id="delete-conv-body" className="mt-2 text-sm text-zinc-400">
+          “<span className="break-words text-zinc-200">{titleOf(session)}</span>” and all its messages will be
+          deleted. This can’t be undone.
+        </p>
+        {error && (
+          <p role="alert" data-testid="delete-conv-error" className="mt-3 text-sm text-red-400">{error}</p>
+        )}
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            data-testid="delete-conv-cancel"
+            onClick={onCancel}
+            autoFocus
+            className="rounded-lg px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            data-testid="delete-conv-confirm"
+            onClick={onConfirm}
+            disabled={busy}
+            className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-60"
+          >
+            {busy ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -41,6 +107,8 @@ export default function ConversationSidebar({
   onNewChat,
   open,
   onClose,
+  // Optional: (sessionId) => Promise; a rejection's message is shown in the confirmation dialog.
+  onDelete = null,
   loading = false,
   // Optional: the project's file tree, on a second tab.
   loadFiles = null,
@@ -50,13 +118,30 @@ export default function ConversationSidebar({
 }) {
   const [tab, setTab] = useState('chats') // chats | files
   const files = tab === 'files' && loadFiles
-  // Close on Escape
+  // The conversation awaiting confirmation: { session, busy, error }.
+  const [confirm, setConfirm] = useState(null)
+  // Close on Escape (the confirmation first, when it is open)
   useEffect(() => {
     if (!open) return
-    const handler = (e) => e.key === 'Escape' && onClose()
+    const handler = (e) => {
+      if (e.key !== 'Escape') return
+      if (confirm) setConfirm(null)
+      else onClose()
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [open, onClose])
+  }, [open, onClose, confirm])
+
+  const confirmDelete = async () => {
+    const { session } = confirm
+    setConfirm({ session, busy: true, error: null })
+    try {
+      await onDelete(session.id)
+      setConfirm(null)
+    } catch (err) {
+      setConfirm({ session, busy: false, error: err?.message || 'Could not delete the conversation.' })
+    }
+  }
 
   if (!open) return null
 
@@ -148,6 +233,7 @@ export default function ConversationSidebar({
                 // On mobile, close the sidebar after selecting
                 if (window.innerWidth < 640) onClose()
               }}
+              onDelete={onDelete ? () => setConfirm({ session: s, busy: false, error: null }) : null}
             />
           ))}
           {!loading && sessions.length === 0 && (
@@ -156,6 +242,15 @@ export default function ConversationSidebar({
         </div>
         )}
       </aside>
+      {confirm && (
+        <ConfirmDelete
+          session={confirm.session}
+          busy={confirm.busy}
+          error={confirm.error}
+          onCancel={() => setConfirm(null)}
+          onConfirm={confirmDelete}
+        />
+      )}
     </>
   )
 }

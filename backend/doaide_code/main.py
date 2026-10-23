@@ -406,6 +406,18 @@ def create_app(
         s = store.create_session(user.email, project["id"] if project else None)
         return {"id": s["id"], "title": s["title"], "created_at": s["created_at"], "updated_at": s["updated_at"]}
 
+    @app.delete("/api/sessions/{session_id}")
+    async def delete_session(session_id: str, user: User = Depends(current_user)) -> dict:
+        """Delete one of the user's conversations with all its messages. A conversation whose reply
+        is still running is kept: stop it first."""
+        s = store.get_session(session_id)
+        if not s or s["user_email"] != user.email:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Session not found")
+        if store.session_busy(session_id):
+            raise HTTPException(status.HTTP_409_CONFLICT, "A reply is still running in this conversation; stop it first")
+        store.delete_session(session_id)
+        return {"deleted": session_id}
+
     @app.get("/api/sessions/{session_id}/messages")
     async def session_messages(
         session_id: str, before: str | None = None, limit: int = 20, user: User = Depends(current_user)

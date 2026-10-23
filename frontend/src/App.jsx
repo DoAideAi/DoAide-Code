@@ -4,6 +4,7 @@ import {
   clearSession,
   createAgentToken,
   createSession,
+  deleteSession,
   downloadInstaller,
   fetchConfig,
   fetchBenchmarks,
@@ -228,6 +229,18 @@ export default function App() {
       // Ignore errors creating session.
     }
   }, [token, apply, loadSessions])
+
+  // Errors propagate: the sidebar's confirmation dialog shows them.
+  const handleDeleteSession = useCallback(async (deletedId) => {
+    if (!token) return
+    await deleteSession(token, deletedId)
+    setSessions((list) => list.filter((s) => s.id !== deletedId))
+    if (deletedId === sessionId) {
+      // The open conversation is gone: show the latest remaining one (a new one if none are left).
+      apply(await switchSession(token, ''))
+    }
+    loadSessions()
+  }, [token, sessionId, apply, loadSessions])
 
   const handleExport = useCallback(async () => {
     if (!token || !sessionId) return
@@ -461,6 +474,7 @@ export default function App() {
         activeSessionId={sessionId}
         onSelect={handleSelectSession}
         onNewChat={handleNewChat}
+        onDelete={handleDeleteSession}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         loading={sessionsLoading}

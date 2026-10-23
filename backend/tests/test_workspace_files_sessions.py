@@ -258,3 +258,22 @@ def test_one_conversation_that_new_clears(client, token):
         ws.send_json({"type": "ping"})
         assert ws.receive_json() == {"type": "pong"}
         assert client.get("/api/session", headers=auth(token)).json()["session_id"] == cleared["session_id"]
+
+
+def test_delete_conversation_removes_it_and_its_messages(client, token, settings):
+    store = client.app.state.store
+    mine = store.create_session("owner@example.com")
+    store.add_message(mine["id"], "user", "hello")
+    theirs = store.create_session("someone@example.com")
+    # Another user's conversation, or one that does not exist, is not found.
+    assert client.delete(f"/api/sessions/{theirs['id']}", headers=auth(token)).status_code == 404
+    assert client.delete("/api/sessions/nope", headers=auth(token)).status_code == 404
+    # A conversation still answering is kept.
+    reply = store.add_message(mine["id"], "assistant", "", status="streaming")
+    assert client.delete(f"/api/sessions/{mine['id']}", headers=auth(token)).status_code == 409
+    store._exec("UPDATE messages SET status = 'done' WHERE id = ?", (reply["id"],))
+    assert client.delete(f"/api/sessions/{mine['id']}", headers=auth(token)).json() == {"deleted": mine["id"]}
+    assert store.get_session(mine["id"]) is None and store.list_messages(mine["id"], 10) == []
+    assert store.get_session(theirs["id"]) is not None
+    listed = [s["id"] for s in client.get("/api/sessions", headers=auth(token)).json()["sessions"]]
+    assert mine["id"] not in listed
