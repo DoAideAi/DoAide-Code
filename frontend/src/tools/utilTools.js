@@ -547,6 +547,24 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'docker-compose-validator',
+    label: 'Compose',
+    title: 'Docker Compose Validator',
+    heading: 'Validate a docker-compose.yml',
+    description:
+      'Paste a docker-compose.yml or compose.yaml and catch YAML errors, unknown keys, bad port and volume syntax, depends_on pointing at missing services, undeclared networks and volumes, and risky settings like privileged mode — with the line of each problem. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'nginx-config-generator',
+    label: 'nginx',
+    title: 'Nginx Config Generator',
+    heading: 'Generate an nginx config',
+    description:
+      'Generate an nginx server block for a static site, single-page app, reverse proxy or PHP-FPM — with HTTPS and HTTP→HTTPS redirect, www handling, gzip, caching, security headers, WebSocket proxying and rate limiting. Copy it or download the .conf. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'number-base-converter',
     label: 'Base converter',
     title: 'Number Base Converter (Binary, Hex, Octal)',

@@ -64,6 +64,8 @@ export const PAGE_LOADERS = {
   'cors-tester': () => import('./CorsPage.jsx'),
   'bcrypt-generator': () => import('./BcryptPage.jsx'),
   'env-diff': () => import('./EnvDiffPage.jsx'),
+  'docker-compose-validator': () => import('./ComposePage.jsx'),
+  'nginx-config-generator': () => import('./NginxPage.jsx'),
   'number-base-converter': () => import('./BaseConverterPage.jsx'),
 }
 

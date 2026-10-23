@@ -398,6 +398,20 @@ export const TOOL_FAQS = {
     ['How do I make a .env.example?', 'Press Generate .env.example: every key is kept with its comments and the values are blanked, ready to commit.'],
     ['Is anything uploaded?', LOCAL],
   ],
+  'docker-compose-validator': [
+    ['How do I validate a docker-compose file?', 'Paste the file. YAML syntax errors are reported first with their line, then the Compose structure: known top-level and service keys, ports, volumes, environment, depends_on and networks.'],
+    ['Do I still need the version: key?', 'No. The Compose Specification ignores it and recent docker compose prints a warning, so the validator suggests removing it.'],
+    ['What do the ports formats mean?', '"8080:80" maps host 8080 to container 80; "127.0.0.1:8080:80" binds only to localhost; "80" publishes container port 80 on a random host port. Quote them — unquoted 22:22 can be read as a base-60 number by older YAML parsers.'],
+    ['Does it replace docker compose config?', 'It catches the common mistakes without Docker installed, but docker compose config is the final word: it also resolves .env files and checks images exist.'],
+    ['Is my compose file uploaded?', LOCAL],
+  ],
+  'nginx-config-generator': [
+    ['How do I set up nginx as a reverse proxy?', 'Pick Reverse proxy, enter your domain and the upstream like http://127.0.0.1:3000, and copy the server block. It forwards Host, X-Real-IP, X-Forwarded-For and X-Forwarded-Proto so your app sees the real client.'],
+    ['How do I serve a React or Vue single-page app with nginx?', 'Choose Single-page app: try_files $uri $uri/ /index.html sends every unknown path to index.html so client-side routes work on refresh, and hashed assets get long cache headers.'],
+    ['Where does the config file go?', 'Usually /etc/nginx/sites-available/your-site with a symlink in sites-enabled, or /etc/nginx/conf.d/your-site.conf. Test with nginx -t and reload with systemctl reload nginx.'],
+    ['Does it set up HTTPS certificates?', 'It writes the ssl_certificate paths Let’s Encrypt/certbot uses and an HTTP→HTTPS redirect; get the certificate itself with certbot --nginx -d your-domain.'],
+    ['Is it free?', FREE],
+  ],
   'number-base-converter': [
     ['How do I convert binary to decimal?', 'Type the binary number in the Binary field — 0b prefixes, spaces and underscores are fine — and the decimal, hex and octal values update instantly.'],
     ['Does it handle large numbers?', 'Yes. It uses arbitrary-precision integers, so 64-bit values and beyond convert exactly, unlike tools limited to JavaScript’s 53-bit numbers.'],
