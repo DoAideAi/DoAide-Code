@@ -1887,4 +1887,217 @@ export const getUser = (id) =&gt; fetch(\`\${BASE}/users/\${id}\`).then((r) =&gt
     ],
     cta: ['/tools/api-mocker', 'Create a live mock API URL in seconds — free'],
   },
+  {
+    slug: 'csp-cors-security-headers-guide',
+    title: 'CSP, CORS & Security Headers Explained: A Practical Guide (2026) | DoAide Code',
+    h1: 'CSP, CORS and security headers, explained',
+    description:
+      'What Content-Security-Policy, CORS, HSTS and friends actually do, how to roll out a CSP without breaking your site, how to debug “blocked by CORS policy”, and how to store passwords with bcrypt — with free generators and testers.',
+    updated: '2026-10-23',
+    intro: `<p>Most web security incidents are not exotic zero-days. They are an injected script that a <strong>Content Security Policy</strong> would have blocked, an API that echoes any origin with credentials, or a password table hashed with plain SHA-256. All three are fixed with configuration you can write in an afternoon.</p>
+<p>This guide explains the headers that matter, in the order you should add them, with the mistakes that trip teams up. Each section links a free tool that does the fiddly part for you: the <a href="/tools/csp-generator">CSP generator</a>, the <a href="/tools/cors-tester">CORS tester</a>, the <a href="/tools/nginx-config-generator">nginx config generator</a> and the <a href="/tools/bcrypt-generator">bcrypt generator</a>.</p>`,
+    sections: [
+      [
+        'baseline',
+        'The baseline every site should send',
+        `<p>Four headers cost nothing and close whole classes of attacks:</p>
+<pre><code>Strict-Transport-Security: max-age=31536000; includeSubDomains
+X-Content-Type-Options: nosniff
+Referrer-Policy: strict-origin-when-cross-origin
+Content-Security-Policy: frame-ancestors 'none'</code></pre>
+<ul>
+<li><strong>HSTS</strong> tells the browser to use HTTPS for your domain for a year, so a network attacker can’t downgrade the first request. Only send it over HTTPS, and only add <code>preload</code> once every subdomain supports HTTPS.</li>
+<li><strong>nosniff</strong> stops the browser guessing a file is a script when the server says it is text.</li>
+<li><strong>Referrer-Policy</strong> keeps full URLs — which can contain tokens — from leaking to other sites.</li>
+<li><strong>frame-ancestors</strong> stops other sites framing yours for clickjacking. It replaces <code>X-Frame-Options</code>, though sending both is harmless for old browsers.</li>
+</ul>
+<p>In nginx there is one trap: a <code>location</code> block with its own <code>add_header</code> silently drops every <code>add_header</code> inherited from the server block. The <a href="/tools/nginx-config-generator">nginx config generator</a> repeats the security headers in those locations so they are never lost.</p>`,
+      ],
+      [
+        'csp',
+        'Content Security Policy: what it blocks',
+        `<p>A CSP is an allow-list of where each kind of resource may come from. If an attacker injects <code>&lt;script src="https://evil.example/x.js"&gt;</code> into your page, the browser refuses to load it because that host is not in <code>script-src</code>.</p>
+<pre><code>Content-Security-Policy:
+  default-src 'self';
+  script-src 'self' https://www.googletagmanager.com;
+  style-src 'self' https://fonts.googleapis.com;
+  font-src 'self' https://fonts.gstatic.com;
+  img-src 'self' data:;
+  connect-src 'self' https://api.example.com;
+  object-src 'none';
+  base-uri 'self';
+  frame-ancestors 'none';
+  upgrade-insecure-requests</code></pre>
+<p><code>default-src</code> is the fallback for every fetch directive you don’t list. <code>base-uri</code>, <code>form-action</code> and <code>frame-ancestors</code> do <em>not</em> fall back to it, which is why a policy with only <code>default-src</code> still lets an injected <code>&lt;base&gt;</code> tag redirect your relative script URLs.</p>
+<p>The directive that matters most is <code>script-src</code>. Two values undo most of its protection: <code>'unsafe-inline'</code> (any inline <code>&lt;script&gt;</code> or <code>onclick</code> runs — exactly what XSS injects) and broad sources like <code>https:</code> or <code>*</code>. Paste your current policy into the audit tab of the <a href="/tools/csp-generator">CSP generator</a> to see which of these you have.</p>`,
+      ],
+      [
+        'nonces',
+        'Nonces and hashes instead of unsafe-inline',
+        `<p>You rarely need <code>'unsafe-inline'</code>. Two safer ways allow the inline code you wrote and nothing else:</p>
+<ul>
+<li><strong>Nonce</strong> — the server generates a random value on every response, puts it in the header (<code>script-src 'nonce-R4nd0m…'</code>) and on each tag (<code>&lt;script nonce="R4nd0m…"&gt;</code>). An attacker can’t guess it. Never reuse a nonce or put it in a cached page.</li>
+<li><strong>Hash</strong> — for a fixed inline script, add <code>'sha256-…'</code> of its exact contents. Any change, even whitespace, changes the hash.</li>
+</ul>
+<p>Add <code>'strict-dynamic'</code> next to a nonce and scripts loaded by your trusted scripts are allowed too, which makes tag managers and bundlers with dynamic imports work without listing every host. The generator’s <em>Strict (nonce)</em> preset builds this policy, and its hash helper computes the <code>sha256</code> source for an inline block.</p>`,
+      ],
+      [
+        'rollout',
+        'Rolling out CSP without breaking production',
+        `<ol>
+<li>Start from a preset close to your stack and list the third parties you actually load (DevTools → Network, filter by domain).</li>
+<li>Ship it as <code>Content-Security-Policy-Report-Only</code> with a <code>report-uri</code>. Nothing is blocked; violations are reported.</li>
+<li>Browse every page type for a few days and fix or allow each legitimate violation.</li>
+<li>Switch the header name to <code>Content-Security-Policy</code>. Keep the report endpoint to catch regressions.</li>
+</ol>
+<p>A <code>&lt;meta http-equiv="Content-Security-Policy"&gt;</code> tag works for static hosting where you can’t set headers, but browsers ignore <code>frame-ancestors</code>, <code>report-uri</code> and <code>sandbox</code> in it — the generator leaves those out of the meta version for you.</p>`,
+      ],
+      [
+        'cors',
+        'CORS: why the browser blocks your API call',
+        `<p>CORS is not a security feature you add; it is the controlled <em>relaxation</em> of the same-origin policy. By default a page on <code>https://app.example.com</code> can send a request to <code>https://api.example.com</code> but cannot read the response. The API opts in by answering with <code>Access-Control-Allow-Origin</code>.</p>
+<p>Some requests are <strong>preflighted</strong>: before the real request the browser sends <code>OPTIONS</code> asking permission. That happens for methods other than GET, HEAD and POST, for headers such as <code>Authorization</code> or <code>X-Api-Key</code>, and for a <code>Content-Type</code> other than form, multipart or <code>text/plain</code> — so every <code>fetch</code> that posts JSON is preflighted.</p>
+<p>The rules people break most often:</p>
+<ul>
+<li><code>Access-Control-Allow-Origin: *</code> cannot be combined with credentials (cookies). Echo the exact origin, send <code>Access-Control-Allow-Credentials: true</code> and add <code>Vary: Origin</code>.</li>
+<li>The header must contain one origin. A comma-separated list is invalid — check the request’s <code>Origin</code> against your allow-list and echo the match.</li>
+<li><code>Access-Control-Allow-Headers: *</code> never covers <code>Authorization</code>; name it explicitly.</li>
+<li>The preflight must return 2xx. An auth middleware that answers <code>OPTIONS</code> with 401 breaks every preflighted request.</li>
+<li>Custom response headers such as <code>X-Total-Count</code> are invisible to JavaScript unless listed in <code>Access-Control-Expose-Headers</code>.</li>
+</ul>
+<p>Paste the response headers from DevTools into the <a href="/tools/cors-tester">CORS tester</a> and it runs these checks step by step, tells you which one fails, and writes the fixed config for nginx, Express, FastAPI or Apache. It never sends a request, so it works for localhost and private APIs.</p>`,
+      ],
+      [
+        'passwords',
+        'Storing passwords: bcrypt, cost and the 72-byte limit',
+        `<p>Headers protect the browser; the database needs its own defence. Never store passwords encrypted or with a fast hash like SHA-256 — a GPU tries billions of those per second. Use a deliberately slow, salted password hash: <strong>Argon2id</strong> for new systems, or <strong>bcrypt</strong>, which every language and framework supports.</p>
+<pre><code>$2b$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW
+ │   │  └ 22-char salt ─────┘└ 31-char hash ──────────────┘
+ │   └ cost: 2^12 rounds
+ └ version</code></pre>
+<ul>
+<li>Pick a cost where one hash takes about 250 ms on your server — usually 10 to 12 today — and raise it as hardware gets faster; rehash on next login.</li>
+<li>bcrypt only uses the first 72 bytes of the password. Long passphrases, especially with multi-byte characters, can be silently truncated.</li>
+<li><code>$2a$</code>, <code>$2b$</code> and <code>$2y$</code> are labels for the same algorithm; libraries verify all three.</li>
+</ul>
+<p>The <a href="/tools/bcrypt-generator">bcrypt generator</a> hashes in your browser and times each cost factor, so you can see what a step up costs before you change production.</p>`,
+      ],
+    ],
+    faqs: [
+      [
+        'What is the best Content Security Policy for a website?',
+        "A nonce-based policy: script-src 'nonce-…' 'strict-dynamic', object-src 'none', base-uri 'none' and frame-ancestors 'none'. It blocks injected scripts without listing every third-party host. Roll it out in Report-Only mode first.",
+      ],
+      [
+        'How do I fix “No Access-Control-Allow-Origin header is present”?',
+        'Change the server, not the frontend: return Access-Control-Allow-Origin with your page’s exact origin (or * for public, cookie-less APIs), and answer the OPTIONS preflight with 2xx plus Allow-Methods and Allow-Headers.',
+      ],
+      [
+        'Is CORS a security feature?',
+        'CORS relaxes the browser’s same-origin policy; it does not protect your API from curl, scripts or other servers. Authenticate and authorise every request on the server regardless of CORS.',
+      ],
+      [
+        'Is bcrypt still safe in 2026?',
+        'Yes, at a cost of 10–12 or higher. Argon2id is the stronger modern choice for new systems, but a well-configured bcrypt is far better than any fast hash such as SHA-256 or MD5.',
+      ],
+    ],
+    cta: ['/tools/csp-generator', 'Build or audit your Content Security Policy — free'],
+  },
+  {
+    slug: 'yaml-json-csv-xml-config-files',
+    title: 'YAML vs JSON vs CSV vs XML: Converting Data & Config Files Safely (2026) | DoAide Code',
+    h1: 'YAML, JSON, CSV and XML: converting data and config files safely',
+    description:
+      'When to use YAML, JSON, CSV or XML, the conversion traps that silently corrupt data (the Norway problem, leading zeros, base-60 ports), and how to validate docker-compose and .env files before they reach production.',
+    updated: '2026-10-23',
+    intro: `<p>Developers move data between formats constantly: a CSV export becomes JSON for an API, a JSON config becomes YAML for Kubernetes, a SOAP response becomes something readable. Each conversion is one line of code — and each has a trap that changes your data without an error.</p>
+<p>This guide covers what each format is good at, the specific gotchas, and how to check the config files that most often break deployments. Every step has a free in-browser tool: <a href="/tools/csv-to-json">CSV to JSON/SQL</a>, <a href="/tools/yaml-to-json">YAML ↔ JSON</a>, the <a href="/tools/xml-formatter">XML formatter</a>, the <a href="/tools/docker-compose-validator">Docker Compose validator</a> and the <a href="/tools/env-diff">.env diff</a>.</p>`,
+    sections: [
+      [
+        'which',
+        'Which format for which job',
+        `<ul>
+<li><strong>JSON</strong> — the default for APIs and machine-to-machine data. Strict, unambiguous, no comments. Validate and pretty-print it with the <a href="/tools/json-formatter">JSON formatter</a>.</li>
+<li><strong>YAML</strong> — configuration humans edit: Docker Compose, Kubernetes, GitHub Actions, Ansible. Comments, anchors and less punctuation, at the cost of whitespace-sensitive syntax and type guessing.</li>
+<li><strong>CSV</strong> — tables: spreadsheet exports, bulk imports, analytics. Compact and universal, but no types and no nesting.</li>
+<li><strong>XML</strong> — documents and older enterprise systems: SOAP, RSS, sitemaps, Office files, Android layouts. Verbose, but has attributes, namespaces and mature schema validation.</li>
+</ul>`,
+      ],
+      [
+        'csv',
+        'CSV to JSON and SQL: quoting and types',
+        `<p>“Split each line on commas” breaks on the first real file. RFC 4180 CSV allows commas, quotes and even newlines inside a field when it is wrapped in double quotes, with a literal quote written as <code>""</code>:</p>
+<pre><code>id,name,notes
+1,"Lee, Jordan","Said ""hi""
+on two lines"</code></pre>
+<p>Watch for three more traps:</p>
+<ul>
+<li><strong>Delimiters.</strong> European Excel exports use semicolons because the comma is the decimal separator; database dumps often use tabs.</li>
+<li><strong>Leading zeros.</strong> Postcodes and product codes like <code>007</code> become <code>7</code> if every numeric-looking value is cast to a number. Keep them as strings.</li>
+<li><strong>Big integers.</strong> IDs above 2<sup>53</sup> lose precision as JavaScript numbers. Keep them as strings too.</li>
+</ul>
+<p>The <a href="/tools/csv-to-json">CSV converter</a> detects the delimiter, follows the quoting rules, keeps codes and huge numbers as strings, and can emit <code>CREATE TABLE</code> plus batched <code>INSERT</code> statements with column types inferred from the data — handy for loading a spreadsheet into a database in one paste.</p>`,
+      ],
+      [
+        'yaml',
+        'YAML ↔ JSON: the Norway problem and friends',
+        `<p>JSON is a subset of YAML 1.2, so JSON → YAML is safe. The other way round, YAML’s implicit typing decides what a plain value means:</p>
+<pre><code>country: NO        # YAML 1.1: false   — YAML 1.2: "NO"
+version: 1.10      # a float: 1.1
+port_map: 22:22    # YAML 1.1: 1342 (base 60)
+id: 0123           # YAML 1.1: octal 83</code></pre>
+<p>Many tools still parse YAML 1.1 (PyYAML, older Go and Ruby libraries), so the safe habit is to <strong>quote anything that is not obviously a number or boolean</strong>: country codes, versions, port mappings, IDs with leading zeros.</p>
+<p>Anchors (<code>&amp;base</code>), aliases (<code>*base</code>) and merge keys (<code>&lt;&lt;: *base</code>) remove repetition in YAML but have no JSON equivalent — a converter must expand them. Paste a file into the <a href="/tools/yaml-to-json">YAML ↔ JSON converter</a> to see exactly what a YAML 1.2 parser makes of it, with the line of any syntax error; multi-document files separated by <code>---</code> become a JSON array.</p>`,
+      ],
+      [
+        'xml',
+        'XML: well-formed is not the same as valid',
+        `<p>A <strong>well-formed</strong> XML document follows the syntax rules: one root element, every tag closed and correctly nested, attribute values quoted, and <code>&amp;</code> and <code>&lt;</code> escaped in text. A <strong>valid</strong> document is well-formed <em>and</em> matches a schema (XSD or DTD). Most “invalid XML” errors are really well-formedness errors — an unescaped ampersand in a product name is the classic.</p>
+<p>Converting XML to JSON needs conventions because XML has things JSON lacks: attributes become keys prefixed with <code>@</code>, repeated child elements become arrays, and text alongside child elements goes under <code>#text</code>. The <a href="/tools/xml-formatter">XML formatter</a> checks well-formedness with the line and column of the first error, pretty-prints or minifies, and converts to JSON using these conventions.</p>`,
+      ],
+      [
+        'compose',
+        'Validating docker-compose.yml before you deploy',
+        `<p>Compose files fail at the worst time — during a deploy — and often silently: an unknown key such as <code>enviroment</code> is a typo that YAML accepts and older Compose versions ignored. Check these before every merge:</p>
+<ul>
+<li>Every service has an <code>image</code> or a <code>build</code>.</li>
+<li>Port mappings are quoted strings: <code>"8080:80"</code>, or <code>"127.0.0.1:5432:5432"</code> to keep a database off the public interface.</li>
+<li>Named volumes and custom networks are declared at the top level.</li>
+<li><code>depends_on</code> points at real services, has no cycles, and <code>condition: service_healthy</code> targets a service with a healthcheck.</li>
+<li>The top-level <code>version:</code> key is gone — the Compose Specification ignores it.</li>
+<li>No <code>privileged: true</code>, <code>network_mode: host</code> or Docker socket mounts unless you really mean it.</li>
+</ul>
+<p>The <a href="/tools/docker-compose-validator">Docker Compose validator</a> runs all of these with line numbers and did-you-mean suggestions, without Docker installed. Run <code>docker compose config</code> on the server as the final check — it also resolves variables from your <code>.env</code>.</p>`,
+      ],
+      [
+        'env',
+        '.env files: catching the missing variable',
+        `<p>The most common config outage is a variable that exists in development and not in production. Keep a committed <code>.env.example</code> with every key and no secret values, and compare it with each environment’s real <code>.env</code> before deploying:</p>
+<pre><code># .env.example          # .env (production)
+DATABASE_URL=           DATABASE_URL=postgres://…
+STRIPE_SECRET_KEY=      STRIPE_SECRET_KEY=sk_live_…
+SENTRY_DSN=             (missing!)</code></pre>
+<p>Dotenv syntax has quirks of its own: <code>export</code> prefixes, quoted multi-line values such as private keys, <code>#</code> starting a comment only after whitespace in unquoted values, and duplicate keys where the later one wins. The <a href="/tools/env-diff">.env diff tool</a> parses both files with these rules, lists missing, extra and changed keys with values masked, and generates a clean <code>.env.example</code> from your real file. It runs entirely in your browser, but treat production secrets with care in any tool.</p>`,
+      ],
+    ],
+    faqs: [
+      [
+        'How do I convert CSV to JSON?',
+        'Paste the CSV into code.doaide.com/tools/csv-to-json. With a header row each line becomes an object keyed by column name; quoted fields, semicolon or tab delimiters and number/boolean typing are handled automatically.',
+      ],
+      [
+        'Why does YAML turn NO into false?',
+        'YAML 1.1 treats yes/no/on/off as booleans, so the country code NO becomes false. YAML 1.2 only recognises true and false, but many parsers still follow 1.1 — quote such values to be safe.',
+      ],
+      [
+        'What is the difference between well-formed and valid XML?',
+        'Well-formed XML follows the syntax rules (one root, matched tags, quoted attributes, escaped special characters). Valid XML is well-formed and also conforms to a schema such as an XSD or DTD.',
+      ],
+      [
+        'How do I check a docker-compose file for errors?',
+        'Paste it into a Compose validator to catch YAML errors, unknown keys, bad ports and undeclared volumes or networks, then run docker compose config on the target machine, which also resolves environment variables.',
+      ],
+    ],
+    cta: ['/tools/csv-to-json', 'Convert CSV, JSON, YAML and XML in your browser — free'],
+  },
 ]
