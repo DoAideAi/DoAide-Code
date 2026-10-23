@@ -429,6 +429,33 @@ export const UTIL_TOOLS = [
       'Enter an IPv4 address with a CIDR prefix or netmask and get the network and broadcast address, usable host range, subnet and wildcard masks, binary view, private/public type, a split into smaller subnets and an is-this-IP-in-range check. Free, no sign-up.',
     isNew: true,
   },
+  {
+    slug: 'markdown-toc',
+    label: 'TOC',
+    title: 'Markdown Table of Contents Generator',
+    heading: 'Generate a markdown table of contents',
+    description:
+      'Paste a README or any markdown and get a table of contents with GitHub-compatible anchor links — choose heading levels, bullets or numbers, and insert it straight into the document. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'placeholder-image',
+    label: 'Placeholder',
+    title: 'Placeholder Image Generator',
+    heading: 'Generate placeholder images',
+    description:
+      'Make placeholder images at any size up to 4000×4000 — Open Graph, Instagram, banner and avatar presets, custom colors, text and font — and download PNG, JPEG, WebP or SVG, or copy a data URI. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'css-animation',
+    label: 'CSS animation',
+    title: 'CSS Animation Generator',
+    heading: 'CSS animation generator',
+    description:
+      'Build CSS @keyframes visually: pick a preset (bounce, pulse, shake, fade, spin…), edit move, scale, rotate, skew and opacity at each keyframe on a timeline, tune duration, easing with a cubic-bezier curve, iterations and direction, and copy the CSS. Free, no sign-up.',
+    isNew: true,
+  },
 ]
 
 // The utility living at this path, or null when the path is an AI tool's (or unknown).

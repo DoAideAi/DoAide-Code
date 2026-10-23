@@ -302,4 +302,26 @@ export const TOOL_FAQS = {
     ['Does it support IPv6?', 'Not yet — this calculator handles IPv4, which is what most subnetting, VPC and firewall rules still use.'],
     ['Is anything uploaded?', LOCAL],
   ],
+  'markdown-toc': [
+    ['How do I add a table of contents to a GitHub README?', 'Paste the README here, copy the generated list and put it near the top — or press Insert into document. Each entry links to #anchor slugs that GitHub creates automatically for every heading.'],
+    ['How does GitHub create heading anchors?', 'It lowercases the heading, removes punctuation except hyphens and underscores, and turns spaces into hyphens. Repeated headings get -1, -2 suffixes. This tool follows the same rules, so the links work.'],
+    ['Can I update the TOC after editing the document?', 'Yes. Inserted TOCs sit between <!-- toc --> and <!-- tocstop --> comments; insert again and the old block is replaced instead of duplicated.'],
+    ['Are headings inside code blocks ignored?', 'Yes — lines in fenced ``` or ~~~ blocks and YAML front matter are skipped, so shell comments starting with # never show up.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
+  'placeholder-image': [
+    ['How do I make a placeholder image?', 'Pick a preset or type the width and height, choose colors and optional text, then download it as PNG, JPEG, WebP or SVG. The default label shows the dimensions, like 1200 × 630.'],
+    ['Can I use placeholder images without hosting them?', 'Yes — copy the data URI or the ready-made <img> tag. The image is an inline SVG, so it works offline, in emails and in prototypes without a server.'],
+    ['What size should an Open Graph image be?', '1200 × 630 pixels (1.91:1). It is the first preset here; Twitter large cards use 1200 × 675 and Instagram posts 1080 × 1080.'],
+    ['Why is the text color automatic?', 'Leave Text color alone and it switches between near-black and near-white based on the background’s luminance, so the label always stays readable. Type a hex value to override it.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
+  'css-animation': [
+    ['How do I create a CSS keyframe animation?', 'Define stops in @keyframes (0% to 100%) with the styles at each point, then apply it with the animation property: name, duration, timing function, delay, iteration count, direction and fill mode. This tool writes both from the timeline you edit.'],
+    ['Which properties animate smoothly?', 'transform (translate, scale, rotate, skew) and opacity: browsers animate them on the GPU without re-layout, so they stay at 60 fps. Avoid animating width, height, top or margin.'],
+    ['What is a cubic-bezier timing function?', 'A curve from (0,0) to (1,1) shaped by two control points that maps time to progress. ease-out starts fast and slows down; y values beyond 0–1, as in ease-out-back, overshoot for a springy feel.'],
+    ['What does animation-fill-mode both do?', 'The element takes the first keyframe’s styles during the delay and keeps the last keyframe’s styles after the animation ends — usually what you want for entrance animations.'],
+    ['Does the CSS respect reduced motion?', 'Yes — the output includes a prefers-reduced-motion media query that turns the animation off for people who ask their OS for less motion.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
 }

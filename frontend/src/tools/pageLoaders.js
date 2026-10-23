@@ -51,6 +51,9 @@ export const PAGE_LOADERS = {
   'api-mocker': () => import('./MockApiPage.jsx'),
   'chmod-calculator': () => import('./ChmodPage.jsx'),
   'ip-subnet-calculator': () => import('./IpCalcPage.jsx'),
+  'markdown-toc': () => import('./TocPage.jsx'),
+  'placeholder-image': () => import('./PlaceholderPage.jsx'),
+  'css-animation': () => import('./AnimationPage.jsx'),
 }
 
 // The slug in a path like /tools/diff-checker ('' for /tools).
