@@ -501,6 +501,24 @@ export const UTIL_TOOLS = [
       'Convert YAML to JSON or JSON to YAML as you type, with the exact line of any syntax error, anchors and aliases resolved, multi-document YAML, and indent options. Converted in your browser. Free, no sign-up.',
     isNew: true,
   },
+  {
+    slug: 'xml-formatter',
+    label: 'XML',
+    title: 'XML Formatter & Validator',
+    heading: 'Format and validate XML',
+    description:
+      'Paste XML to pretty-print or minify it, check it is well-formed with the line of any error, and convert it to JSON — attributes, namespaces, CDATA and comments kept. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'number-base-converter',
+    label: 'Base converter',
+    title: 'Number Base Converter (Binary, Hex, Octal)',
+    heading: 'Convert binary, hex, octal and decimal',
+    description:
+      'Convert numbers between binary, octal, decimal, hexadecimal and any base from 2 to 36 — big integers included — see the bits for 8 to 64-bit signed and unsigned types, and run bitwise AND, OR, XOR, NOT and shifts. Free, no sign-up.',
+    isNew: true,
+  },
 ]
 
 // The utility living at this path, or null when the path is an AI tool's (or unknown).

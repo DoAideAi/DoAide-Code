@@ -59,6 +59,8 @@ export const PAGE_LOADERS = {
   'og-preview': () => import('./OgPreviewPage.jsx'),
   'csv-to-json': () => import('./CsvPage.jsx'),
   'yaml-to-json': () => import('./YamlPage.jsx'),
+  'xml-formatter': () => import('./XmlPage.jsx'),
+  'number-base-converter': () => import('./BaseConverterPage.jsx'),
 }
 
 // The slug in a path like /tools/diff-checker ('' for /tools).

@@ -362,4 +362,19 @@ export const TOOL_FAQS = {
     ['Why does "no" become false?', 'This converter follows YAML 1.2, where only true and false are booleans, so no, yes, on and off stay strings. Quote values if another tool reads YAML 1.1.'],
     ['Is anything uploaded?', LOCAL],
   ],
+  'xml-formatter': [
+    ['How do I format XML online?', 'Paste the XML and press Format to indent it with 2 or 4 spaces or tabs, or Minify to strip the whitespace between tags. Errors show the line and column.'],
+    ['What does well-formed XML mean?', 'Exactly one root element, every tag closed and properly nested, attribute values quoted and special characters like & escaped. The validator checks these rules; it does not validate against an XSD or DTD.'],
+    ['How is XML converted to JSON?', 'Elements become keys, repeated elements become arrays, attributes are prefixed with @ and mixed text goes under #text — a common convention that round-trips cleanly.'],
+    ['Are comments and CDATA kept?', 'Yes, both are preserved when formatting. Minify can optionally remove comments.'],
+    ['Is my XML uploaded?', LOCAL],
+  ],
+  'number-base-converter': [
+    ['How do I convert binary to decimal?', 'Type the binary number in the Binary field — 0b prefixes, spaces and underscores are fine — and the decimal, hex and octal values update instantly.'],
+    ['Does it handle large numbers?', 'Yes. It uses arbitrary-precision integers, so 64-bit values and beyond convert exactly, unlike tools limited to JavaScript’s 53-bit numbers.'],
+    ['How are negative numbers shown?', 'In two’s complement at the bit width you pick (8, 16, 32 or 64): -1 is 0xFF in 8 bits. The signed and unsigned readings of the same bits are shown side by side.'],
+    ['Which bitwise operations are supported?', 'AND, OR, XOR, NOT, left shift, arithmetic and logical right shift, all masked to the chosen width, with the result in every base.'],
+    ['Can I convert to base 36 or other bases?', 'Yes — any base from 2 to 36 using digits 0–9 and letters a–z.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
 }
