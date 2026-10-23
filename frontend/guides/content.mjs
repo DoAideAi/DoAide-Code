@@ -1523,4 +1523,185 @@ main { flex: 1; }</code></pre>
     ],
     cta: ['/tools/meta-tag-generator', 'Generate your meta tags free'],
   },
+  {
+    slug: 'uuid-v4-vs-v7',
+    title: 'UUID v4 vs v7: Which to Use for Database Keys (2026) | DoAide Code',
+    h1: 'UUID v4 vs v7: which one should you use?',
+    description:
+      'How UUID v4 and v7 differ, why time-ordered v7 makes better database primary keys, when random v4 is still right, how to store UUIDs efficiently — and a free UUID generator for v1, v4 and v7.',
+    updated: '2026-10-23',
+    intro: `<p>For a decade the answer to “which UUID?” was simply v4: 122 random bits, no coordination, no collisions in practice. Then RFC 9562 (2024) standardised <strong>UUID v7</strong>, which puts a millisecond timestamp in front of the random bits — and suddenly the default for new database schemas changed.</p>
+<p>This guide explains what actually differs between the versions, why it matters for your indexes, and the cases where v4 is still the better choice. Generate any of them while you read with the <a href="/tools/uuid-generator">free UUID generator</a> — v1, v4 and v7, up to 1,000 at once, with a decoder that shows the timestamp hidden inside v1 and v7 ids.</p>`,
+    sections: [
+      [
+        'anatomy',
+        'What is inside a UUID',
+        `<p>Every UUID is 128 bits written as 32 hex digits in five groups: <code>017f22e2-79b0-<strong>7</strong>cc3-<strong>9</strong>8c4-dc0c0c07398f</code>. Two places are fixed: the first digit of the third group is the <strong>version</strong> (the 7 above), and the first digit of the fourth group encodes the <strong>variant</strong> (8, 9, a or b for standard UUIDs). Everything else depends on the version:</p>
+<ul>
+<li><strong>v1</strong> — a 60-bit timestamp in 100-nanosecond ticks since 1582, a clock sequence and a 48-bit node id that was traditionally the machine’s MAC address. The timestamp is split into shuffled fields, so v1 ids do <em>not</em> sort by time.</li>
+<li><strong>v4</strong> — 122 random bits. Nothing else.</li>
+<li><strong>v7</strong> — a 48-bit Unix timestamp in milliseconds first, then 74 random (or counter) bits. Sorting v7 ids as strings or bytes sorts them by creation time.</li>
+</ul>
+<p>Paste any UUID into the decoder on the <a href="/tools/uuid-generator">UUID generator</a> to see its version, variant and, for v1 and v7, exactly when it was made.</p>`,
+      ],
+      [
+        'why-v7',
+        'Why v7 makes better primary keys',
+        `<p>Databases store primary keys in a B-tree index. With <strong>random v4 keys</strong>, each insert lands at a random position in that tree: pages split all over the index, recently written rows are scattered across disk, and the working set the cache must hold grows with the whole table. On large, write-heavy tables this shows up as slower inserts, bloated indexes and more I/O.</p>
+<p><strong>v7 keys arrive in order</strong>, so new rows append to the right-hand edge of the index exactly like an auto-increment integer would — while keeping everything that made UUIDs attractive:</p>
+<ul>
+<li>ids can be generated anywhere (client, service, offline device) with no round-trip to the database;</li>
+<li>they are unique across tables, shards and merged datasets;</li>
+<li>they do not reveal how many rows you have, unlike sequential integers.</li>
+</ul>
+<p>As a bonus, “newest first” becomes <code>ORDER BY id DESC</code>, and keyset pagination works on the primary key alone.</p>`,
+      ],
+      [
+        'when-v4',
+        'When random v4 is still the right choice',
+        `<p>v7’s strength — the embedded timestamp — is also its weakness. Anyone who sees a v7 id can read when the record was created, to the millisecond. Prefer <strong>v4</strong> when:</p>
+<ul>
+<li>the id is <strong>public</strong> and creation time is sensitive — invitation links, password-reset tokens, user ids in URLs where signup dates should stay private;</li>
+<li>you need <strong>unpredictability</strong>: v7 has fewer random bits, and ids made in the same millisecond are close together;</li>
+<li>the table is small or read-mostly, so index locality does not matter.</li>
+</ul>
+<p>A common pattern is both: a v7 primary key internally, and a separate random v4 (or a longer random token) for anything exposed outside. And never use any UUID as a <em>secret</em> on its own — for tokens, generate 128+ random bits specifically for that purpose, the same way the <a href="/tools/password-generator">password generator</a> draws from the browser’s secure random source.</p>`,
+      ],
+      [
+        'storage',
+        'Storing and generating UUIDs efficiently',
+        `<p>The storage format matters as much as the version:</p>
+<ul>
+<li><strong>Use a native 16-byte type</strong> — <code>uuid</code> in PostgreSQL, <code>BINARY(16)</code> in MySQL (with <code>UUID_TO_BIN()</code>), <code>uniqueidentifier</code> in SQL Server. A <code>CHAR(36)</code> column is more than twice the size, and every index that includes the key pays for it again.</li>
+<li><strong>Generate v7 in the database or the app.</strong> PostgreSQL 18 ships a built-in <code>uuidv7()</code> function; Python 3.14 added <code>uuid.uuid7()</code>; in JavaScript, <code>crypto.randomUUID()</code> gives v4 and the <code>uuid</code> npm package provides <code>v7()</code>.</li>
+<li><strong>Keep the canonical lowercase hyphenated form</strong> in APIs and logs. Uppercase or braces (<code>{…}</code>) are display conventions from the Windows/.NET world, where UUIDs are called GUIDs.</li>
+</ul>
+<pre><code>-- PostgreSQL 18
+CREATE TABLE orders (
+  id uuid PRIMARY KEY DEFAULT uuidv7(),
+  created_at timestamptz NOT NULL DEFAULT now()
+);</code></pre>
+<p>Need test fixtures? The <a href="/tools/uuid-generator">generator</a> exports a whole batch as a quoted, comma-separated list ready to paste into SQL or a JSON seed file — and the <a href="/tools/json-schema-generator">JSON Schema generator</a> tags UUID strings with <code>format: uuid</code> automatically.</p>`,
+      ],
+    ],
+    faqs: [
+      [
+        'Should I use UUID v4 or v7 for a primary key?',
+        'Use v7 for new database primary keys: it is time-ordered, so inserts append to the index instead of scattering across it, and it keeps every other UUID advantage. Use v4 where the id is public and its creation time should stay private.',
+      ],
+      [
+        'Can UUID v7 values collide?',
+        'Practically never. Each v7 id carries 74 random or counter bits per millisecond, and well-behaved generators also count upward within a millisecond, so ids from one generator are strictly increasing and unique.',
+      ],
+      [
+        'Is UUID v7 an official standard?',
+        'Yes. RFC 9562, published in May 2024, defines versions 6, 7 and 8 and replaces the original RFC 4122. v7 is the version the RFC recommends for new time-based ids.',
+      ],
+      [
+        'How do I generate UUIDs online for free?',
+        'Open code.doaide.com/tools/uuid-generator, pick v4, v7 or v1 and how many you need (up to 1,000), and copy or download them. They are generated in your browser with a cryptographically secure random source and never sent anywhere.',
+      ],
+    ],
+    cta: ['/tools/uuid-generator', 'Generate v4 or v7 UUIDs free — up to 1,000 at once'],
+  },
+  {
+    slug: 'css-grid-layout-guide',
+    title: 'CSS Grid Layout Guide: Template Areas, fr & minmax (2026) | DoAide Code',
+    h1: 'CSS Grid explained: tracks, fr, minmax and template areas',
+    description:
+      'A practical CSS Grid guide — grid-template-columns, the fr unit, minmax(), auto-fill vs auto-fit, named grid-template-areas, responsive layouts and when to use flexbox instead — with a free visual CSS grid generator.',
+    updated: '2026-10-23',
+    intro: `<p>Flexbox lays things out in a line. <strong>CSS Grid lays things out in two dimensions at once</strong> — rows and columns together — which is exactly what page layouts, dashboards and card galleries need. Grid has been supported in every major browser for years, yet many developers still reach for nested flex containers and margin hacks because the grid syntax looks intimidating.</p>
+<p>It is smaller than it looks. This guide covers the handful of properties that build almost every real layout, then the recipes you will reuse. Build each one visually in the <a href="/tools/css-grid-generator">free CSS grid generator</a> — set tracks and gaps, paint named areas onto a live grid, and copy the CSS and HTML.</p>`,
+    sections: [
+      [
+        'tracks',
+        'Tracks: columns, rows and the fr unit',
+        `<p>A grid starts with <code>display: grid</code> and a list of track sizes:</p>
+<pre><code>.layout {
+  display: grid;
+  grid-template-columns: 240px 1fr 1fr;
+  grid-template-rows: auto 1fr auto;
+  gap: 16px;
+}</code></pre>
+<ul>
+<li><strong><code>fr</code></strong> is a share of the leftover space. After the fixed 240px column is placed, the two <code>1fr</code> columns split the rest equally; <code>2fr 1fr</code> would split it two-to-one.</li>
+<li><strong><code>auto</code></strong> sizes a track to its content — ideal for header and footer rows.</li>
+<li><strong><code>repeat(3, 1fr)</code></strong> is shorthand for three equal columns (the generator writes it for you when tracks match).</li>
+<li><strong><code>gap</code></strong> spaces tracks without margins; <code>gap: 24px 16px</code> sets row and column gaps separately.</li>
+</ul>`,
+      ],
+      [
+        'minmax-autofill',
+        'minmax(), auto-fill and auto-fit: responsive without media queries',
+        `<p><code>minmax(min, max)</code> lets a track flex between two limits. Combined with <code>repeat()</code>’s auto keywords it produces the most useful line of CSS Grid:</p>
+<pre><code>.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}</code></pre>
+<p>The browser fits as many 220px-or-wider columns as the container allows and stretches them to fill the row — four columns on a laptop, two on a tablet, one on a phone, with zero media queries.</p>
+<ul>
+<li><strong><code>auto-fill</code></strong> keeps empty column slots when there are few items, so cards keep their size.</li>
+<li><strong><code>auto-fit</code></strong> collapses empty slots, so a short row of items stretches to fill the width.</li>
+</ul>
+<p>Another everyday use: <code>grid-template-columns: minmax(0, 1fr)</code> instead of <code>1fr</code> stops long words or code blocks from forcing a column wider than the screen.</p>`,
+      ],
+      [
+        'template-areas',
+        'Named template areas: draw the layout in your CSS',
+        `<p><code>grid-template-areas</code> lets you sketch the layout as text and place children by name:</p>
+<pre><code>.page {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "header  header"
+    "sidebar main"
+    "footer  footer";
+}
+.header  { grid-area: header; }
+.sidebar { grid-area: sidebar; }
+.main    { grid-area: main; }
+.footer  { grid-area: footer; }</code></pre>
+<p>Three rules to remember: every row string must have the same number of cells; a <code>.</code> marks an empty cell; and each name must form <strong>one filled rectangle</strong> — an L-shaped area makes the browser ignore the entire template. The <a href="/tools/css-grid-generator">grid generator</a> checks that rule as you paint and tells you which area is broken.</p>
+<p>The real payoff is responsive design: a media query only needs to redefine the map, and the HTML never changes.</p>
+<pre><code>@media (max-width: 640px) {
+  .page {
+    grid-template-columns: 1fr;
+    grid-template-areas: "header" "main" "sidebar" "footer";
+  }
+}</code></pre>`,
+      ],
+      [
+        'grid-vs-flexbox',
+        'Grid or flexbox?',
+        `<p>They are partners, not rivals. A simple rule of thumb:</p>
+<ul>
+<li><strong>Grid</strong> when you control the layout from the container in two dimensions: page shells, dashboards, image galleries, forms with aligned labels, anything where items must line up in both rows and columns.</li>
+<li><strong>Flexbox</strong> when content flows in one direction and items size themselves: navbars, button groups, tag lists, centering a single element. The <a href="/guides/css-flexbox-cheat-sheet">flexbox cheat sheet</a> and the <a href="/tools/flexbox-playground">flexbox playground</a> cover that side.</li>
+</ul>
+<p>Most real pages use both — a grid for the page shell, flexbox inside the header and cards. For the cards themselves, pair the layout with a consistent set of colors from the <a href="/tools/color-palette">color palette generator</a> and depth from the <a href="/tools/box-shadow">box shadow generator</a>.</p>`,
+      ],
+    ],
+    faqs: [
+      [
+        'How do I create a CSS grid layout quickly?',
+        'Use the free generator at code.doaide.com/tools/css-grid-generator: set the number and size of columns and rows, adjust the gaps, paint named areas onto the live preview, and copy the generated CSS and HTML. It runs in your browser, no sign-up.',
+      ],
+      [
+        'What does 1fr mean in CSS Grid?',
+        'fr is a fraction of the free space left in the grid container after fixed and content-sized tracks are placed. 1fr 1fr splits it equally; 2fr 1fr gives the first track twice as much.',
+      ],
+      [
+        'Why is my grid-template-areas not working?',
+        'The usual causes: rows with different numbers of cells, an area name that does not form a single rectangle, or a child whose grid-area name does not match. Any of these makes the browser drop the whole template.',
+      ],
+      [
+        'What is the difference between auto-fill and auto-fit?',
+        'Both create as many columns as fit. auto-fill keeps empty tracks when there are fewer items than columns, so items keep their size; auto-fit collapses the empty tracks so the existing items stretch to fill the row.',
+      ],
+    ],
+    cta: ['/tools/css-grid-generator', 'Build your CSS grid visually — free generator'],
+  },
 ]
