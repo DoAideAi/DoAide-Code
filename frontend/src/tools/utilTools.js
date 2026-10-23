@@ -390,7 +390,7 @@ export const UTIL_TOOLS = [
     title: 'Strong Password Generator',
     heading: 'Generate a strong password',
     description:
-      'Create random passwords from 4 to 128 characters with the letters, numbers and symbols you choose, see the entropy and time-to-crack, and check how strong your own password is. Generated in your browser, never sent. Free.',
+      'Create random passwords from 4 to 128 characters with the letters, numbers and symbols you choose, see the entropy and time-to-crack, and check how strong your own password is. Generated in your browser, never sent. Free, no sign-up.',
     isNew: true,
   },
   {
@@ -400,6 +400,15 @@ export const UTIL_TOOLS = [
     heading: 'Validate and explore JSON',
     description:
       'Paste JSON to validate it, see the exact line of any error, and explore it as a collapsible tree. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'api-mocker',
+    label: 'API mocker',
+    title: 'Mock API Generator',
+    heading: 'Mock an API in seconds',
+    description:
+      'Define REST endpoints — method, path with :params, status code, delay and JSON body — and get a live URL that serves them to your frontend, tests or Postman. CORS open, no sign-up, free.',
     isNew: true,
   },
 ]

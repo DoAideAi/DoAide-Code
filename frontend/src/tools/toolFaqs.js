@@ -278,4 +278,12 @@ export const TOOL_FAQS = {
     ['Do meta keywords still matter?', 'No — Google has ignored the keywords meta tag since 2009, which is why this tool does not generate one.'],
     ['Is anything uploaded?', LOCAL],
   ],
+  'api-mocker': [
+    ['How do I create a mock API?', 'Add endpoints with a method, path, status and response body, press Create mock URL and call the base URL from any app — fetch, axios, curl or Postman. It is live immediately.'],
+    ['Can a mock endpoint use path parameters?', 'Yes. A path like /users/:id matches /users/42, and {{id}} anywhere in the body is replaced with 42. Literal paths win over :param ones, so /users/me can have its own response.'],
+    ['Can I simulate slow responses and errors?', 'Set a delay of up to 5 seconds on any endpoint to test loading states, and return any status from 100 to 599 — 401, 404, 429 or 500 — to test error handling.'],
+    ['Does the mock API work from localhost?', 'Yes. Every response carries Access-Control-Allow-Origin: *, and preflight OPTIONS requests are answered, so browser apps on any origin can call it.'],
+    ['Can I edit a mock after sharing it?', 'Saved mocks never change, so links you shared keep working. Open the edit link, change endpoints and save again to get a new URL.'],
+    ['Is the mock API free?', FREE],
+  ],
 }

@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import benchmark, codetools
+from . import benchmark, codetools, mocks
 from .auth import (
     AuthError,
     User,
@@ -82,6 +82,11 @@ class SnippetRequest(BaseModel):
     code: str
     language: str = ""
     title: str = ""
+
+
+class MockRequest(BaseModel):
+    name: str = ""
+    endpoints: list[dict]
 
 
 class RefreshRequest(BaseModel):
@@ -256,6 +261,73 @@ def create_app(
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "No snippet lives at this link.")
         return {k: row[k] for k in ("id", "code", "language", "title", "views", "created_at")}
+
+    # Mock APIs: define endpoints once, get a base URL (/api/mock/<id>) that serves them to anyone,
+    # from any origin. Definitions are immutable; editing one in the tool creates a new id.
+    mock_limit = codetools.RateLimiter(limit=10, window=600)
+    mock_serve_limit = codetools.RateLimiter(limit=120, window=60)
+    mock_cors = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Max-Age": "86400",
+    }
+
+    def client_ip(request: Request) -> str:
+        forwarded = request.headers.get("x-forwarded-for", "")
+        return forwarded.split(",")[-1].strip() or (request.client.host if request.client else "?")
+
+    @app.post("/api/public/mocks", status_code=status.HTTP_201_CREATED)
+    async def create_mock(body: MockRequest, request: Request) -> dict:
+        try:
+            endpoints = mocks.clean_endpoints(body.endpoints)
+        except mocks.MockError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        if not mock_limit.allow(client_ip(request)):
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "That's a lot of mock APIs: wait a few minutes.")
+        spec = json.dumps({"name": body.name.strip()[:100], "endpoints": endpoints})
+        for _ in range(5):
+            mock_id = "".join(secrets.choice(id_alphabet) for _ in range(8))
+            if store.add_mock_api(mock_id, spec):
+                return {"id": mock_id, "url": f"{public_urls(request)[0]}/api/mock/{mock_id}"}
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Could not create a mock. Try again.")
+
+    @app.get("/api/public/mocks/{mock_id}")
+    async def read_mock(mock_id: str) -> dict:
+        row = store.get_mock_api(mock_id) if snippet_id_ok(mock_id) else None
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "No mock API lives at this link.")
+        return {"id": row["id"], "hits": row["hits"], "created_at": row["created_at"], **json.loads(row["spec"])}
+
+    @app.api_route("/api/mock/{mock_id}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+    @app.api_route("/api/mock/{mock_id}/{path:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+    async def serve_mock(mock_id: str, request: Request, path: str = "") -> Response:
+        def error(code: int, message: str) -> Response:
+            return JSONResponse({"error": message}, status_code=code, headers=mock_cors)
+
+        if request.method == "OPTIONS":
+            return Response(status_code=status.HTTP_204_NO_CONTENT, headers=mock_cors)
+        if not mock_serve_limit.allow(client_ip(request)):
+            return error(status.HTTP_429_TOO_MANY_REQUESTS, "Too many requests to mock APIs: slow down a little.")
+        row = store.get_mock_api(mock_id, hit=True) if snippet_id_ok(mock_id) else None
+        if row is None:
+            return error(status.HTTP_404_NOT_FOUND, "No mock API lives at this URL.")
+        endpoints = json.loads(row["spec"])["endpoints"]
+        endpoint, params, path_known = mocks.match(endpoints, request.method, path)
+        if endpoint is None:
+            if path_known:
+                return error(status.HTTP_405_METHOD_NOT_ALLOWED, f"/{path} has no {request.method} endpoint in this mock.")
+            return error(status.HTTP_404_NOT_FOUND, f"No endpoint in this mock matches {request.method} /{path}.")
+        if endpoint["delay_ms"]:
+            await asyncio.sleep(endpoint["delay_ms"] / 1000)
+        content = b"" if request.method == "HEAD" else mocks.render_body(endpoint["body"], params).encode()
+        no_body = endpoint["status"] in (204, 304) or endpoint["status"] < 200
+        return Response(
+            b"" if no_body else content,
+            status_code=endpoint["status"],
+            media_type=None if no_body else endpoint["content_type"],
+            headers={**mock_cors, "Cache-Control": "no-store"},
+        )
 
     @app.post("/api/auth/local")
     async def local_login(request: Request) -> dict:

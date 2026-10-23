@@ -48,6 +48,7 @@ export const PAGE_LOADERS = {
   'ascii-art': () => import('./AsciiArtPage.jsx'),
   'uuid-generator': () => import('./UuidPage.jsx'),
   'password-generator': () => import('./PasswordPage.jsx'),
+  'api-mocker': () => import('./MockApiPage.jsx'),
 }
 
 // The slug in a path like /tools/diff-checker ('' for /tools).

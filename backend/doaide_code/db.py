@@ -137,6 +137,13 @@ CREATE TABLE IF NOT EXISTS shared_snippets (
     views INTEGER NOT NULL DEFAULT 0,
     created_at REAL NOT NULL
 );
+-- Mock APIs from the API response mocker: a JSON list of endpoints served at /api/mock/<id>/...
+CREATE TABLE IF NOT EXISTS mock_apis (
+    id TEXT PRIMARY KEY,
+    spec TEXT NOT NULL,
+    hits INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL
+);
 """
 
 
@@ -410,6 +417,24 @@ class Store:
         if row is not None:
             self._exec("UPDATE shared_snippets SET views = views + 1 WHERE id = ?", (snippet_id,))
             row["views"] += 1
+        return row
+
+    # Mock APIs
+
+    def add_mock_api(self, mock_id: str, spec: str) -> bool:
+        """False when the id is already taken (the caller picks a new one)."""
+        try:
+            self._exec("INSERT INTO mock_apis (id, spec, created_at) VALUES (?, ?, ?)", (mock_id, spec, time.time()))
+        except sqlite3.IntegrityError:
+            return False
+        return True
+
+    def get_mock_api(self, mock_id: str, hit: bool = False) -> dict[str, Any] | None:
+        """The stored mock, counting a served request when `hit`; None when the id is unknown."""
+        row = self._one("SELECT * FROM mock_apis WHERE id = ?", (mock_id,))
+        if row is not None and hit:
+            self._exec("UPDATE mock_apis SET hits = hits + 1 WHERE id = ?", (mock_id,))
+            row["hits"] += 1
         return row
 
     # Refresh tokens
