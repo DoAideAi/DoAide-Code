@@ -529,6 +529,24 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'bcrypt-generator',
+    label: 'Bcrypt',
+    title: 'Bcrypt Hash Generator & Checker',
+    heading: 'Generate and verify bcrypt hashes',
+    description:
+      'Hash a password with bcrypt at any cost factor from 4 to 15, see how long each round takes, and check a password against an existing $2a$/$2b$/$2y$ hash. Hashed in your browser, never uploaded. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'env-diff',
+    label: '.env diff',
+    title: '.env File Diff & Compare',
+    heading: 'Compare .env files',
+    description:
+      'Paste two .env files — say .env.example and production — and see missing, extra, changed and duplicate keys, empty values and syntax problems side by side, with secrets masked. Generate a .env.example with the values stripped. Compared in your browser. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'number-base-converter',
     label: 'Base converter',
     title: 'Number Base Converter (Binary, Hex, Octal)',

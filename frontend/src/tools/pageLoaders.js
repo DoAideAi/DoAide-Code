@@ -62,6 +62,8 @@ export const PAGE_LOADERS = {
   'xml-formatter': () => import('./XmlPage.jsx'),
   'csp-generator': () => import('./CspPage.jsx'),
   'cors-tester': () => import('./CorsPage.jsx'),
+  'bcrypt-generator': () => import('./BcryptPage.jsx'),
+  'env-diff': () => import('./EnvDiffPage.jsx'),
   'number-base-converter': () => import('./BaseConverterPage.jsx'),
 }
 

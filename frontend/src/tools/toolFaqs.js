@@ -384,6 +384,20 @@ export const TOOL_FAQS = {
     ['Does this tool send requests to my server?', 'No — it runs the browser’s CORS rules on the headers you paste, so it works for localhost and private APIs. Copy the response headers from DevTools → Network or curl -i.'],
     ['Is it free?', FREE],
   ],
+  'bcrypt-generator': [
+    ['What cost factor should I use for bcrypt?', 'Pick the highest cost that keeps a hash around 250 ms on your server — today usually 10 to 12. Each step up doubles the time. The tool times every hash so you can compare.'],
+    ['Why does the same password give a different hash each time?', 'bcrypt generates a random 16-byte salt per hash and stores it inside the result, so identical passwords never share a hash. Verification reads the salt back out.'],
+    ['What do $2a$, $2b$ and $2y$ mean?', 'Versions of the same algorithm: $2b$ is current, $2y$ is PHP’s name for it and $2a$ is the older label. All three verify here.'],
+    ['Is there a password length limit?', 'Yes — bcrypt only uses the first 72 bytes. The tool warns when the input is longer; pre-hashing or Argon2id avoids the limit.'],
+    ['Is my password sent anywhere?', 'No. Hashing and checking run in your browser; nothing is uploaded or stored. Still, avoid pasting live production passwords into any website.'],
+  ],
+  'env-diff': [
+    ['How do I compare two .env files?', 'Paste one on the left (for example .env.example) and one on the right (your .env). Keys are listed as missing, extra, changed or identical, with duplicates and syntax errors flagged.'],
+    ['Are my secret values shown?', 'Values are masked by default and only the first characters appear; reveal them with the toggle. Nothing leaves your browser either way.'],
+    ['Which .env syntax is supported?', 'KEY=value lines, export KEY=value, single and double quotes, multi-line double-quoted values, # comments and inline comments after unquoted values — the dotenv conventions.'],
+    ['How do I make a .env.example?', 'Press Generate .env.example: every key is kept with its comments and the values are blanked, ready to commit.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
   'number-base-converter': [
     ['How do I convert binary to decimal?', 'Type the binary number in the Binary field — 0b prefixes, spaces and underscores are fine — and the decimal, hex and octal values update instantly.'],
     ['Does it handle large numbers?', 'Yes. It uses arbitrary-precision integers, so 64-bit values and beyond convert exactly, unlike tools limited to JavaScript’s 53-bit numbers.'],
