@@ -176,5 +176,22 @@ export const TOOL_FAQS = {
     ['How do I make a QR code for a URL?', 'Type or paste the URL and download the generated code as a crisp SVG or a high-resolution PNG. It is generated in your browser.'],
     ['What does the error correction setting do?', 'Higher levels keep the code scannable when partly covered or damaged — up to 30% at level H — at the cost of a denser pattern.'],
     ['Do the QR codes expire?', 'No. The code encodes your text directly (no redirect service), so it works as long as the destination exists.'],
+  ],  'json-schema-generator': [
+    ['How do I generate a JSON Schema from JSON?', 'Paste a sample of your JSON: the schema appears instantly with inferred types, required keys and detected string formats, ready to copy.'],
+    ['Which JSON Schema draft does it produce?', 'Draft 2020-12, the current standard — the $schema line is included so validators know what they are reading.'],
+    ['How are arrays with different objects handled?', 'Item schemas are merged: properties are unioned, and only keys present in every element stay required. Genuinely mixed types become an anyOf.'],
+    ['Is my JSON uploaded?', LOCAL],
+  ],
+  'http-status-codes': [
+    ['What is the difference between 401 and 403?', '401 means not authenticated — log in or fix the token and retry. 403 means authenticated but not allowed — retrying with the same credentials will not help.'],
+    ['When should an API return 422 instead of 400?', '400 says the request itself is malformed (broken JSON, missing fields); 422 says it parsed fine but fails business validation. Many APIs use 400 for both, and that is acceptable too.'],
+    ['What is the difference between 301 and 308?', 'Both are permanent redirects, but a 301 lets clients change POST to GET at the new URL; a 308 requires the same method and body to be repeated.'],
+    ['Is this list searchable offline?', 'The whole reference loads with the page, so search and filtering work instantly with no further requests.'],
+  ],
+  'meta-tag-generator': [
+    ['What meta tags does a page need for SEO?', 'A unique title (under ~60 characters), a description (under ~160), a canonical URL, and Open Graph + Twitter card tags so shares look right — exactly the set this tool generates.'],
+    ['What size should the og:image be?', '1200×630 pixels is the safe standard: large-image cards on X/Twitter, Facebook, LinkedIn, WhatsApp and Slack all render it well.'],
+    ['Do meta keywords still matter?', 'No — Google has ignored the keywords meta tag since 2009, which is why this tool does not generate one.'],
+    ['Is anything uploaded?', LOCAL],
   ],
 }

@@ -31,6 +31,9 @@ export const PAGE_LOADERS = {
   'markdown-to-html': () => import('./MdHtmlPage.jsx'),
   'image-to-base64': () => import('./ImagePage.jsx'),
   'qr-code': () => import('./QrPage.jsx'),
+  'json-schema-generator': () => import('./JsonSchemaPage.jsx'),
+  'http-status-codes': () => import('./HttpStatusPage.jsx'),
+  'meta-tag-generator': () => import('./MetaTagPage.jsx'),
 }
 
 // The slug in a path like /tools/diff-checker ('' for /tools).

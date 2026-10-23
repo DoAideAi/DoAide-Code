@@ -241,6 +241,33 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'json-schema-generator',
+    label: 'JSON Schema',
+    title: 'JSON Schema Generator',
+    heading: 'Generate a JSON Schema from JSON',
+    description:
+      'Paste sample JSON and get a draft 2020-12 JSON Schema — types inferred, keys marked required, date/email/URL formats detected, array items merged. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'http-status-codes',
+    label: 'HTTP status',
+    title: 'HTTP Status Codes Reference',
+    heading: 'HTTP status codes, explained',
+    description:
+      'Every HTTP status code with what it means and when to use it — searchable by number, name or meaning, filterable by 1xx–5xx category. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'meta-tag-generator',
+    label: 'Meta tags',
+    title: 'Meta Tag Generator',
+    heading: 'Generate SEO meta tags',
+    description:
+      'Fill in your page title, description, URL and social image and copy a complete head block — title, description, canonical, Open Graph and Twitter card tags, with length warnings. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',
