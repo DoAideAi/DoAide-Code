@@ -60,6 +60,8 @@ export const PAGE_LOADERS = {
   'csv-to-json': () => import('./CsvPage.jsx'),
   'yaml-to-json': () => import('./YamlPage.jsx'),
   'xml-formatter': () => import('./XmlPage.jsx'),
+  'csp-generator': () => import('./CspPage.jsx'),
+  'cors-tester': () => import('./CorsPage.jsx'),
   'number-base-converter': () => import('./BaseConverterPage.jsx'),
 }
 

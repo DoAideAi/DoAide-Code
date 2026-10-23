@@ -369,6 +369,21 @@ export const TOOL_FAQS = {
     ['Are comments and CDATA kept?', 'Yes, both are preserved when formatting. Minify can optionally remove comments.'],
     ['Is my XML uploaded?', LOCAL],
   ],
+  'csp-generator': [
+    ['What is a Content Security Policy?', 'An HTTP response header that tells the browser which sources a page may load scripts, styles, images, frames and connections from. It is the main defence against cross-site scripting (XSS) after output escaping.'],
+    ['Why is unsafe-inline dangerous?', 'It lets any inline <script> or onclick handler run, which is exactly what an XSS injection uses. Use a nonce or hash for the inline scripts you need instead.'],
+    ['How do I roll out CSP without breaking my site?', 'Send it as Content-Security-Policy-Report-Only first and watch the reports, then switch to the enforcing header once nothing legitimate is blocked.'],
+    ['Can I set CSP in a meta tag?', 'Yes, with <meta http-equiv="Content-Security-Policy">, but frame-ancestors, report-uri and sandbox are ignored there. The header is preferred.'],
+    ['What does frame-ancestors do?', 'It says which sites may embed your page in a frame — frame-ancestors \'none\' is the modern replacement for X-Frame-Options: DENY and stops clickjacking.'],
+    ['Is my policy uploaded?', LOCAL],
+  ],
+  'cors-tester': [
+    ['Why do I get “blocked by CORS policy”?', 'The browser sent a cross-origin request and the response lacked an Access-Control-Allow-Origin header matching your origin (or the preflight failed). The fix is always on the server that receives the request, never in the frontend.'],
+    ['When does the browser send a preflight OPTIONS request?', 'For any method other than GET, HEAD or POST, for custom headers like Authorization or X-Api-Key, or for a Content-Type other than form, multipart or text/plain — so JSON POSTs are preflighted.'],
+    ['Can I use Access-Control-Allow-Origin: * with cookies?', 'No. With credentials the server must echo the exact origin, send Access-Control-Allow-Credentials: true, and should add Vary: Origin.'],
+    ['Does this tool send requests to my server?', 'No — it runs the browser’s CORS rules on the headers you paste, so it works for localhost and private APIs. Copy the response headers from DevTools → Network or curl -i.'],
+    ['Is it free?', FREE],
+  ],
   'number-base-converter': [
     ['How do I convert binary to decimal?', 'Type the binary number in the Binary field — 0b prefixes, spaces and underscores are fine — and the decimal, hex and octal values update instantly.'],
     ['Does it handle large numbers?', 'Yes. It uses arbitrary-precision integers, so 64-bit values and beyond convert exactly, unlike tools limited to JavaScript’s 53-bit numbers.'],

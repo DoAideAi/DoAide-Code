@@ -511,6 +511,24 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'csp-generator',
+    label: 'CSP',
+    title: 'Content Security Policy (CSP) Generator',
+    heading: 'Build a Content Security Policy',
+    description:
+      'Build a Content-Security-Policy header directive by directive — script-src, style-src, img-src, connect-src, frame-ancestors and more — with presets, nonce and hash help, or paste an existing policy to audit it for unsafe-inline, wildcards and missing directives. Copy it as a header, meta tag, nginx, Apache or Express config. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'cors-tester',
+    label: 'CORS',
+    title: 'CORS Header Tester & Generator',
+    heading: 'Test and fix CORS headers',
+    description:
+      'Describe the request — origin, method, headers, credentials — and paste the server’s response headers to see whether the browser will allow it, why not, and whether a preflight is sent. Then copy the right CORS config for nginx, Express, FastAPI or Apache. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'number-base-converter',
     label: 'Base converter',
     title: 'Number Base Converter (Binary, Hex, Octal)',
