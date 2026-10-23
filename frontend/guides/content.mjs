@@ -1284,4 +1284,243 @@ exit 0</code></pre>
     ],
     cta: ['/tools/share-code', 'Share a code snippet free — get a short link'],
   },
+  {
+    slug: 'generate-json-schema-from-json',
+    title: 'Generate a JSON Schema from JSON: Practical Guide (2026) | DoAide Code',
+    h1: 'How to generate a JSON Schema from a JSON sample',
+    description:
+      'What JSON Schema is for, how to generate one automatically from sample JSON, what inference gets right (types, required keys, formats) and where to edit by hand — with a free in-browser JSON Schema generator.',
+    updated: '2026-10-23',
+    intro: `<p>Every API contract argument ends the same way: someone finally writes a schema. JSON Schema is how services tell each other — and tell their tests, their editors and their AI tools — exactly what a payload looks like: which keys exist, which are required, what type each one is. OpenAPI request bodies, form validators, config file linting in VS Code, structured output from LLMs — all of it runs on JSON Schema.</p>
+<p>Writing one by hand is tedious, and the fastest way to start is to generate it from a real sample of your data. This guide shows how schema inference works, what it gets right automatically, and the handful of things you should still edit by hand. You can follow along with the <a href="/tools/json-schema-generator">free JSON Schema generator</a> — paste JSON, get a draft 2020-12 schema instantly, nothing uploaded.</p>`,
+    sections: [
+      [
+        'what-schema-does',
+        'What a JSON Schema actually buys you',
+        `<p>A schema is machine-checkable documentation. Concretely it gives you:</p>
+<ul>
+<li><strong>Validation at the boundary.</strong> Reject a bad request with a precise error ("age must be an integer") instead of a 500 three layers deeper.</li>
+<li><strong>Editor support.</strong> VS Code validates and autocompletes JSON and YAML files against a schema — that is how it knows the keys of package.json.</li>
+<li><strong>Contract tests.</strong> Validate real API responses against the schema in CI and catch breaking changes before clients do.</li>
+<li><strong>Typed clients and structured AI output.</strong> Code generators turn schemas into TypeScript types; LLM APIs accept a JSON Schema to force well-formed output.</li>
+</ul>
+<p>The draft to use in 2026 is <strong>2020-12</strong> — it is what OpenAPI 3.1 and modern validators (Ajv, jsonschema) speak natively.</p>`,
+      ],
+      [
+        'how-inference-works',
+        'How generating a schema from a sample works',
+        `<p>A generator walks your sample value and mirrors its shape:</p>
+<ul>
+<li><strong>Scalars</strong> map to their JSON Schema types, with whole numbers becoming <code>integer</code> (stricter and almost always what an API means) and decimals becoming <code>number</code>.</li>
+<li><strong>Objects</strong> become <code>type: "object"</code> with a <code>properties</code> map, and the keys present in the sample are listed as <code>required</code>.</li>
+<li><strong>Arrays</strong> are the interesting case: the generator infers a schema for every element and merges them — properties are unioned, and only keys present in <em>every</em> element stay required. Genuinely mixed arrays become an <code>anyOf</code>.</li>
+<li><strong>Recognizable strings</strong> get a <code>format</code>: ISO dates become <code>date-time</code>, and emails, URLs, UUIDs and IPv4 addresses are tagged too — validators and docs both benefit.</li>
+</ul>
+<p>Paste a realistic sample into the <a href="/tools/json-schema-generator">generator</a> and read the output next to this list — each rule is visible in the result.</p>`,
+      ],
+      [
+        'edit-by-hand',
+        'What to edit by hand afterwards',
+        `<p>Inference sees one sample, not your intent. After generating, spend five minutes on:</p>
+<ul>
+<li><strong>Optional keys.</strong> If a field can be absent but your sample happened to include it, delete it from <code>required</code>. (Feed the generator an array of several samples and it does this intersection for you.)</li>
+<li><strong>Nullability.</strong> A field that was <code>null</code> in the sample is typed <code>null</code>; widen it to what it really is, e.g. <code>{"type": ["string", "null"]}</code>.</li>
+<li><strong>Constraints.</strong> Add <code>minimum</code>, <code>maxLength</code>, <code>pattern</code> and <code>enum</code> where business rules exist — no sample can reveal that status is one of three values.</li>
+<li><strong>Descriptions.</strong> A one-line <code>description</code> per property is what turns a schema into documentation humans read.</li>
+<li><strong>additionalProperties.</strong> Set it to <code>false</code> on strict API contracts so typos in keys fail loudly instead of passing silently.</li>
+</ul>`,
+      ],
+      [
+        'validate-workflow',
+        'A minimal validation workflow',
+        `<p>With a schema in hand, wiring validation takes minutes. In Node with Ajv:</p>
+<pre><code>import Ajv from 'ajv/dist/2020.js'
+import addFormats from 'ajv-formats'
+
+const ajv = new Ajv()
+addFormats(ajv)
+const validate = ajv.compile(schema)
+
+if (!validate(payload)) {
+  console.log(validate.errors) // instancePath, message, params
+}</code></pre>
+<p>In Python, <code>jsonschema.validate(payload, schema)</code> does the same. Put it at every boundary you do not control: request bodies, webhook payloads, files users upload, responses from third-party APIs. Validate your own config files in the editor by adding a <code>$schema</code> key pointing at your schema file.</p>
+<p>Working with the JSON itself first? The <a href="/tools/json-formatter">JSON formatter</a> validates syntax and shows the structure as a tree, and the <a href="/tools/json-path-finder">JSON path finder</a> gives you the exact path to any value.</p>`,
+      ],
+    ],
+    faqs: [
+      [
+        'Can I generate a JSON Schema from a JSON file for free?',
+        'Yes — paste the JSON into the free generator at code.doaide.com/tools/json-schema-generator and copy the draft 2020-12 schema. It runs entirely in your browser with no sign-up, and your data is never uploaded.',
+      ],
+      [
+        'Which JSON Schema draft should I use in 2026?',
+        'Draft 2020-12. It is the current standard, it is what OpenAPI 3.1 uses natively, and every maintained validator (Ajv, python-jsonschema, everit) supports it. Only pick draft-07 when a legacy tool forces it.',
+      ],
+      [
+        'Does a generated schema replace writing one by hand?',
+        'It replaces the boring 80%: structure, types, required lists and formats. You still add intent by hand — optional keys, enums, ranges and descriptions — which the guide covers section by section.',
+      ],
+      [
+        'What is the difference between integer and number in JSON Schema?',
+        'number accepts any JSON number including decimals; integer accepts only whole values. Generators emit integer when the sample value is whole, which is stricter and usually correct for ids and counts.',
+      ],
+    ],
+    cta: ['/tools/json-schema-generator', 'Generate a JSON Schema from your JSON — free'],
+  },
+  {
+    slug: 'css-flexbox-cheat-sheet',
+    title: 'CSS Flexbox Cheat Sheet: Every Property, Visually (2026) | DoAide Code',
+    h1: 'The flexbox cheat sheet: every property and what it actually moves',
+    description:
+      'A practical CSS flexbox reference — flex-direction, justify-content, align-items, wrap, gap and the per-item flex shorthand — with the recipes for centering, navbars, cards and sticky footers, and a free visual playground.',
+    updated: '2026-10-23',
+    intro: `<p>Flexbox is how layout gets done: one container property set, and a row of divs becomes a navbar, a card row, a perfectly centered modal. Yet most of us still guess between <code>justify-content</code> and <code>align-items</code>, or cargo-cult <code>flex: 1</code> without knowing what the 1 is.</p>
+<p>This cheat sheet fixes the mental model in one read, then gives you the five recipes that cover 90% of real layouts. Every example here can be reproduced live in the <a href="/tools/flexbox-playground">free flexbox playground</a> — flip a property, watch the boxes move, copy the CSS.</p>`,
+    sections: [
+      [
+        'mental-model',
+        'The mental model: two axes, one rule',
+        `<p>A flex container lays items along a <strong>main axis</strong>, chosen by <code>flex-direction</code> (<code>row</code> by default, <code>column</code> to stack). Everything else follows one rule:</p>
+<ul>
+<li><strong><code>justify-content</code> positions items along the main axis</strong> — start, end, center, or distributed with <code>space-between</code> / <code>space-around</code> / <code>space-evenly</code>.</li>
+<li><strong><code>align-items</code> positions them across it</strong> — <code>stretch</code> (default), <code>flex-start</code>, <code>flex-end</code>, <code>center</code>, <code>baseline</code>.</li>
+</ul>
+<p>Flip <code>flex-direction</code> to <code>column</code> and the two swap what they visually do — same properties, rotated axes. This is the single most common flexbox confusion, and the fastest cure is flipping the direction select in the <a href="/tools/flexbox-playground">playground</a> and watching the items rearrange.</p>
+<p>Add <code>gap</code> for spacing between items (it replaced the margin hacks years ago) and <code>flex-wrap: wrap</code> to let items break onto new lines, with <code>align-content</code> controlling how the wrapped lines pack.</p>`,
+      ],
+      [
+        'item-properties',
+        'Per-item control: grow, shrink, basis',
+        `<p>Each item carries three numbers, usually written with the <code>flex</code> shorthand — <code>flex: grow shrink basis</code>:</p>
+<ul>
+<li><strong><code>flex-grow</code></strong> — the item's share of leftover space. Items with grow 2 take twice the extra space of items with grow 1.</li>
+<li><strong><code>flex-shrink</code></strong> — how willingly it gives space up when the container is too small (0 = never shrink).</li>
+<li><strong><code>flex-basis</code></strong> — its starting size before growing and shrinking; <code>auto</code> means "my content's size".</li>
+</ul>
+<p>The idioms to memorize: <code>flex: 1</code> (= 1 1 0) makes items split space equally regardless of content; <code>flex: auto</code> (= 1 1 auto) splits leftover space but respects content size; <code>flex: none</code> (= 0 0 auto) makes an item rigid. One item can also override the container's alignment with <code>align-self</code>.</p>`,
+      ],
+      [
+        'recipes',
+        'The five recipes that cover real layouts',
+        `<p><strong>1. Perfect centering</strong> (modals, hero sections, empty states):</p>
+<pre><code>.container { display: flex; justify-content: center; align-items: center; }</code></pre>
+<p><strong>2. Navbar</strong> — logo left, links right:</p>
+<pre><code>.nav { display: flex; justify-content: space-between; align-items: center; gap: 16px; }</code></pre>
+<p><strong>3. Equal-width card row that wraps:</strong></p>
+<pre><code>.cards { display: flex; flex-wrap: wrap; gap: 16px; }
+.card { flex: 1 1 250px; }  /* grow, shrink, min ~250px before wrapping */</code></pre>
+<p><strong>4. Sticky footer</strong> — footer at the bottom even on short pages:</p>
+<pre><code>body { display: flex; flex-direction: column; min-height: 100vh; }
+main { flex: 1; }</code></pre>
+<p><strong>5. Sidebar layout</strong> — fixed sidebar, fluid content:</p>
+<pre><code>.layout { display: flex; }
+.sidebar { flex: none; width: 240px; }
+.content { flex: 1; min-width: 0; }  /* min-width: 0 lets long content shrink */</code></pre>
+<p>Rebuild any of these in the <a href="/tools/flexbox-playground">playground</a> to see which property does what — it emits only the properties you changed, so the copied CSS stays this short.</p>`,
+      ],
+      [
+        'flexbox-or-grid',
+        'Flexbox or Grid?',
+        `<p>The working rule: <strong>flexbox for one dimension, grid for two.</strong> A navbar, a button row, a vertical stack — flexbox, because content flows along one line (even if it wraps). A page skeleton, a photo gallery with strict rows <em>and</em> columns, a dashboard — grid, because you are placing things on both axes at once.</p>
+<p>They compose: a grid for the page, flexbox inside each cell. If you are fighting flexbox with nested wrappers to line things up in two directions, that is the signal to switch the outer layer to grid.</p>
+<p>Polishing components while you are here: the <a href="/tools/box-shadow">box shadow generator</a> and <a href="/tools/css-gradient">CSS gradient generator</a> build the other half of a card's look, visually.</p>`,
+      ],
+    ],
+    faqs: [
+      [
+        'How do I center a div with flexbox?',
+        'On the parent: display: flex; justify-content: center; align-items: center;. The first centers along the main axis, the second across it. It works for any content size — try it live in the flexbox playground.',
+      ],
+      [
+        'What is the difference between justify-content and align-items?',
+        'justify-content distributes items along the main axis (the flex-direction); align-items aligns them across it. With flex-direction: row, justify-content is horizontal and align-items vertical; with column they swap.',
+      ],
+      [
+        'What does flex: 1 mean?',
+        'It is shorthand for flex-grow: 1, flex-shrink: 1, flex-basis: 0 — the item ignores its content size and takes an equal share of the container, which is how equal columns are made.',
+      ],
+      [
+        'When should I use grid instead of flexbox?',
+        'Use grid when you are controlling rows and columns at once (page layouts, galleries, dashboards) and flexbox when content flows along one axis (navbars, button rows, stacks). They nest happily in the same page.',
+      ],
+    ],
+    cta: ['/tools/flexbox-playground', 'Open the free flexbox playground'],
+  },
+  {
+    slug: 'seo-meta-tags-guide',
+    title: 'Meta Tags for SEO: The Complete Checklist (2026) | DoAide Code',
+    h1: 'Meta tags for SEO: what your pages actually need in 2026',
+    description:
+      'The meta tags that matter for SEO and social sharing in 2026 — title, description, canonical, Open Graph, Twitter cards, favicons — with character limits, common mistakes, and free generators for each.',
+    updated: '2026-10-23',
+    intro: `<p>Meta tags are the part of SEO you control completely and get wrong silently. The page renders fine, nothing errors — but the title gets truncated mid-word in search results, shared links show a grey rectangle instead of a preview, and Google picks its own description because yours was missing.</p>
+<p>This checklist covers the tags that matter in 2026, the ones that stopped mattering years ago, and the exact limits to stay inside. Generate the whole block for any page with the <a href="/tools/meta-tag-generator">free meta tag generator</a> — it warns about lengths as you type.</p>`,
+    sections: [
+      [
+        'core-tags',
+        'The core four: title, description, canonical, viewport',
+        `<p><strong>Title</strong> — the strongest on-page signal and your search-result headline. Keep it under ~60 characters so it is not cut off, put the distinctive words first, and make every page's unique: <code>&lt;title&gt;Free Invoice Generator for Freelancers | MySite&lt;/title&gt;</code>.</p>
+<p><strong>Meta description</strong> — not a ranking factor, but it is your ad copy on the results page and drives click-through. One or two sentences under ~160 characters saying what the visitor gets. Skip it and Google assembles one from page fragments.</p>
+<p><strong>Canonical</strong> — <code>&lt;link rel="canonical" href="…"&gt;</code> names the one true URL when the same content is reachable several ways (tracking parameters, http/https, trailing slashes). Without it, ranking signals split across duplicates.</p>
+<p><strong>Viewport</strong> — <code>&lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;</code>. Not strictly an SEO tag, but mobile-first indexing means a page that renders desktop-width on phones ranks like one.</p>`,
+      ],
+      [
+        'social-tags',
+        'Open Graph and Twitter cards: how shares look',
+        `<p>When a link is shared on WhatsApp, LinkedIn, Slack, Facebook or X, the preview card is built from these tags — and a link with a real preview gets dramatically more clicks than a bare URL:</p>
+<pre><code>&lt;meta property="og:title" content="…"&gt;
+&lt;meta property="og:description" content="…"&gt;
+&lt;meta property="og:type" content="website"&gt;
+&lt;meta property="og:url" content="https://…"&gt;
+&lt;meta property="og:image" content="https://…/og.png"&gt;
+&lt;meta name="twitter:card" content="summary_large_image"&gt;</code></pre>
+<p>The image is the part people miss: make it <strong>1200×630</strong>, serve it over https with an absolute URL, and keep any text on it large. X/Twitter falls back to Open Graph tags for most fields, so the one Twitter-specific tag you always need is <code>twitter:card</code>.</p>
+<p>The <a href="/tools/meta-tag-generator">meta tag generator</a> emits the full matched set, and the <a href="/tools/favicon-generator">favicon generator</a> covers the other visual identity piece — the icon browsers and search results show next to your name.</p>`,
+      ],
+      [
+        'dead-tags',
+        'Tags you can stop writing',
+        `<p>Cargo-culted head sections are full of tags that do nothing in 2026:</p>
+<ul>
+<li><strong><code>meta keywords</code></strong> — ignored by Google since 2009; at worst it hands your keyword research to competitors.</li>
+<li><strong><code>meta robots "index, follow"</code></strong> — that is the default; the tag only matters when you want <code>noindex</code> or <code>nofollow</code>.</li>
+<li><strong><code>meta revisit-after</code>, <code>rating</code>, <code>distribution</code></strong> — never standards, never used.</li>
+<li><strong><code>meta author</code></strong> — harmless, but search engines do not read it; authorship lives in structured data now.</li>
+</ul>
+<p>What replaced them: <strong>JSON-LD structured data</strong> (Article, Product, FAQPage, WebApplication) for rich results. It belongs in the same checklist even though it is a script block, not a meta tag.</p>`,
+      ],
+      [
+        'audit-workflow',
+        'A five-minute audit workflow',
+        `<p>For each key page:</p>
+<ol>
+<li><strong>View source</strong> and check the core four exist and are unique to the page.</li>
+<li><strong>Measure lengths</strong> — or paste the values into the <a href="/tools/meta-tag-generator">generator</a>, which flags over-limit titles and descriptions as you type.</li>
+<li><strong>Test a share</strong> — paste the URL into a WhatsApp chat with yourself or a Slack DM and see what card renders; wrong image means og:image is missing, relative, or behind a redirect.</li>
+<li><strong>Check performance basics</strong> — social crawlers and Google both time out on slow pages. The <a href="/tools/performance-audit">performance audit</a> reads the same page source and flags render-blocking scripts and unsized images.</li>
+<li><strong>Keep sitemap and canonicals consistent</strong> — the canonical URL on the page should be the URL in your sitemap, always the https non-trailing-slash (or whatever your convention) version.</li>
+</ol>`,
+      ],
+    ],
+    faqs: [
+      [
+        'What are the most important meta tags for SEO?',
+        'The title tag and meta description (your search-result listing), the canonical link (consolidates duplicate URLs), the viewport tag (mobile-first indexing), and Open Graph + Twitter card tags so shared links render a preview card.',
+      ],
+      [
+        'How long should a title tag and meta description be in 2026?',
+        'Keep titles under roughly 60 characters and descriptions under roughly 160 — beyond that, search results truncate them with an ellipsis. The limits are really pixel widths, so character counts are a safe approximation.',
+      ],
+      [
+        'Do meta keywords still matter?',
+        'No. Google has ignored the keywords meta tag since 2009 and no major engine uses it for ranking. Spend the effort on the title, description and structured data instead.',
+      ],
+      [
+        'Why does my link not show an image when shared?',
+        'The og:image tag is missing, uses a relative URL, points to a slow or redirected address, or the image is too small. Use an absolute https URL to a 1200×630 image and retest the share.',
+      ],
+    ],
+    cta: ['/tools/meta-tag-generator', 'Generate your meta tags free'],
+  },
 ]
