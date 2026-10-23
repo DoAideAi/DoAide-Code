@@ -35,7 +35,7 @@ describe('JsonPage', () => {
     fireEvent.change(screen.getByTestId('json-in'), { target: { value: '{"deep": {"deeper": {"deepest": 1}}}' } })
     // Depth 2 starts closed: the summary shows instead of the child.
     expect(screen.getByTestId('json-tree').textContent).not.toContain('"deepest"')
-    fireEvent.click(screen.getByRole('button', { name: /"deeper"/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand "deeper"' }))
     expect(screen.getByTestId('json-tree').textContent).toContain('"deepest"')
   })
 
@@ -44,5 +44,24 @@ describe('JsonPage', () => {
     fireEvent.change(screen.getByTestId('json-in'), { target: { value: '{broken' } })
     expect(screen.getByTestId('json-format').disabled).toBe(true)
     expect(screen.getByTestId('json-minify').disabled).toBe(true)
+  })
+
+  it('searches, expands and shows the path of a clicked node', () => {
+    render(<JsonPage />)
+    const doc = { users: [{ name: 'Asha', address: { city: 'Pune' } }, { name: 'Ravi' }] }
+    fireEvent.change(screen.getByTestId('json-in'), { target: { value: JSON.stringify(doc) } })
+    expect(screen.getByTestId('json-tree').textContent).not.toContain('Pune') // depth 3 starts closed
+    fireEvent.change(screen.getByTestId('json-search'), { target: { value: 'pune' } })
+    expect(screen.getByTestId('json-search-count').textContent).toBe('1 match')
+    expect(screen.getByTestId('json-tree').textContent).toContain('"Pune"')
+    fireEvent.click(screen.getByText('"city"'))
+    expect(screen.getByTestId('json-path-jsonpath').textContent).toBe('$.users[0].address.city')
+    expect(screen.getByTestId('json-path-javascript').textContent).toBe('data.users[0].address.city')
+
+    fireEvent.change(screen.getByTestId('json-search'), { target: { value: '' } })
+    fireEvent.click(screen.getByTestId('json-collapse-all'))
+    expect(screen.getByTestId('json-tree').textContent).not.toContain('"name"')
+    fireEvent.click(screen.getByTestId('json-expand-all'))
+    expect(screen.getByTestId('json-tree').textContent).toContain('"Pune"')
   })
 })

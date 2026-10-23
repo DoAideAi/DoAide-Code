@@ -136,6 +136,8 @@ export const TOOL_FAQS = {
     ['How do I validate JSON online?', 'Paste it: you get a valid/invalid verdict, the exact line and column of the first error, and a collapsible tree to explore.'],
     ['Is my JSON uploaded?', LOCAL],
     ['How large a document can it handle?', 'Up to 500,000 characters while staying responsive.'],
+    ['How do I find a key or value in a large JSON file?', 'Type in the search box: every key and value containing the text is highlighted, and the tree opens down to each match.'],
+    ['How do I get the path to a JSON field?', 'Click any key in the tree to see its JSONPath ($.users[0].name) and JavaScript accessor (data.users[0].name), each with a copy button.'],
   ],
   'timestamp-converter': [
     ['How do I convert a unix timestamp to a date?', 'Paste the number: 10-digit values are read as seconds, 13-digit as milliseconds, and you get ISO 8601, RFC 2822 and any timezone instantly.'],
@@ -337,5 +339,12 @@ export const TOOL_FAQS = {
     ['How is LIKE converted?', 'To a regular expression: % becomes .* and _ becomes a single character, anchored with ^ and $ where the pattern has no wildcard. ILIKE adds the i flag for case-insensitive matching.'],
     ['Does it convert JOINs?', 'No — MongoDB has no direct JOIN. The tool flags joins and subqueries instead of guessing; use $lookup in an aggregation or embed related data in the document.'],
     ['Is my query uploaded?', LOCAL],
+  ],
+  'og-preview': [
+    ['How do I check how my link will look when shared?', 'Open the page, view its source (Ctrl+U), copy it and paste it here. The previews update instantly for Google, Facebook, X, LinkedIn, WhatsApp, Slack and Discord, and the checks list anything missing.'],
+    ['Which Open Graph tags are required?', 'og:title, og:description, og:image and og:url, plus og:type. Add twitter:card = summary_large_image to get a big image card on X.'],
+    ['Why does my old image still show after I changed it?', 'Platforms cache previews. Re-scrape with Facebook’s Sharing Debugger or LinkedIn’s Post Inspector, or add a query string to the image URL so it is fetched again.'],
+    ['What size should the og:image be?', '1200×630 pixels (1.91:1), under 5 MB, as an absolute https URL. Smaller than 600px wide falls back to a small thumbnail on most platforms.'],
+    ['Is anything uploaded?', 'No — the HTML is parsed in your browser. Only the image itself is loaded from its own URL so the previews can show it.'],
   ],
 }

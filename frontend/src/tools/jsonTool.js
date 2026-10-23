@@ -44,3 +44,40 @@ export function jsonStats(value) {
   walk(value, 1)
   return { values, keys, depth }
 }
+
+// JSONPath for a path of keys/indexes: $.users[0].name, $['odd key'].
+export function jsonPath(path) {
+  return '$' + path.map((k) => (typeof k === 'number' ? `[${k}]` : /^[A-Za-z_$][\w$]*$/.test(k) ? `.${k}` : `['${k.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}']`)).join('')
+}
+
+// The same path as JavaScript property access on a variable called `data`.
+export function jsAccessor(path) {
+  return 'data' + path.map((k) => (typeof k === 'number' ? `[${k}]` : /^[A-Za-z_$][\w$]*$/.test(k) ? `.${k}` : `[${JSON.stringify(k)}]`)).join('')
+}
+
+export const pathKey = (path) => JSON.stringify(path)
+export const MAX_MATCHES = 1000
+
+// Paths whose key or scalar value contains the query (case-insensitive), plus every ancestor
+// of a match so the tree can open down to it: { matches, open, count }.
+export function searchJson(value, query) {
+  const q = query.trim().toLowerCase()
+  const matches = new Set()
+  const open = new Set()
+  if (!q) return { matches, open, count: 0 }
+  let count = 0
+  const walk = (v, path) => {
+    if (count >= MAX_MATCHES) return
+    const key = path.at(-1)
+    const scalar = v === null || typeof v !== 'object'
+    const hit = (typeof key === 'string' && key.toLowerCase().includes(q)) || (scalar && String(v).toLowerCase().includes(q))
+    if (hit) {
+      count++
+      matches.add(pathKey(path))
+      for (let i = 0; i < path.length; i++) open.add(pathKey(path.slice(0, i)))
+    }
+    if (!scalar) for (const [k, child] of Array.isArray(v) ? v.map((x, i) => [i, x]) : Object.entries(v)) walk(child, [...path, k])
+  }
+  walk(value, [])
+  return { matches, open, count }
+}

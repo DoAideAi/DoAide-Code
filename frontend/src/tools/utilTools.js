@@ -399,7 +399,7 @@ export const UTIL_TOOLS = [
     title: 'JSON Formatter & Validator',
     heading: 'Validate and explore JSON',
     description:
-      'Paste JSON to validate it, see the exact line of any error, and explore it as a collapsible tree. Free, no sign-up.',
+      'Paste JSON to validate, format or minify it, see the exact line of any error, and explore it as a collapsible tree — search keys and values, expand or collapse all, and click any node for its JSONPath. Free, no sign-up.',
     isNew: true,
   },
   {
@@ -472,6 +472,15 @@ export const UTIL_TOOLS = [
     heading: 'Convert SQL to MongoDB queries',
     description:
       'Paste a SQL query and get the MongoDB shell equivalent — find with filters, projection, sort and limit; countDocuments; distinct; aggregation pipelines for GROUP BY and HAVING; insertMany, updateMany and deleteMany. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'og-preview',
+    label: 'OG preview',
+    title: 'Open Graph Preview & Checker',
+    heading: 'Preview Open Graph link cards',
+    description:
+      'Paste a page’s HTML or type the og:title, description and image, and see how the link looks on Google, Facebook, X/Twitter, LinkedIn, WhatsApp, Slack and Discord — with checks for missing tags, lengths and image size. Free, no sign-up.',
     isNew: true,
   },
 ]

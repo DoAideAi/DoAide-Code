@@ -1,11 +1,12 @@
 // The JSON formatter and validator (/tools/json-formatter): paste JSON, see instantly whether it
-// is valid (and where it broke), and explore it as a collapsible tree. Runs in the page.
+// is valid (and where it broke), and explore it as a collapsible tree — search keys and values,
+// expand or collapse everything, and click any node for its JSONPath. Runs in the page.
 
-import { useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import RecentSnippets from './RecentSnippets.jsx'
 import { rememberSnippet } from './snippets.js'
 import ToolShell, { BUTTON, CopyButton } from './ToolShell.jsx'
-import { MAX_JSON_CHARS, jsonStats, parseJson } from './jsonTool.js'
+import { MAX_JSON_CHARS, MAX_MATCHES, jsAccessor, jsonPath, jsonStats, parseJson, pathKey, searchJson } from './jsonTool.js'
 import { UTIL_TOOLS } from './utilTools.js'
 
 const TOOL = UTIL_TOOLS.find((t) => t.slug === 'json-formatter')
@@ -20,19 +21,56 @@ function Leaf({ value }) {
   return <span className="text-violet-300">{String(value)}</span>
 }
 
-function Node({ name, value, depth }) {
+// What every node needs from the page: search results, the expand/collapse-all signal and the
+// selected path. Passed by context so the recursive tree doesn't thread props by hand.
+const TreeContext = createContext(null)
+
+function Name({ name, path }) {
+  const { search, selected, select } = useContext(TreeContext)
+  const key = pathKey(path)
+  const hit = search.matches.has(key)
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      title="Show this node's path"
+      onClick={(e) => {
+        e.stopPropagation()
+        select(path)
+      }}
+      onKeyDown={(e) => e.key === 'Enter' && select(path)}
+      className={`cursor-pointer rounded ${selected === key ? 'ring-1 ring-sky-500' : ''} ${hit ? 'bg-amber-500/25' : ''}`}
+    >
+      {name === null ? <span className="text-zinc-500">$</span> : <span className="text-sky-300">{typeof name === 'number' ? name : `"${name}"`}</span>}
+    </span>
+  )
+}
+
+function Node({ name, value, depth, path }) {
+  const { search, expand } = useContext(TreeContext)
   // Top levels start open, deeper ones closed, so big documents stay fast and scannable.
   const [open, setOpen] = useState(depth < 2)
+  useEffect(() => {
+    if (expand.n) setOpen(expand.mode === 'open' || depth === 0)
+  }, [expand, depth])
+  const forced = search.open.has(pathKey(path))
+  const shown = open || forced
   const isArray = Array.isArray(value)
   const isObject = !isArray && value !== null && typeof value === 'object'
-  const label = name === null ? null : <span className="text-sky-300">{typeof name === 'number' ? name : `"${name}"`}</span>
+  const label = <Name name={name} path={path} />
 
   if (!isArray && !isObject) {
     return (
       <div className={MONO}>
-        {label}
-        {label && <span className="text-zinc-500">: </span>}
-        <Leaf value={value} />
+        {name !== null && (
+          <>
+            {label}
+            <span className="text-zinc-500">: </span>
+          </>
+        )}
+        <span className={search.matches.has(pathKey(path)) ? 'rounded bg-amber-500/25' : ''}>
+          <Leaf value={value} />
+        </span>
       </div>
     )
   }
@@ -41,21 +79,26 @@ function Node({ name, value, depth }) {
   const summary = isArray ? `[ ${value.length} item${value.length === 1 ? '' : 's'} ]` : `{ ${entries.length} key${entries.length === 1 ? '' : 's'} }`
   return (
     <div>
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-1 rounded px-1 text-left hover:bg-zinc-900 ${MONO}`}
-      >
-        <span aria-hidden className="w-3 text-zinc-500">{open ? '▾' : '▸'}</span>
+      <div className={`flex items-center gap-1 ${MONO}`}>
+        <button
+          type="button"
+          aria-expanded={shown}
+          aria-label={`${shown ? 'Collapse' : 'Expand'} ${name === null ? 'root' : typeof name === 'number' ? `item ${name}` : `"${name}"`}`}
+          onClick={() => setOpen(!shown)}
+          className="w-4 rounded text-zinc-500 hover:bg-zinc-900"
+        >
+          {shown ? '▾' : '▸'}
+        </button>
         {label}
-        {label && <span className="text-zinc-500">: </span>}
-        <span className="text-zinc-500">{open ? (isArray ? '[' : '{') : summary}</span>
-      </button>
-      {open && (
+        {name !== null && <span className="text-zinc-500">: </span>}
+        <button type="button" onClick={() => setOpen(!shown)} className="rounded px-1 text-zinc-500 hover:bg-zinc-900">
+          {shown ? (isArray ? '[' : '{') : summary}
+        </button>
+      </div>
+      {shown && (
         <div className="ml-4 border-l border-zinc-800/60 pl-3">
           {entries.slice(0, MAX_CHILDREN).map(([key, child]) => (
-            <Node key={key} name={key} value={child} depth={depth + 1} />
+            <Node key={key} name={key} value={child} depth={depth + 1} path={[...path, key]} />
           ))}
           {entries.length > MAX_CHILDREN && (
             <div className={`text-zinc-500 ${MONO}`}>… {entries.length - MAX_CHILDREN} more</div>
@@ -67,13 +110,24 @@ function Node({ name, value, depth }) {
   )
 }
 
+function valueAt(root, path) {
+  return path.reduce((v, k) => v?.[k], root)
+}
+
 export default function JsonPage() {
   const [text, setText] = useState('')
   const [historyAt, setHistoryAt] = useState(0)
+  const [query, setQuery] = useState('')
+  const [expand, setExpand] = useState({ mode: 'open', n: 0 })
+  const [selected, setSelected] = useState(null)
 
   const tooLong = text.length > MAX_JSON_CHARS
   const result = useMemo(() => (text.trim() && !tooLong ? parseJson(text) : null), [text, tooLong])
   const stats = useMemo(() => (result?.ok ? jsonStats(result.value) : null), [result])
+  const search = useMemo(() => (result?.ok ? searchJson(result.value, query) : searchJson(null, '')), [result, query])
+  const selectedPath = selected && result?.ok ? JSON.parse(selected) : null
+  const selectedValue = selectedPath ? valueAt(result.value, selectedPath) : undefined
+  const tree = useMemo(() => ({ search, expand, selected, select: (path) => setSelected(pathKey(path)) }), [search, expand, selected])
   const keepAnd = (make) => () => {
     rememberSnippet('json-formatter', text, 'JSON')
     setHistoryAt(Date.now())
@@ -145,8 +199,53 @@ export default function JsonPage() {
             {stats.keys > 0 && `, ${stats.keys.toLocaleString()} key${stats.keys === 1 ? '' : 's'}`}, {stats.depth} level
             {stats.depth === 1 ? '' : 's'} deep
           </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="search"
+              data-testid="json-search"
+              aria-label="Search keys and values"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search keys and values…"
+              className="min-h-[44px] min-w-0 flex-1 rounded-md border border-zinc-800 bg-zinc-950 px-2 text-sm text-zinc-200 sm:min-h-[36px]"
+            />
+            {query.trim() && (
+              <span data-testid="json-search-count" className="text-xs text-zinc-400">
+                {search.count >= MAX_MATCHES ? `${MAX_MATCHES}+` : search.count} match{search.count === 1 ? '' : 'es'}
+              </span>
+            )}
+            <button type="button" data-testid="json-expand-all" className={BUTTON} onClick={() => setExpand((e) => ({ mode: 'open', n: e.n + 1 }))}>
+              Expand all
+            </button>
+            <button type="button" data-testid="json-collapse-all" className={BUTTON} onClick={() => setExpand((e) => ({ mode: 'closed', n: e.n + 1 }))}>
+              Collapse all
+            </button>
+          </div>
+          {selectedPath && selectedValue !== undefined && (
+            <div data-testid="json-path" className="flex flex-col gap-1 rounded-md border border-zinc-800 bg-zinc-950 p-2 text-xs">
+              {[
+                ['JSONPath', jsonPath(selectedPath)],
+                ['JavaScript', jsAccessor(selectedPath)],
+              ].map(([label, text]) => (
+                <div key={label} className="flex items-center gap-2">
+                  <span className="w-20 shrink-0 text-zinc-500">{label}</span>
+                  <code data-testid={`json-path-${label.toLowerCase()}`} className="min-w-0 flex-1 break-all text-emerald-300">
+                    {text}
+                  </code>
+                  <CopyButton text={text} label="Copy" />
+                </div>
+              ))}
+              <div className="flex items-center gap-2">
+                <span className="w-20 shrink-0 text-zinc-500">Value</span>
+                <code className="min-w-0 flex-1 truncate text-zinc-300">{JSON.stringify(selectedValue)}</code>
+                <CopyButton text={JSON.stringify(selectedValue, null, 2)} label="Copy" />
+              </div>
+            </div>
+          )}
           <div data-testid="json-tree" className="overflow-x-auto">
-            <Node name={null} value={result.value} depth={0} />
+            <TreeContext.Provider value={tree}>
+              <Node name={null} value={result.value} depth={0} path={[]} />
+            </TreeContext.Provider>
           </div>
         </section>
       )}
