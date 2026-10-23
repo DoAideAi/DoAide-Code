@@ -72,6 +72,27 @@ def test_missing_search_text_and_escapes_are_problems(repo):
     assert not changeset.changed
 
 
+def test_absolute_path_from_another_checkout_edits_the_project_file(repo):
+    # Live: a Sonnet answer named /Users/.../AgentProving/assurance/src/assurance/stats/statistics.py.
+    stats = repo / "src" / "assurance" / "stats"
+    stats.mkdir(parents=True)
+    (stats / "statistics.py").write_text("def mean():\n    return 0\n")
+    (repo / "statistics.py").write_text("x = 1\n")  # same name, shorter shared tail
+    elsewhere = "/elsewhere/AgentProving/assurance/src/assurance/stats/statistics.py"
+    text = f"{elsewhere}\n<<<<<<< SEARCH\n    return 0\n=======\n    return 1\n>>>>>>> REPLACE\n"
+    changeset = build_changeset(repo, parse_edits(text))
+    assert not changeset.all_problems
+    assert [f.path for f in changeset.changed] == ["src/assurance/stats/statistics.py"]
+
+
+def test_absolute_path_with_no_project_file_names_the_project(repo):
+    text = "/elsewhere/other/new.py\n<<<<<<< SEARCH\nx\n=======\ny\n>>>>>>> REPLACE\n"
+    changeset = build_changeset(repo, parse_edits(text))
+    assert not changeset.changed
+    [problem] = changeset.all_problems
+    assert str(repo.resolve()) in problem and "/switch-project" in problem
+
+
 async def test_syntax_errors_introduced_by_a_change_are_reported(repo):
     bad = "app.py\n<<<<<<< SEARCH\n    return 1\n=======\n    return (\n>>>>>>> REPLACE\n"
     changeset = await propose(repo, bad)

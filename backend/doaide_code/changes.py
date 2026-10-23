@@ -304,6 +304,29 @@ def _only_match(root: Path, path: str) -> Path | None:
     return found[0] if found else None
 
 
+def _same_file_here(root: Path, path: str) -> Path | None:
+    """The project file an absolute path from elsewhere means: the one sharing the longest tail
+    with it (/elsewhere/AgentProving/src/stats/x.py -> src/stats/x.py), or None when no file has
+    that name or two share the longest tail."""
+    want = Path(path).parts
+    best: list[Path] = []
+    longest = 0
+    for current, dirs, names in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in IGNORED and not d.startswith(".")]
+        if want[-1] not in names:
+            continue
+        full = Path(current, want[-1])
+        have = full.relative_to(root).parts
+        shared = 0
+        while shared < min(len(have), len(want)) and have[-1 - shared] == want[-1 - shared]:
+            shared += 1
+        if shared > longest:
+            best, longest = [full], shared
+        elif shared == longest:
+            best.append(full)
+    return best[0] if len(best) == 1 else None
+
+
 def build_changeset(root: Path, edits: list[Edit]) -> Changeset:
     root = root.resolve()
     changeset = Changeset(root)
@@ -311,8 +334,17 @@ def build_changeset(root: Path, edits: list[Edit]) -> Changeset:
         try:
             target = resolve_in_root(root, edit.path)
         except FileAccessError:
-            changeset.problems.append(f"{edit.path}: outside the project, skipped")
-            continue
+            # Models copy absolute paths from tracebacks or another checkout of the project (live:
+            # /Users/.../AgentProving/assurance/src/assurance/stats/statistics.py, opened elsewhere).
+            match = _same_file_here(root, edit.path) if Path(edit.path).is_absolute() and edit.search.strip() else None
+            if match is None:
+                changeset.problems.append(
+                    f"{edit.path} is outside the project at {root}, so it was not edited "
+                    "(use a path inside the project, or switch with /switch-project)"
+                )
+                continue
+            log.info("%s: absolute path taken as %s", edit.path, match.relative_to(root).as_posix())
+            target = match
         if edit.search.strip() and not target.exists() and (match := _only_match(root, edit.path.strip("./"))):
             # An edit to "history.py" means the project's only history.py (live: the 32b wrote
             # the path as the request named it, and the edit escalated as "file does not exist").
