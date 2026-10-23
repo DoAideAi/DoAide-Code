@@ -349,6 +349,51 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'text-diff',
+    label: 'Text diff',
+    title: 'Text Diff Checker',
+    heading: 'Compare two texts',
+    description:
+      'Paste two versions of any text — essays, contracts, configs, lists — and see added, removed and changed lines with the exact words highlighted. Ignore case, whitespace or blank lines. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'html-entities',
+    label: 'HTML entities',
+    title: 'HTML Entity Encoder & Decoder',
+    heading: 'Encode and decode HTML entities',
+    description:
+      'Escape text for HTML with named (&copy;) or numeric (&#169;) entities, or decode any entity back to characters — with a click-to-copy reference of the common ones. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'ascii-art',
+    label: 'ASCII art',
+    title: 'ASCII Art Text Generator',
+    heading: 'Turn text into ASCII art',
+    description:
+      'Type a word and get big ASCII art text in 18 FIGlet fonts — Standard, ANSI Shadow, Slant, Doom, Star Wars and more — ready to wrap in a code comment for READMEs, CLIs and source banners. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'uuid-generator',
+    label: 'UUID',
+    title: 'UUID Generator',
+    heading: 'Generate UUIDs',
+    description:
+      'Generate v4 random, v7 time-ordered or v1 UUIDs — one or a thousand at once — in uppercase, without hyphens or in braces, and decode any UUID’s version and timestamp. Cryptographically random, free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'password-generator',
+    label: 'Password',
+    title: 'Strong Password Generator',
+    heading: 'Generate a strong password',
+    description:
+      'Create random passwords from 4 to 128 characters with the letters, numbers and symbols you choose, see the entropy and time-to-crack, and check how strong your own password is. Generated in your browser, never sent. Free.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',

@@ -224,6 +224,36 @@ export const TOOL_FAQS = {
     ['Can I convert Excel or CSV to a markdown table?', 'Yes — copy cells from Excel or Google Sheets (they paste as tab-separated text) or paste CSV into Import, and the table fills in ready to copy as markdown.'],
     ['How do I put a pipe character inside a cell?', 'Escape it as \\|. The generator escapes pipes and turns line breaks into <br> automatically so your table never breaks.'],
   ],
+  'text-diff': [
+    ['How do I compare two texts for differences?', 'Paste the original on the left and the changed version on the right. Changed lines are highlighted red and green, and the exact words that differ inside them are marked, so you can spot a single edited word in a long paragraph.'],
+    ['How is this different from the code diff checker?', 'This one is tuned for prose: lines wrap instead of scrolling, changed words are highlighted inside each line, and you can ignore case, whitespace and blank lines. The code diff checker keeps a monospace side-by-side view for source files.'],
+    ['Can I ignore whitespace and capitalization?', 'Yes — tick Ignore case, Ignore whitespace or Ignore blank lines and lines that differ only in those ways count as unchanged.'],
+    ['Is my text uploaded?', LOCAL],
+  ],
+  'html-entities': [
+    ['What is an HTML entity?', 'A text code the browser turns into a character: &lt; for <, &amp; for &, &copy; for ©. They let you show characters that would otherwise be read as markup, or that are hard to type.'],
+    ['Which characters must be escaped in HTML?', 'Always & and <; > for symmetry; and " or \' inside attribute values. Choosing “Only & < > \" \'” encodes exactly those and leaves the rest of your text readable.'],
+    ['Named or numeric entities — which should I use?', 'Both work in every browser. Named ones (&euro;) are easier to read; numeric ones (&#8364;) cover every Unicode character, including emoji, and are safe in XML too.'],
+    ['Does escaping HTML prevent XSS?', 'Encoding < > & " \' before inserting untrusted text into HTML is the core defence for element content and quoted attributes. Other contexts — URLs, JavaScript, CSS — need their own escaping.'],
+  ],
+  'ascii-art': [
+    ['How do I make ASCII art text?', 'Type your text, pick a font and copy the result. The fonts are FIGlet fonts — the classic format behind the figlet and toilet command-line tools — rendered right in your browser.'],
+    ['Which ASCII font is best for a README or CLI banner?', 'ANSI Shadow and Slant are popular for project banners; Standard and Small stay narrow enough for an 80-column terminal. Use “Compare all fonts” to see your text in every style at once.'],
+    ['How do I put ASCII art in a code comment?', 'Pick a comment style — // for JavaScript, # for Python and shell, /* */ for CSS, <!-- --> for HTML — and every line is wrapped so the banner can sit at the top of a source file.'],
+    ['Why does my ASCII art look broken in some places?', 'ASCII art needs a monospace font. Paste it inside a code block (``` in markdown) or a <pre> tag so every character keeps the same width.'],
+  ],
+  'uuid-generator': [
+    ['What is the difference between UUID v4 and v7?', 'v4 is 122 random bits — the default choice for unpredictable ids. v7 starts with a millisecond timestamp, so ids sort in creation order, which keeps database indexes compact. Prefer v7 for primary keys.'],
+    ['Can two UUIDs ever collide?', 'In practice, no. With v4 you would need to generate about a billion UUIDs every second for 85 years to reach a 50% chance of a single duplicate.'],
+    ['Is a UUID the same as a GUID?', 'Yes — GUID is Microsoft’s name for the same 128-bit format. Tick Uppercase and {Braces} for the style Windows and .NET usually show.'],
+    ['Are these UUIDs secure to use?', 'They come from crypto.getRandomValues, the browser’s cryptographically secure generator, and are made in your browser — nothing is sent or logged. v1 here uses a random node id instead of your MAC address.'],
+  ],
+  'password-generator': [
+    ['How long should a password be?', 'At least 16 characters for accounts you care about; 20+ with all character sets gives over 120 bits of entropy, far beyond any brute-force attack. A password manager means you never have to type it.'],
+    ['Is this password generator safe?', 'Passwords are generated in your browser with crypto.getRandomValues, a cryptographically secure source, using rejection sampling so every character is equally likely. Nothing is sent, stored or logged.'],
+    ['What is password entropy?', 'The number of guesses an attacker needs, expressed in bits: length × log2(characters to choose from). Every extra bit doubles the work; 80+ bits is considered very strong.'],
+    ['Why exclude look-alike characters?', 'I, l, 1, O and 0 are easy to misread when a password is typed from paper or read aloud. Excluding them costs very little entropy — add a character or two of length to make up for it.'],
+  ],
   'box-shadow': [
     ['How do I make a realistic CSS shadow?', 'Layer two shadows: a tight, darker one for where the element meets the surface and a wide, soft, low-opacity one for ambient depth. The “Subtle card” and “Elevated” presets show the pattern.'],
     ['What do the four box-shadow numbers mean?', 'In order: horizontal offset, vertical offset, blur radius and spread. Spread grows the shadow in every direction before the blur softens it.'],

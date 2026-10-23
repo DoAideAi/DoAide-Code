@@ -43,6 +43,11 @@ export const PAGE_LOADERS = {
   'css-grid-generator': () => import('./GridPage.jsx'),
   'color-palette': () => import('./PalettePage.jsx'),
   'markdown-table': () => import('./MarkdownTablePage.jsx'),
+  'text-diff': () => import('./TextDiffPage.jsx'),
+  'html-entities': () => import('./HtmlEntityPage.jsx'),
+  'ascii-art': () => import('./AsciiArtPage.jsx'),
+  'uuid-generator': () => import('./UuidPage.jsx'),
+  'password-generator': () => import('./PasswordPage.jsx'),
 }
 
 // The slug in a path like /tools/diff-checker ('' for /tools).
