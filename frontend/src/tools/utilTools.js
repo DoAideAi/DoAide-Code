@@ -483,6 +483,24 @@ export const UTIL_TOOLS = [
       'Paste a page’s HTML or type the og:title, description and image, and see how the link looks on Google, Facebook, X/Twitter, LinkedIn, WhatsApp, Slack and Discord — with checks for missing tags, lengths and image size. Free, no sign-up.',
     isNew: true,
   },
+  {
+    slug: 'csv-to-json',
+    label: 'CSV → JSON',
+    title: 'CSV to JSON & SQL Converter',
+    heading: 'Convert CSV to JSON or SQL',
+    description:
+      'Paste or drop a CSV (or TSV) and convert it to a JSON array, JSON keyed by column, SQL CREATE TABLE and INSERT statements, or back from JSON to CSV — auto-detected delimiter, quoted fields, header row and number/boolean typing. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'yaml-to-json',
+    label: 'YAML ↔ JSON',
+    title: 'YAML to JSON Converter',
+    heading: 'Convert YAML to JSON and back',
+    description:
+      'Convert YAML to JSON or JSON to YAML as you type, with the exact line of any syntax error, anchors and aliases resolved, multi-document YAML, and indent options. Converted in your browser. Free, no sign-up.',
+    isNew: true,
+  },
 ]
 
 // The utility living at this path, or null when the path is an AI tool's (or unknown).

@@ -347,4 +347,19 @@ export const TOOL_FAQS = {
     ['What size should the og:image be?', '1200×630 pixels (1.91:1), under 5 MB, as an absolute https URL. Smaller than 600px wide falls back to a small thumbnail on most platforms.'],
     ['Is anything uploaded?', 'No — the HTML is parsed in your browser. Only the image itself is loaded from its own URL so the previews can show it.'],
   ],
+  'csv-to-json': [
+    ['How do I convert CSV to JSON?', 'Paste the CSV or drop the file. With a header row, each line becomes an object keyed by the column names; without one you get arrays. Numbers, true/false and empty cells can be typed automatically.'],
+    ['Does it handle commas and line breaks inside fields?', 'Yes — fields wrapped in double quotes may contain the delimiter, newlines and escaped quotes ("") as RFC 4180 describes.'],
+    ['Can it detect semicolon or tab separated files?', 'Yes. The delimiter is auto-detected from comma, semicolon, tab and pipe, and you can override it.'],
+    ['How do I turn a CSV into SQL INSERT statements?', 'Choose the SQL output, set the table name and you get a CREATE TABLE with column types inferred from the data plus INSERT statements, batched and with quotes escaped.'],
+    ['Can I convert JSON back to CSV?', 'Yes — switch the direction and paste a JSON array of objects. Columns are the union of all keys; nested values are written as JSON text.'],
+    ['Is my file uploaded?', LOCAL],
+  ],
+  'yaml-to-json': [
+    ['How do I convert YAML to JSON?', 'Paste the YAML on the left and the JSON appears on the right as you type. Switch the direction to turn JSON into YAML.'],
+    ['Are anchors and aliases supported?', 'Yes — &anchor, *alias and << merge keys are resolved, so the JSON contains the expanded values.'],
+    ['What about files with several YAML documents?', 'Documents separated by --- are converted to a JSON array, one element per document, as in Kubernetes manifests.'],
+    ['Why does "no" become false?', 'This converter follows YAML 1.2, where only true and false are booleans, so no, yes, on and off stay strings. Quote values if another tool reads YAML 1.1.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
 }

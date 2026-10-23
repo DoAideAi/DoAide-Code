@@ -57,6 +57,8 @@ export const PAGE_LOADERS = {
   'css-to-tailwind': () => import('./TailwindPage.jsx'),
   'sql-to-mongodb': () => import('./SqlMongoPage.jsx'),
   'og-preview': () => import('./OgPreviewPage.jsx'),
+  'csv-to-json': () => import('./CsvPage.jsx'),
+  'yaml-to-json': () => import('./YamlPage.jsx'),
 }
 
 // The slug in a path like /tools/diff-checker ('' for /tools).
