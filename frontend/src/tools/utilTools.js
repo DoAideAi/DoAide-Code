@@ -322,6 +322,33 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'css-grid-generator',
+    label: 'CSS grid',
+    title: 'CSS Grid Generator',
+    heading: 'Build a CSS grid layout',
+    description:
+      'Set column and row tracks, gaps and named template areas, paint areas straight onto a live grid preview, and copy the CSS and HTML. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'color-palette',
+    label: 'Palette',
+    title: 'Color Palette Generator',
+    heading: 'Generate a color palette',
+    description:
+      'Pick one base color and get harmonious palettes — complementary, analogous, triadic, split, tetradic, monochromatic — with hex, RGB, HSL, contrast ratios and CSS, SCSS, Tailwind or JSON export. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'markdown-table',
+    label: 'MD table',
+    title: 'Markdown Table Generator',
+    heading: 'Generate a markdown table',
+    description:
+      'Edit cells like a spreadsheet, set left/center/right alignment per column, import from CSV, Excel or an existing table, and copy neatly padded GitHub-flavored markdown. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',

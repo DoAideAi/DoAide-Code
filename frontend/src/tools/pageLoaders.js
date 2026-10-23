@@ -40,6 +40,9 @@ export const PAGE_LOADERS = {
   'svg-optimizer': () => import('./SvgOptimizerPage.jsx'),
   'favicon-generator': () => import('./FaviconPage.jsx'),
   'performance-audit': () => import('./PerfAuditPage.jsx'),
+  'css-grid-generator': () => import('./GridPage.jsx'),
+  'color-palette': () => import('./PalettePage.jsx'),
+  'markdown-table': () => import('./MarkdownTablePage.jsx'),
 }
 
 // The slug in a path like /tools/diff-checker ('' for /tools).

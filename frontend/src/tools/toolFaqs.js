@@ -206,6 +206,24 @@ export const TOOL_FAQS = {
     ['Why should scripts use defer?', 'A plain <script src> in <head> halts HTML parsing while it downloads and executes. defer downloads in parallel and runs after parsing, keeping first paint fast without changing execution order.'],
     ['Is my HTML uploaded?', LOCAL],
   ],
+  'css-grid-generator': [
+    ['How do I create a CSS grid layout?', 'Set display: grid on the container, define columns with grid-template-columns and rows with grid-template-rows, add a gap, then place children by line numbers or named areas. This generator writes all of it from the visual controls.'],
+    ['What does grid-template-areas do?', 'It names regions of the grid with an ASCII-art map — "header header" / "sidebar main" — and children join a region with grid-area: name. Each name must form one filled rectangle or the browser ignores the whole template.'],
+    ['What is the difference between fr and auto?', 'fr shares out the free space proportionally (2fr gets twice 1fr); auto sizes the track to its content. A classic page uses auto for header and footer rows and 1fr for the content row.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
+  'color-palette': [
+    ['How do I make a color palette that looks good?', 'Start from one brand color and apply a color-wheel rule: complementary (opposite hue) for punchy contrast, analogous (neighbours) for calm, triadic for balanced variety. The generator applies each rule in HSL so saturation stays consistent.'],
+    ['What is a complementary color?', 'The hue directly opposite on the color wheel — 180° away. Blue’s complement is orange; using one as the main color and the other as an accent gives maximum contrast.'],
+    ['What contrast ratio do I need for accessible text?', 'WCAG AA asks for 4.5:1 for normal text and 3:1 for large text; AAA asks for 7:1. Each swatch shows the ratio of its label so you can see which colors work behind text.'],
+    ['Can I export the palette to Tailwind?', 'Yes — switch the export to Tailwind for a colors block to paste into tailwind.config.js, or pick CSS variables, SCSS or JSON.'],
+  ],
+  'markdown-table': [
+    ['How do I make a table in markdown?', 'Write a header row with cells separated by pipes, a divider row of dashes, then one line per row: | Name | Role | / | --- | --- | / | Ada | Engineer |. This generator builds and pads it for you.'],
+    ['How do I align columns in a markdown table?', 'Put colons in the divider row: :--- aligns left, :---: centers and ---: aligns right. Click the alignment button above each column here to cycle through them.'],
+    ['Can I convert Excel or CSV to a markdown table?', 'Yes — copy cells from Excel or Google Sheets (they paste as tab-separated text) or paste CSV into Import, and the table fills in ready to copy as markdown.'],
+    ['How do I put a pipe character inside a cell?', 'Escape it as \\|. The generator escapes pipes and turns line breaks into <br> automatically so your table never breaks.'],
+  ],
   'box-shadow': [
     ['How do I make a realistic CSS shadow?', 'Layer two shadows: a tight, darker one for where the element meets the surface and a wide, soft, low-opacity one for ambient depth. The “Subtle card” and “Elevated” presets show the pattern.'],
     ['What do the four box-shadow numbers mean?', 'In order: horizontal offset, vertical offset, blur radius and spread. Spread grows the shadow in every direction before the blur softens it.'],
