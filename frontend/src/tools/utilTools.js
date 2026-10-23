@@ -295,6 +295,33 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'svg-optimizer',
+    label: 'SVG optimizer',
+    title: 'SVG Optimizer',
+    heading: 'Optimize an SVG',
+    description:
+      'Paste SVG markup and get a smaller equivalent — comments, metadata and editor junk stripped, coordinates rounded, paths compacted — with a live preview and byte savings shown. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'favicon-generator',
+    label: 'Favicon',
+    title: 'Favicon Generator',
+    heading: 'Generate favicons from an image',
+    description:
+      'Drop one image and download every favicon a site needs — 16px to 512px PNGs, apple-touch-icon, a real favicon.ico — plus the HTML snippet. Resized in your browser, never uploaded. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'performance-audit',
+    label: 'Perf audit',
+    title: 'Web Performance Audit',
+    heading: 'Audit a page’s performance',
+    description:
+      'Paste your page’s HTML and get the Core Web Vitals problems visible in the markup — render-blocking scripts, unsized images, missing lazy loading, font gaps — each with the fix. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',

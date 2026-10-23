@@ -37,6 +37,9 @@ export const PAGE_LOADERS = {
   'box-shadow': () => import('./BoxShadowPage.jsx'),
   'flexbox-playground': () => import('./FlexboxPage.jsx'),
   'emoji-picker': () => import('./EmojiPage.jsx'),
+  'svg-optimizer': () => import('./SvgOptimizerPage.jsx'),
+  'favicon-generator': () => import('./FaviconPage.jsx'),
+  'performance-audit': () => import('./PerfAuditPage.jsx'),
 }
 
 // The slug in a path like /tools/diff-checker ('' for /tools).

@@ -188,6 +188,24 @@ export const TOOL_FAQS = {
     ['What is the difference between 301 and 308?', 'Both are permanent redirects, but a 301 lets clients change POST to GET at the new URL; a 308 requires the same method and body to be repeated.'],
     ['Is this list searchable offline?', 'The whole reference loads with the page, so search and filtering work instantly with no further requests.'],
   ],
+  'svg-optimizer': [
+    ['How does the SVG optimizer shrink files?', 'It parses the SVG, removes comments, metadata, titles, editor namespaces and the XML prolog, rounds coordinates to your chosen precision, compacts path data and collapses whitespace — typically 30–70% smaller.'],
+    ['Will optimizing change how my SVG looks?', 'Visually no, at the default 2-decimal precision — that is sub-pixel accuracy at any sane render size. For very large artboards, raise the precision.'],
+    ['Should I remove the <title> element?', 'For decorative inline icons, yes. Keep it when the SVG stands alone as meaningful content, since screen readers announce it.'],
+    ['Is my SVG uploaded?', LOCAL],
+  ],
+  'favicon-generator': [
+    ['What favicon sizes does a website need?', '16, 32 and 48px PNGs (bundled in favicon.ico), a 180px apple-touch-icon for iOS, and 192px + 512px icons for Android and PWA manifests — exactly the set this tool produces.'],
+    ['Is the favicon.ico it makes real?', 'Yes — a proper ICO container holding the 16, 32 and 48px images, which all modern browsers and Windows accept.'],
+    ['What image should I start from?', 'A square image, 512×512 or larger, with a simple bold shape — detail disappears at 16px. Non-square images are center-cropped to fill.'],
+    ['Is my image uploaded?', 'No — it is resized with a canvas in your browser and never leaves your machine.'],
+  ],
+  'performance-audit': [
+    ['How do I check my Core Web Vitals?', 'Paste your page HTML here for the markup-level problems (render-blocking scripts, unsized images, missing lazy loading), then check PageSpeed Insights for field LCP, CLS and INP data from real users.'],
+    ['What is the biggest cause of layout shift?', 'Images without width and height attributes: the browser reserves no space, so content jumps when they load. This audit counts them for you.'],
+    ['Why should scripts use defer?', 'A plain <script src> in <head> halts HTML parsing while it downloads and executes. defer downloads in parallel and runs after parsing, keeping first paint fast without changing execution order.'],
+    ['Is my HTML uploaded?', LOCAL],
+  ],
   'box-shadow': [
     ['How do I make a realistic CSS shadow?', 'Layer two shadows: a tight, darker one for where the element meets the surface and a wide, soft, low-opacity one for ambient depth. The “Subtle card” and “Elevated” presets show the pattern.'],
     ['What do the four box-shadow numbers mean?', 'In order: horizontal offset, vertical offset, blur radius and spread. Spread grows the shadow in every direction before the blur softens it.'],
