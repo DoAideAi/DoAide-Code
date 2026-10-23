@@ -188,6 +188,24 @@ export const TOOL_FAQS = {
     ['What is the difference between 301 and 308?', 'Both are permanent redirects, but a 301 lets clients change POST to GET at the new URL; a 308 requires the same method and body to be repeated.'],
     ['Is this list searchable offline?', 'The whole reference loads with the page, so search and filtering work instantly with no further requests.'],
   ],
+  'box-shadow': [
+    ['How do I make a realistic CSS shadow?', 'Layer two shadows: a tight, darker one for where the element meets the surface and a wide, soft, low-opacity one for ambient depth. The “Subtle card” and “Elevated” presets show the pattern.'],
+    ['What do the four box-shadow numbers mean?', 'In order: horizontal offset, vertical offset, blur radius and spread. Spread grows the shadow in every direction before the blur softens it.'],
+    ['Can I make an inner shadow?', 'Yes — tick Inset on any layer and the shadow renders inside the element, useful for pressed buttons and wells.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
+  'flexbox-playground': [
+    ['How do I center a div with flexbox?', 'Set justify-content: center and align-items: center on the container — try it here and copy the two-line CSS.'],
+    ['What is the difference between justify-content and align-items?', 'justify-content places items along the main axis (the flex-direction); align-items places them across it. Flip flex-direction to column and watch the two swap jobs.'],
+    ['What does flex: 1 actually do?', 'It is shorthand for flex-grow: 1, flex-shrink: 1, flex-basis: 0 — the item takes an equal share of the free space. Raise one item’s grow here to see shares change.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
+  'emoji-picker': [
+    ['How do I copy an emoji as an HTML entity?', 'Click the emoji, then click the HTML entity in the detail card — multi-codepoint emojis get every entity in sequence.'],
+    ['Which emojis do developers use in commits?', 'The Status & git group collects the gitmoji-style set: ✨ for features, 🐛 for fixes, ♻️ for refactors, 🚀 for deploys, 📝 for docs.'],
+    ['Why do some emojis have two codepoints?', 'Characters like ⚠️ are a base symbol plus the U+FE0F variation selector that forces emoji rendering; sequences with skin tones or ZWJ have even more.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
   'meta-tag-generator': [
     ['What meta tags does a page need for SEO?', 'A unique title (under ~60 characters), a description (under ~160), a canonical URL, and Open Graph + Twitter card tags so shares look right — exactly the set this tool generates.'],
     ['What size should the og:image be?', '1200×630 pixels is the safe standard: large-image cards on X/Twitter, Facebook, LinkedIn, WhatsApp and Slack all render it well.'],

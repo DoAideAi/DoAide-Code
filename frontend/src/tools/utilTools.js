@@ -268,6 +268,33 @@ export const UTIL_TOOLS = [
     isNew: true,
   },
   {
+    slug: 'box-shadow',
+    label: 'Box shadow',
+    title: 'CSS Box Shadow Generator',
+    heading: 'Build a CSS box shadow',
+    description:
+      'Drag sliders for offset, blur, spread, color and opacity, layer up to six shadows, preview live and copy the CSS — with presets from subtle card to neon glow. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'flexbox-playground',
+    label: 'Flexbox',
+    title: 'CSS Flexbox Playground',
+    heading: 'Flexbox playground',
+    description:
+      'Flip every flexbox property — direction, justify, align, wrap, gap, per-item grow/shrink/basis — watch the live preview move, and copy clean CSS with only the properties you changed. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'emoji-picker',
+    label: 'Emoji',
+    title: 'Emoji Picker for Developers',
+    heading: 'Emoji picker for developers',
+    description:
+      'Search 200+ developer-relevant emojis — commit prefixes, status dots, reactions — click to copy, and grab the Unicode codepoint, HTML entity, JS and CSS escapes. Free, no sign-up.',
+    isNew: true,
+  },
+  {
     slug: 'json-formatter',
     label: 'JSON viewer',
     title: 'JSON Formatter & Validator',

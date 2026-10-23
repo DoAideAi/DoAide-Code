@@ -34,6 +34,9 @@ export const PAGE_LOADERS = {
   'json-schema-generator': () => import('./JsonSchemaPage.jsx'),
   'http-status-codes': () => import('./HttpStatusPage.jsx'),
   'meta-tag-generator': () => import('./MetaTagPage.jsx'),
+  'box-shadow': () => import('./BoxShadowPage.jsx'),
+  'flexbox-playground': () => import('./FlexboxPage.jsx'),
+  'emoji-picker': () => import('./EmojiPage.jsx'),
 }
 
 // The slug in a path like /tools/diff-checker ('' for /tools).
