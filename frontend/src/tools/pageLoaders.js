@@ -49,6 +49,8 @@ export const PAGE_LOADERS = {
   'uuid-generator': () => import('./UuidPage.jsx'),
   'password-generator': () => import('./PasswordPage.jsx'),
   'api-mocker': () => import('./MockApiPage.jsx'),
+  'chmod-calculator': () => import('./ChmodPage.jsx'),
+  'ip-subnet-calculator': () => import('./IpCalcPage.jsx'),
 }
 
 // The slug in a path like /tools/diff-checker ('' for /tools).

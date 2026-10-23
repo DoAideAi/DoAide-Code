@@ -286,4 +286,20 @@ export const TOOL_FAQS = {
     ['Can I edit a mock after sharing it?', 'Saved mocks never change, so links you shared keep working. Open the edit link, change endpoints and save again to get a new URL.'],
     ['Is the mock API free?', FREE],
   ],
+  'chmod-calculator': [
+    ['What does chmod 755 mean?', 'Owner can read, write and execute (7 = 4+2+1); group and others can read and execute (5 = 4+1). It is the usual mode for scripts, programs and directories.'],
+    ['What is the difference between 644 and 755?', '644 (rw-r--r--) has no execute bit, which suits ordinary files like HTML, config and images. 755 adds execute for everyone, needed for scripts and to enter directories.'],
+    ['Which permissions should SSH keys have?', 'Private keys must be 600 (rw-------) and the ~/.ssh directory 700; OpenSSH refuses keys that other users can read. Public keys can be 644.'],
+    ['What are setuid, setgid and the sticky bit?', 'The fourth, leading octal digit. Setuid (4) runs a program as its owner; setgid (2) runs it as its group, or makes new files in a directory inherit the group; sticky (1) on a directory like /tmp lets only a file’s owner delete it.'],
+    ['Should I ever use chmod 777?', 'Almost never. 777 lets every user on the machine change or replace the file. Fix ownership with chown instead, or use 775/664 with a shared group.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
+  'ip-subnet-calculator': [
+    ['How do I calculate a subnet from CIDR notation?', 'The prefix (/24) says how many leading bits are the network. Masking the address with those bits gives the network address; setting the remaining host bits to 1 gives the broadcast. Everything between is usable for hosts.'],
+    ['How many hosts are in a /24, /26 or /30?', 'A /n subnet has 2^(32−n) addresses, minus 2 for the network and broadcast: /24 → 254 hosts, /26 → 62, /28 → 14, /30 → 2. A /31 point-to-point link uses both addresses (RFC 3021) and a /32 is a single host.'],
+    ['What is a wildcard mask?', 'The netmask inverted — 0.0.0.255 for a /24. Cisco ACLs and OSPF use it to say which bits may vary.'],
+    ['Which IP ranges are private?', '10.0.0.0/8, 172.16.0.0/12 and 192.168.0.0/16 (RFC 1918). The calculator also labels loopback, link-local, carrier-grade NAT (100.64.0.0/10), documentation and multicast ranges.'],
+    ['Does it support IPv6?', 'Not yet — this calculator handles IPv4, which is what most subnetting, VPC and firewall rules still use.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
 }

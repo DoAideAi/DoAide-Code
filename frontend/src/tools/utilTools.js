@@ -411,6 +411,24 @@ export const UTIL_TOOLS = [
       'Define REST endpoints — method, path with :params, status code, delay and JSON body — and get a live URL that serves them to your frontend, tests or Postman. CORS open, no sign-up, free.',
     isNew: true,
   },
+  {
+    slug: 'chmod-calculator',
+    label: 'Chmod',
+    title: 'Chmod Calculator',
+    heading: 'Calculate chmod permissions',
+    description:
+      'Tick read, write and execute for owner, group and others — or type 755, 0644 or rwxr-xr-x — and get the octal and symbolic chmod commands, special bits (setuid, setgid, sticky) and a plain-English explanation. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'ip-subnet-calculator',
+    label: 'IP subnet',
+    title: 'IP Subnet Calculator (CIDR)',
+    heading: 'IP subnet calculator',
+    description:
+      'Enter an IPv4 address with a CIDR prefix or netmask and get the network and broadcast address, usable host range, subnet and wildcard masks, binary view, private/public type, a split into smaller subnets and an is-this-IP-in-range check. Free, no sign-up.',
+    isNew: true,
+  },
 ]
 
 // The utility living at this path, or null when the path is an AI tool's (or unknown).
