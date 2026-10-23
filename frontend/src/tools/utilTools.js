@@ -456,6 +456,24 @@ export const UTIL_TOOLS = [
       'Build CSS @keyframes visually: pick a preset (bounce, pulse, shake, fade, spin…), edit move, scale, rotate, skew and opacity at each keyframe on a timeline, tune duration, easing with a cubic-bezier curve, iterations and direction, and copy the CSS. Free, no sign-up.',
     isNew: true,
   },
+  {
+    slug: 'css-to-tailwind',
+    label: 'CSS → Tailwind',
+    title: 'CSS to Tailwind Converter',
+    heading: 'Convert CSS to Tailwind',
+    description:
+      'Paste CSS and get Tailwind CSS utility classes for every selector — spacing, sizing, flexbox, grid, typography, colors, borders and shadows — with hover, focus, responsive (sm/md/lg) and dark-mode variants. Free, no sign-up.',
+    isNew: true,
+  },
+  {
+    slug: 'sql-to-mongodb',
+    label: 'SQL → MongoDB',
+    title: 'SQL to MongoDB Query Converter',
+    heading: 'Convert SQL to MongoDB queries',
+    description:
+      'Paste a SQL query and get the MongoDB shell equivalent — find with filters, projection, sort and limit; countDocuments; distinct; aggregation pipelines for GROUP BY and HAVING; insertMany, updateMany and deleteMany. Free, no sign-up.',
+    isNew: true,
+  },
 ]
 
 // The utility living at this path, or null when the path is an AI tool's (or unknown).

@@ -324,4 +324,18 @@ export const TOOL_FAQS = {
     ['Does the CSS respect reduced motion?', 'Yes — the output includes a prefers-reduced-motion media query that turns the animation off for people who ask their OS for less motion.'],
     ['Is anything uploaded?', LOCAL],
   ],
+  'css-to-tailwind': [
+    ['How do I convert CSS to Tailwind classes?', 'Paste a stylesheet or a few declarations. Each selector gets its utility classes: padding: 16px becomes p-4, display: flex becomes flex, :hover rules get hover: and min-width media queries get sm:, md:, lg: prefixes.'],
+    ['What happens to values that are not in Tailwind’s scale?', 'They become arbitrary values like w-[13px] or bg-[#1e293b], which Tailwind v3 compiles exactly. They are highlighted so you can round them to the nearest scale step or add them to your theme.'],
+    ['Does it handle properties Tailwind has no utility for?', 'Yes — they become arbitrary properties such as [mask-type:alpha], so nothing is dropped.'],
+    ['Which Tailwind version does it target?', 'Tailwind CSS v3 with the default theme: 4px spacing scale, text-sm/base/lg sizes, rounded-md/lg/xl radii and the sm 640px to 2xl 1536px breakpoints.'],
+    ['Is anything uploaded?', LOCAL],
+  ],
+  'sql-to-mongodb': [
+    ['How do I convert a SQL query to MongoDB?', 'Paste it here. WHERE becomes the filter document ($gt, $in, $regex…), the column list becomes a projection, ORDER BY becomes .sort(), and LIMIT/OFFSET become .limit() and .skip().'],
+    ['How does GROUP BY translate to MongoDB?', 'Into an aggregation pipeline: WHERE becomes $match, GROUP BY becomes $group with $sum, $avg, $min or $max accumulators, HAVING becomes a second $match, then $project, $sort and $limit.'],
+    ['How is LIKE converted?', 'To a regular expression: % becomes .* and _ becomes a single character, anchored with ^ and $ where the pattern has no wildcard. ILIKE adds the i flag for case-insensitive matching.'],
+    ['Does it convert JOINs?', 'No — MongoDB has no direct JOIN. The tool flags joins and subqueries instead of guessing; use $lookup in an aggregation or embed related data in the document.'],
+    ['Is my query uploaded?', LOCAL],
+  ],
 }
