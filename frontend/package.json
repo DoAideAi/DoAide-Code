@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 3098",
-    "build": "vite build && node scripts/build-guides.mjs",
+    "build": "vite build && node scripts/build-guides.mjs && node scripts/build-tool-pages.mjs",
     "test": "vitest run"
   },
   "dependencies": {
