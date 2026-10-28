@@ -50,6 +50,8 @@ export function renderToolPage(html, tool) {
       () => `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>`,
     )
     .replace('<div id="root"></div>', () => `<div id="root"><h1>${esc(tool.heading || tool.title)}</h1></div>`)
+    // The shell's <noscript> carries the homepage's <h1>; one h1 per page.
+    .replace(/(<noscript>[\s\S]*?)<h1>([\s\S]*?)<\/h1>/, '$1<p><strong>$2</strong></p>')
   for (const [attr, key, value] of [
     ['name', 'description', tool.description],
     ['property', 'og:title', title],

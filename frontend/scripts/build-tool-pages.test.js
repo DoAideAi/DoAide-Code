@@ -8,7 +8,8 @@ const SHELL = `<!doctype html><html><head>
 <meta property="og:title" content="home" />
 <meta property="og:url" content="https://code.doaide.com/" />
 <script type="application/ld+json">{"@type":"SoftwareApplication"}</script>
-</head><body><div id="root"></div></body></html>`
+</head><body><div id="root"></div>
+<noscript><h1>DoAide Code</h1><p>Enable JavaScript.</p></noscript></body></html>`
 
 describe('build-tool-pages', () => {
   it('gives every tool a unique title', () => {
@@ -24,6 +25,7 @@ describe('build-tool-pages', () => {
     expect(html).toContain('href="https://code.doaide.com/tools/flexbox-playground"')
     expect(html).not.toContain('content="home"')
     expect(html).toContain('<div id="root"><h1>Flexbox playground</h1></div>')
+    expect(html.match(/<h1>/g)).toHaveLength(1)
     expect(html).toContain('"@type":"WebApplication"')
     expect(html).not.toContain('SoftwareApplication')
   })
